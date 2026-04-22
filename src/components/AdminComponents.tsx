@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot } from "lucide-react";
+import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical } from "lucide-react";
 import Image from "next/image";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
@@ -191,8 +191,6 @@ export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: 
             name: formData.name,
             phone: formData.phone,
             customData,
-            status: 'novo',
-            funnelId: 'default'
           }),
         });
       }
@@ -550,6 +548,11 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
 
   const activeFunnel = funnelsList.find(f => f.id === activeFunnelId) || funnelsList[0];
   const columns = activeFunnel?.columns || [];
+  const visibleLeads = threads.filter((thread) =>
+    thread.id !== "general" &&
+    thread.id !== "continuous" &&
+    (!activeFunnel || !thread.funnelId || thread.funnelId === activeFunnel.id)
+  );
 
   const handleLeadClick = (e: React.MouseEvent, lead: Thread) => {
     // If we were dragging the scrollbar (mouse moved significantly), do not open the drawer
@@ -620,7 +623,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
   };
 
   const toggleAllLeads = () => {
-    const validLeads = threads.filter(t => t.id !== "general" && t.id !== "continuous");
+    const validLeads = visibleLeads;
     if (selectedLeadIds.size === validLeads.length) {
       setSelectedLeadIds(new Set());
     } else {
@@ -651,14 +654,15 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
     if (!leadId) return;
 
     // Optimistic UI Update
-    setThreads(prev => prev.map(t => t.id === leadId ? { ...t, status: columnId } : t));
+    const nextStatus = columns.find((column) => column.id === columnId)?.title || columnId;
+    setThreads(prev => prev.map(t => t.id === leadId ? { ...t, status: nextStatus } : t));
 
     // API Call to save new status
     try {
       await fetch(`/api/leads/${encodeURIComponent(leadId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: columnId })
+        body: JSON.stringify({ status: nextStatus })
       });
     } catch (err) {
       console.error("Failed to update lead status", err);
@@ -687,7 +691,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
             <Filter size={16} /> Filtros
           </button>
           <div className="h-4 w-px bg-novian-muted"></div>
-          <span className="text-sm text-novian-text/50">{threads.filter(t => t.id !== "general" && t.id !== "continuous").length} Leads Totais</span>
+          <span className="text-sm text-novian-text/50">{visibleLeads.length} Leads Totais</span>
         </div>
         <div className="flex items-center gap-3">
            <select 
@@ -737,7 +741,13 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
         >
           <div className="flex gap-6 h-full min-w-max pb-4">
             {columns.map(col => {
-              const columnLeads = threads.filter(t => t.id !== "general" && t.id !== "continuous" && (t.status === col.id || (!t.status && col.id === 'novo')));
+              const columnLeads = visibleLeads.filter((thread) => {
+                if (!thread.status) {
+                  return columns[0]?.id === col.id;
+                }
+
+                return thread.status === col.title || thread.status === col.id;
+              });
               return (
                 <div 
                   key={col.id} 
@@ -831,11 +841,11 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                       onClick={toggleAllLeads}
                     >
                       <div className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-all ${
-                        threads.filter(t => t.id !== "general" && t.id !== "continuous").length > 0 && selectedLeadIds.size === threads.filter(t => t.id !== "general" && t.id !== "continuous").length 
+                        visibleLeads.length > 0 && selectedLeadIds.size === visibleLeads.length 
                           ? 'bg-novian-accent border-novian-accent text-novian-primary shadow-[0_0_8px_rgba(222,192,166,0.3)]' 
                           : 'bg-transparent border-novian-muted/50 hover:border-novian-accent/50'
                       }`}>
-                        {threads.filter(t => t.id !== "general" && t.id !== "continuous").length > 0 && selectedLeadIds.size === threads.filter(t => t.id !== "general" && t.id !== "continuous").length && (
+                        {visibleLeads.length > 0 && selectedLeadIds.size === visibleLeads.length && (
                           <Check size={12} strokeWidth={3} />
                         )}
                       </div>
@@ -849,7 +859,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                 </tr>
               </thead>
               <tbody className="divide-y divide-novian-muted/30">
-                {threads.filter(t => t.id !== "general" && t.id !== "continuous").map(lead => {
+                {visibleLeads.map(lead => {
                   const leadCol = columns.find(c => c.id === lead.status) || columns[0];
                   const colColorClass = leadCol?.color?.split(' ')[0].replace('border-', 'text-') || 'text-novian-text';
                   const isSelected = selectedLeadIds.has(lead.id);
@@ -911,7 +921,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                     </tr>
                   );
                 })}
-                {threads.filter(t => t.id !== "general" && t.id !== "continuous").length === 0 && (
+                {visibleLeads.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-8 py-12 text-center text-novian-text/50">
                       Nenhum lead encontrado neste funil.
@@ -926,8 +936,18 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
 
       {/* Lead Details Side Drawer */}
       {selectedLead && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end">
-          <div className="w-full max-w-md bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end"
+          onClick={() => {
+            setSelectedLead(null);
+            setIsEditingLead(false);
+            setIsMenuOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="p-6 border-b border-novian-muted/50 flex items-center justify-between bg-novian-primary/30">
               <div>
                 <h2 className="text-xl font-semibold text-novian-text truncate max-w-[250px]">{selectedLead.title}</h2>
@@ -1366,8 +1386,15 @@ export function PropertiesLayout() {
       </div>
 
       {isDrawerOpen && (
-        <form onSubmit={handleSaveProperty} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex justify-end">
-          <div className="w-full max-w-2xl bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex justify-end"
+          onClick={() => setIsDrawerOpen(false)}
+        >
+          <form
+            onSubmit={handleSaveProperty}
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-2xl bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+          >
             <div className="p-6 border-b border-novian-muted/50 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-novian-text">
                 {selectedProperty ? 'Editar Imóvel' : 'Novo Imóvel'}
@@ -1385,27 +1412,18 @@ export function PropertiesLayout() {
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Título do Imóvel</label>
                     <input name="title" required type="text" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.title} />
                   </div>
-                  <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-medium text-novian-text/70">Descrição (Suporta Markdown)</label>
-                      </div>
-                      <textarea 
-                        name="description" 
-                        required 
-                        className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none h-48 resize-none font-mono" 
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                      ></textarea>
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-medium text-novian-text/70">Descrição</label>
+                      <span className="text-[11px] text-novian-text/45">Use a descrição completa do imóvel.</span>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-novian-text/70 mb-1">Preview</label>
-                      <div className="w-full bg-novian-primary/50 border border-novian-muted/50 rounded-lg px-4 py-3 h-48 overflow-y-auto prose prose-invert prose-sm prose-p:text-novian-text/80 prose-headings:font-serif prose-a:text-novian-accent max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {description || '*A pré-visualização aparecerá aqui...*'}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
+                    <textarea 
+                      name="description" 
+                      required 
+                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none min-h-56 resize-y" 
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                    ></textarea>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Endereço Completo</label>
@@ -1526,8 +1544,8 @@ export function PropertiesLayout() {
                 </button>
               </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -1568,6 +1586,7 @@ export function SettingsLayout() {
 
   const [funnels, setFunnels] = useState<StoreFunnel[]>([]);
   const [editingFunnel, setEditingFunnel] = useState<StoreFunnel | null>(null);
+  const [draggedFunnelColumnId, setDraggedFunnelColumnId] = useState<string | null>(null);
   const [currentAppUser, setCurrentAppUser] = useState<ManagedAppUser | null>(null);
   const [managedUsers, setManagedUsers] = useState<ManagedAppUser[]>([]);
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
@@ -1595,16 +1614,37 @@ export function SettingsLayout() {
   const handleSaveFunnel = async () => {
     if (!editingFunnel || !editingFunnel.name) return;
     try {
-      await fetch("/api/funnels", {
+      const res = await fetch("/api/funnels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingFunnel),
       });
+      if (!res.ok) {
+        throw new Error("Failed to save funnel");
+      }
       setEditingFunnel(null);
       fetchFunnels();
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const moveEditingFunnelColumn = (sourceId: string, targetId: string) => {
+    if (!editingFunnel || sourceId === targetId) return;
+
+    const sourceIndex = editingFunnel.columns.findIndex((column) => column.id === sourceId);
+    const targetIndex = editingFunnel.columns.findIndex((column) => column.id === targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    const reorderedColumns = [...editingFunnel.columns];
+    const [movedColumn] = reorderedColumns.splice(sourceIndex, 1);
+    reorderedColumns.splice(targetIndex, 0, movedColumn);
+
+    setEditingFunnel({
+      ...editingFunnel,
+      columns: reorderedColumns,
+    });
   };
 
   const isEditingExistingFunnel = !!editingFunnel && funnels.some((funnel) => funnel.id === editingFunnel.id);
@@ -1913,7 +1953,40 @@ export function SettingsLayout() {
                     
                     <div className="space-y-3">
                       {editingFunnel.columns.map((col, index) => (
-                        <div key={col.id} className="flex items-center gap-3 bg-novian-primary p-3 rounded-lg border border-novian-muted/50">
+                        <div
+                          key={col.id}
+                          draggable
+                          onDragStart={(event) => {
+                            setDraggedFunnelColumnId(col.id);
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", col.id);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceId = draggedFunnelColumnId || event.dataTransfer.getData("text/plain");
+                            if (sourceId) {
+                              moveEditingFunnelColumn(sourceId, col.id);
+                            }
+                            setDraggedFunnelColumnId(null);
+                          }}
+                          onDragEnd={() => setDraggedFunnelColumnId(null)}
+                          className={`flex items-center gap-3 bg-novian-primary p-3 rounded-lg border transition-colors ${
+                            draggedFunnelColumnId === col.id
+                              ? "border-novian-accent/70 opacity-60"
+                              : "border-novian-muted/50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="text-novian-text/35 hover:text-novian-accent cursor-grab active:cursor-grabbing"
+                            title="Drag to reorder"
+                          >
+                            <GripVertical size={16} />
+                          </button>
                           <div className="flex-1">
                             <input 
                               type="text" 
@@ -1955,6 +2028,9 @@ export function SettingsLayout() {
                         <div className="text-center py-6 bg-novian-primary/50 border border-dashed border-novian-muted rounded-lg">
                           <p className="text-xs text-novian-text/50">Nenhuma coluna adicionada.</p>
                         </div>
+                      )}
+                      {editingFunnel.columns.length > 1 && (
+                        <p className="text-xs text-novian-text/45">Drag and drop the columns to organize the funnel from left to right.</p>
                       )}
                     </div>
                   </div>
@@ -2745,7 +2821,7 @@ export function WarRoomLayout() {
 
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
   return (
-    <div className="rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="min-w-0 rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">{label}</div>
       <div className="mt-4 text-4xl font-semibold text-novian-text">{value}</div>
       <div className="mt-3 text-sm text-novian-text/55">{hint}</div>
@@ -2885,9 +2961,9 @@ function FunnelBreakdownCard({
       <div className="mb-1 text-lg font-semibold text-novian-text">{title}</div>
       <div className="text-sm leading-6 text-novian-text/55">{subtitle}</div>
 
-      <div className="mt-8 h-[360px] w-full">
+      <div className="mt-8 h-[360px] min-h-[360px] w-full min-w-0">
         {items.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <FunnelChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <RechartsFunnel

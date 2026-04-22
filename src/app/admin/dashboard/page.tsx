@@ -112,7 +112,7 @@ const getStageTheme = (color?: string | null) => {
 
 function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
-    <div className="rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="min-w-0 rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
       <div className="text-sm font-medium text-novian-text/55">{label}</div>
       <div className="mt-3 flex items-baseline gap-2">
         <div className="text-3xl font-bold text-novian-text">{value}</div>
@@ -325,9 +325,9 @@ function FunnelBreakdownCard({
       <div className="mb-1 text-lg font-semibold text-novian-text">{title}</div>
       <div className="truncate whitespace-nowrap text-sm text-novian-text/55">{subtitle}</div>
 
-      <div className="mt-8 h-[360px] w-full">
+      <div className="mt-8 h-[360px] min-h-[360px] w-full min-w-0">
         {items.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <FunnelChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <RechartsFunnel

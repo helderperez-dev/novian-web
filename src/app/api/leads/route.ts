@@ -48,8 +48,8 @@ export async function POST(req: Request) {
         const newLead = await createLead({
             phone: body.phone,
             title: body.name,
-            status: body.status || 'novo',
-            funnelId: body.funnelId || 'default',
+            status: body.status,
+            funnelId: body.funnelId,
             customData: body.customData
         });
 

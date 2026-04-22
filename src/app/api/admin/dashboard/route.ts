@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAppUser } from "@/lib/auth";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { funnelsStore, getProperties } from "@/lib/store";
-import { getChatThreads } from "@/lib/chatStore";
+import { getProperties } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +30,30 @@ function normalizeStage(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+}
+
+function mapStageColorToClass(title: string, color: string | null) {
+  if (color?.includes("border-")) {
+    return color;
+  }
+
+  const byTitle: Record<string, string> = {
+    "novo lead": "border-blue-500/30 text-blue-400 bg-blue-500/10",
+    qualificacao: "border-purple-500/30 text-purple-400 bg-purple-500/10",
+    "qualificação": "border-purple-500/30 text-purple-400 bg-purple-500/10",
+    agendado: "border-yellow-500/30 text-yellow-400 bg-yellow-500/10",
+    atendimento: "border-yellow-500/30 text-yellow-400 bg-yellow-500/10",
+    proposta: "border-orange-500/30 text-orange-400 bg-orange-500/10",
+    "proposta gerada": "border-orange-500/30 text-orange-400 bg-orange-500/10",
+    fechado: "border-green-500/30 text-green-400 bg-green-500/10",
+    captado: "border-green-500/30 text-green-400 bg-green-500/10",
+    "análise de ia": "border-purple-500/30 text-purple-400 bg-purple-500/10",
+    "analise da ia": "border-purple-500/30 text-purple-400 bg-purple-500/10",
+    "contato feito": "border-orange-500/30 text-orange-400 bg-orange-500/10",
+    "oportunidades (web)": "border-blue-500/30 text-blue-400 bg-blue-500/10",
+  };
+
+  return byTitle[title.trim().toLowerCase()] || "border-blue-500/30 text-blue-400 bg-blue-500/10";
 }
 
 function toFunnelBreakdown(steps: FunnelStepDefinition[], items: string[]) {
@@ -73,15 +96,10 @@ export async function GET() {
   try {
     const supabase = createAdminSupabaseClient();
 
-    const crmLeads = (await getChatThreads()).filter(
-      (thread) => thread.id !== "general" && thread.id !== "continuous",
-    );
-    const crmFunnels = Array.from(funnelsStore.values()).filter(
-      (funnel) => !funnel.type || funnel.type === "lead"
-    );
-
     const [
       properties,
+      crmLeadsResponse,
+      crmFunnelsResponse,
       captacaoLeadsResponse,
       captacaoFunnelsResponse,
       appUsersResponse,
@@ -90,6 +108,15 @@ export async function GET() {
       messagesResponse,
     ] = await Promise.all([
       getProperties(),
+      supabase
+        .from("leads")
+        .select("id, status, funnel_id")
+        .neq("status", "Oportunidades (Web)")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("funnels")
+        .select("id, name, type, stages:funnel_stages(id, title, color, order)")
+        .eq("type", "lead"),
       supabase
         .from("captacao_items")
         .select("id, title, status, created_at, custom_data, funnel_id, source")
@@ -105,6 +132,8 @@ export async function GET() {
     ]);
 
     if (
+      crmLeadsResponse.error ||
+      crmFunnelsResponse.error ||
       captacaoLeadsResponse.error ||
       captacaoFunnelsResponse.error ||
       appUsersResponse.error ||
@@ -113,7 +142,9 @@ export async function GET() {
       messagesResponse.error
     ) {
       console.error(
-        captacaoLeadsResponse.error ||
+        crmLeadsResponse.error ||
+          crmFunnelsResponse.error ||
+          captacaoLeadsResponse.error ||
           captacaoFunnelsResponse.error ||
           appUsersResponse.error ||
           clientProcessesResponse.error ||
@@ -123,16 +154,22 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to load dashboard data" }, { status: 500 });
     }
 
+    const crmFunnelIds = new Set((crmFunnelsResponse.data || []).map((funnel) => funnel.id));
+    const crmLeads = (crmLeadsResponse.data || []).filter((lead) =>
+      lead.funnel_id ? crmFunnelIds.has(lead.funnel_id) : true,
+    );
     const captacaoFunnelIds = new Set((captacaoFunnelsResponse.data || []).map((funnel) => funnel.id));
     const captacaoLeads = (captacaoLeadsResponse.data || []).filter((lead) =>
       lead.funnel_id ? captacaoFunnelIds.has(lead.funnel_id) : true,
     );
     const crmFunnelSteps =
-      crmFunnels[0]?.columns.map((column) => ({
-        label: column.title,
-        aliases: [column.id, column.title],
-        color: column.color,
-      })) || [];
+      ((crmFunnelsResponse.data || [])[0]?.stages || [])
+        .sort((a, b) => Number(a.order) - Number(b.order))
+        .map((stage) => ({
+          label: stage.title,
+          aliases: [stage.title],
+          color: mapStageColorToClass(stage.title, stage.color || null),
+        })) || [];
     const captacaoFunnelStages = (captacaoFunnelsResponse.data || [])[0]?.stages || [];
     const captacaoFunnelSteps = [...captacaoFunnelStages]
       .sort((a, b) => Number(a.order) - Number(b.order))
@@ -143,7 +180,7 @@ export async function GET() {
       .map((stage) => ({
         label: stage.title,
         aliases: [stage.title],
-        color: stage.color || undefined,
+        color: mapStageColorToClass(stage.title, stage.color || null),
       }));
 
     const internalUsers = (appUsersResponse.data || []).filter((user) => user.user_type === "internal");
@@ -187,7 +224,7 @@ export async function GET() {
     return NextResponse.json({
       overview: {
         crmLeads: crmLeads.length,
-        crmFunnels: crmFunnels.length,
+        crmFunnels: (crmFunnelsResponse.data || []).length,
         captacaoLeads: captacaoLeads.length,
         captacaoFunnels: (captacaoFunnelsResponse.data || []).length,
         totalProperties: properties.length,

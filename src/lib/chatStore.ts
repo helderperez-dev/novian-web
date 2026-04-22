@@ -129,11 +129,11 @@ function mapMessage(row: ChatMessageRow): ChatMessage {
   };
 }
 
-async function getDefaultLeadFunnelId() {
+async function getDefaultLeadFunnel() {
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase
     .from("funnels")
-    .select("id")
+    .select("id, stages:funnel_stages(title, order)")
     .eq("type", "lead")
     .order("created_at", { ascending: true })
     .limit(1)
@@ -143,7 +143,16 @@ async function getDefaultLeadFunnelId() {
     throw error;
   }
 
-  return data?.id || null;
+  const firstStageTitle = Array.isArray(data?.stages)
+    ? [...data.stages]
+        .sort((a, b) => Number(a.order) - Number(b.order))
+        .find((stage) => stage?.title)?.title || null
+    : null;
+
+  return {
+    id: data?.id || null,
+    firstStageTitle,
+  };
 }
 
 async function getLeadByThreadId(threadId: string) {
@@ -299,13 +308,21 @@ export async function getRecentMessages(limit = 50) {
 
 export async function createLead(data: Partial<Thread> & { phone: string; title?: string }) {
   const supabase = createAdminSupabaseClient();
-  const funnelId = data.funnelId === "default" || !data.funnelId ? await getDefaultLeadFunnelId() : data.funnelId;
+  const defaultLeadFunnel = await getDefaultLeadFunnel();
+  const funnelId =
+    data.funnelId === "default" || !data.funnelId
+      ? defaultLeadFunnel.id
+      : data.funnelId;
+  const normalizedStatus =
+    !data.status || data.status === "novo"
+      ? defaultLeadFunnel.firstStageTitle || "Novo Lead"
+      : data.status;
 
   const insertPayload: Database["public"]["Tables"]["leads"]["Insert"] = {
     phone: data.phone,
     name: data.title || `Lead: ${data.phone}`,
     preview: "Lead criado manualmente",
-    status: data.status || "Novo Lead",
+    status: normalizedStatus,
     unread: false,
     funnel_id: funnelId,
     score: data.score || 0,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/database.types';
 
 type CaptacaoLeadInsert = {
@@ -37,8 +37,32 @@ const sanitizeImages = (value: unknown) => {
         .filter(Boolean);
 };
 
+const normalizeTransactionType = (value: unknown) => {
+    const normalized = sanitizeText(value).toLowerCase();
+
+    if (normalized === 'venda' || normalized === 'sale') return 'sale';
+    if (normalized === 'aluguel' || normalized === 'rent') return 'rent';
+    if (normalized === 'temporada' || normalized === 'vacation') return 'vacation';
+
+    return 'sale';
+};
+
+const normalizePropertyType = (value: unknown) => {
+    const normalized = sanitizeText(value).toLowerCase();
+
+    if (!normalized || normalized === 'todos' || normalized === 'all') return 'all';
+
+    return normalized;
+};
+
+const normalizeSource = (value: unknown) => {
+    const normalized = sanitizeText(value).toLowerCase();
+    return normalized || 'olx';
+};
+
 export async function POST(req: Request) {
     try {
+        const supabase = createAdminSupabaseClient();
         const apifyToken = process.env.APIFY_API_TOKEN;
         const payload = await req.json();
         const maxItems = Math.max(1, Number(payload?.maxListings || 10));
@@ -51,6 +75,13 @@ export async function POST(req: Request) {
         if (!payload?.city || !payload?.state || !payload?.sources || !funnelId) {
             return NextResponse.json({ error: "Parametros obrigatorios ausentes" }, { status: 400 });
         }
+
+        const normalizedPayload = {
+            ...payload,
+            sources: normalizeSource(payload?.sources),
+            transactionType: normalizeTransactionType(payload?.transactionType),
+            propertyType: normalizePropertyType(payload?.propertyType),
+        };
 
         const funnelResponse = await supabase
             .from('funnels')
@@ -68,7 +99,7 @@ export async function POST(req: Request) {
                 .sort((a: { order: number }, b: { order: number }) => Number(a.order) - Number(b.order))[0]?.title ||
             "Oportunidades (Web)";
 
-        console.log("Starting Apify scrape with payload:", payload);
+        console.log("Starting Apify scrape with payload:", normalizedPayload);
 
         // We use Apify API to trigger the actor and get the results synchronously
         // For memory limit issues on free tier, we request a smaller memory allocation or let it default.
@@ -80,7 +111,7 @@ export async function POST(req: Request) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(normalizedPayload)
         });
 
         if (!response.ok) {
@@ -97,7 +128,7 @@ export async function POST(req: Request) {
         }
 
         const normalizedItems: NormalizedCaptacaoItem[] = items.slice(0, maxItems).map((item: Record<string, unknown>) => {
-            const source = sanitizeText(item.source || payload.sources || "apify");
+            const source = sanitizeText(item.source || normalizedPayload.sources || "apify");
             const images = sanitizeImages(item.images);
             const listingUrl = sanitizeUrl(item.url);
             const description = sanitizeText(item.description);
@@ -123,7 +154,7 @@ export async function POST(req: Request) {
             return {
                 externalId: sanitizeText(item.id),
                 listingUrl,
-                dedupeKey: listingUrl || `${sanitizeText(item.title)}|${sanitizeText(item.city || payload.city)}|${sanitizeText(item.priceFormatted || item.price)}`,
+                dedupeKey: listingUrl || `${sanitizeText(item.title)}|${sanitizeText(item.city || normalizedPayload.city)}|${sanitizeText(item.priceFormatted || item.price)}`,
                 title: sanitizeText(item.title || "Imóvel sem título"),
                 preview: (description || sanitizeText(descriptionParts.join(" | "))).substring(0, 180),
                 status: firstStageTitle,
@@ -131,7 +162,7 @@ export async function POST(req: Request) {
                 source,
                 external_id: sanitizeText(item.id),
                 listing_url: listingUrl,
-                dedupe_key: listingUrl || `${sanitizeText(item.title)}|${sanitizeText(item.city || payload.city)}|${sanitizeText(item.priceFormatted || item.price)}`,
+                dedupe_key: listingUrl || `${sanitizeText(item.title)}|${sanitizeText(item.city || normalizedPayload.city)}|${sanitizeText(item.priceFormatted || item.price)}`,
                 custom_data: {
                     description,
                     price: item.price || 0,
@@ -150,15 +181,15 @@ export async function POST(req: Request) {
                     image,
                     images,
                     imageCount: item.imageCount || images.length,
-                    city: sanitizeText(item.city || payload.city),
-                    state: sanitizeText(item.state || payload.state),
-                    region: sanitizeText(payload.region),
+                    city: sanitizeText(item.city || normalizedPayload.city),
+                    state: sanitizeText(item.state || normalizedPayload.state),
+                    region: sanitizeText(normalizedPayload.region),
                     amenities: sanitizeText(item.amenities),
                     complexAmenities: sanitizeText(item.complexAmenities),
                     publishedAt: sanitizeText(item.publishedAt),
                     scrapedAt: sanitizeText(item.scrapedAt),
-                    transactionType: sanitizeText(item.transactionType || payload.transactionType || "sale"),
-                    propertyType: sanitizeText(item.propertyType || payload.propertyType || "all"),
+                    transactionType: sanitizeText(item.transactionType || normalizedPayload.transactionType || "sale"),
+                    propertyType: sanitizeText(item.propertyType || normalizedPayload.propertyType || "all"),
                     propertySubType: sanitizeText(item.propertySubType)
                 }
             };
