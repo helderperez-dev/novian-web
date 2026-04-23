@@ -55,6 +55,9 @@ export interface AgentConfig {
     systemPrompt: string;
     modules?: string[];
     knowledgeBase?: string;
+    whatsappDisplayName?: string;
+    whatsappPhone?: string;
+    whatsappProfilePictureUrl?: string;
 }
 
 export interface LandingPageConfig {

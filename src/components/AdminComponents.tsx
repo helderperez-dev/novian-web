@@ -140,6 +140,79 @@ const getStageTheme = (color?: string | null) => {
   };
 };
 
+type LeadDetailItem = {
+  label: string;
+  value: string;
+  href?: string;
+};
+
+const getLeadPhoneValue = (thread: Pick<Thread, "phone" | "id">) => {
+  const phone = thread.phone?.trim();
+  if (phone) {
+    return phone;
+  }
+
+  if (thread.id.endsWith("@s.whatsapp.net")) {
+    return thread.id.split("@")[0];
+  }
+
+  return "";
+};
+
+const normalizeLeadDetailValue = (value: NonNullable<Thread["customData"]>[string]) => {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).join(", ");
+  }
+
+  return "";
+};
+
+const getLeadMetadataDetails = (customData?: Thread["customData"]): LeadDetailItem[] => {
+  if (!customData) {
+    return [];
+  }
+
+  const detailSpecs: Array<{
+    key: string;
+    label: string;
+    href?: (value: string) => string;
+  }> = [
+    { key: "source", label: "Origem" },
+    { key: "whatsapp_jid", label: "WhatsApp ID" },
+    { key: "whatsapp_business_category", label: "Categoria WA" },
+    { key: "whatsapp_business_email", label: "E-mail", href: (value) => `mailto:${value}` },
+    {
+      key: "whatsapp_business_website",
+      label: "Website",
+      href: (value) => (value.startsWith("http://") || value.startsWith("https://") ? value : `https://${value}`),
+    },
+    { key: "whatsapp_business_address", label: "Endereco" },
+  ];
+
+  return detailSpecs.reduce<LeadDetailItem[]>((items, detail) => {
+    const value = normalizeLeadDetailValue(customData[detail.key]);
+    if (!value) {
+      return items;
+    }
+
+    items.push({
+      label: detail.label,
+      value,
+      href: detail.href ? detail.href(value) : undefined,
+    });
+
+    return items;
+  }, []);
+};
+
 export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: () => void, onLeadCreated: () => void, initialData?: Thread }) {
   const [formData, setFormData] = useState<Record<string, string>>(() => {
     if (initialData) {
@@ -682,6 +755,9 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
     }
   };
 
+  const selectedLeadPhone = selectedLead ? getLeadPhoneValue(selectedLead) : "";
+  const selectedLeadMetadataDetails = selectedLead ? getLeadMetadataDetails(selectedLead.customData) : [];
+
   return (
     <div className="flex-1 flex flex-col h-full bg-novian-primary overflow-hidden min-w-0 relative">
       {/* Leads Toolbar */}
@@ -1044,12 +1120,20 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                             className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
                           />
                           <div>
-                            <p className="text-sm font-semibold text-novian-text">{selectedLead.title || selectedLead.phone}</p>
-                            <p className="text-xs text-novian-text/60 font-mono">{selectedLead.phone}</p>
+                            <p className="text-sm font-semibold text-novian-text">{selectedLead.title || selectedLeadPhone}</p>
+                            <p className="text-xs text-novian-text/60 font-mono">{selectedLeadPhone}</p>
                           </div>
                         </div>
                       )}
 
+                      <div>
+                        <p className="text-xs text-novian-text/50 mb-1">Telefone / WhatsApp</p>
+                        <p className="text-sm font-mono text-novian-text/90">{selectedLeadPhone || "Nao informado"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-novian-text/50 mb-1">Origem</p>
+                        <p className="text-sm text-novian-text/90">{String(selectedLead.customData?.source || "Manual")}</p>
+                      </div>
                       <div>
                         <p className="text-xs text-novian-text/50 mb-1">Status Atual</p>
                         <span className="inline-block bg-novian-muted text-novian-text px-2 py-1 rounded-md text-xs font-medium border border-novian-muted/50 uppercase tracking-wider">
@@ -1068,6 +1152,31 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                       </div>
                     </div>
                   </div>
+
+                  {selectedLeadMetadataDetails.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Detalhes do Contato</h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        {selectedLeadMetadataDetails.map((detail) => (
+                          <div key={detail.label}>
+                            <p className="text-xs text-novian-text/50 mb-1">{detail.label}</p>
+                            {detail.href ? (
+                              <a
+                                href={detail.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm font-medium text-novian-accent hover:text-white transition-colors break-all"
+                              >
+                                {detail.value}
+                              </a>
+                            ) : (
+                              <p className="text-sm font-medium break-all">{detail.value}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {(selectedLead.customData?.whatsapp_about || selectedLead.customData?.whatsapp_business_description) && (
                     <div className="space-y-4">
@@ -2500,6 +2609,7 @@ export function WarRoomLayout() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>("general");
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
+  const [agents, setAgents] = useState<AgentConfig[]>([]);
 
   const fetchWarRoomData = async () => {
     try {
@@ -2527,6 +2637,20 @@ export function WarRoomLayout() {
     }
   };
 
+  const fetchAgents = async () => {
+    try {
+      const res = await fetch("/api/agents", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Failed to load agents");
+      }
+
+      const data = await res.json();
+      setAgents(Array.isArray(data.agents) ? data.agents : []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     // Initial fetch inside effect to avoid synchronous setState warnings
     let isMounted = true;
@@ -2541,6 +2665,10 @@ export function WarRoomLayout() {
       clearInterval(interval);
     };
   }, [activeThreadId]);
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || !activeThreadId) return;
@@ -2561,6 +2689,16 @@ export function WarRoomLayout() {
       setTypingAgent(null);
     }
   };
+
+  const activeThread = activeThreadId ? threads.find((thread) => thread.id === activeThreadId) || null : null;
+  const activeThreadAgentId =
+    typeof activeThread?.customData?.agent_id === "string"
+      ? activeThread.customData.agent_id
+      : activeThread?.agentIds?.[0];
+  const activeAgent = activeThreadAgentId ? agents.find((agent) => agent.id === activeThreadAgentId) || null : null;
+  const activeThreadPhone = activeThread ? getLeadPhoneValue(activeThread) : "";
+  const activeThreadMetadataDetails = activeThread ? getLeadMetadataDetails(activeThread.customData) : [];
+  const headerAgents = activeThread && activeAgent ? [activeAgent] : agents.slice(0, 2);
 
   return (
     <>
@@ -2614,11 +2752,27 @@ export function WarRoomLayout() {
             {/* Thread Header */}
             <div className="h-16 border-b border-novian-muted/50 flex items-center px-6 gap-4 shrink-0 bg-novian-surface/30">
               <h2 className="text-lg font-medium text-novian-accent">
-                {activeThreadId === "general" ? "#general-command" : threads.find(t => t.id === activeThreadId)?.title || "Chat"}
+                {activeThreadId === "general" ? "#general-command" : activeThread?.title || "Chat"}
               </h2>
               <div className="flex -space-x-2">
-                <AgentAvatar name="Mariana (SDR)" initials="MS" />
-                <AgentAvatar name="Daniel (Dir)" initials="DR" />
+                {headerAgents.length > 0 ? (
+                  headerAgents.map((agent) => {
+                    const agentName = agent.whatsappDisplayName || agent.name;
+                    return (
+                      <AgentAvatar
+                        key={agent.id}
+                        name={agentName}
+                        initials={agentName.substring(0, 2).toUpperCase()}
+                        avatarUrl={agent.whatsappProfilePictureUrl}
+                      />
+                    );
+                  })
+                ) : (
+                  <>
+                    <AgentAvatar name="Mariana (SDR)" initials="MS" />
+                    <AgentAvatar name="Daniel (Dir)" initials="DR" />
+                  </>
+                )}
               </div>
               <span className="text-xs text-novian-text/50 ml-2">Agentes ativos</span>
             </div>
@@ -2628,7 +2782,6 @@ export function WarRoomLayout() {
               <div className="space-y-6">
                 {messages.map((msg) => {
                   const isNew = !seenMessageIds.has(msg.id) && msg.role !== 'Client' && msg.role !== 'CEO' && !msg.isSystem;
-                  const activeThread = threads.find(t => t.id === activeThreadId);
                   const clientAvatarUrl = typeof activeThread?.customData?.whatsapp_profile_picture_url === 'string' ? activeThread.customData.whatsapp_profile_picture_url : undefined;
                   
                   return msg.isSystem ? (
@@ -2648,7 +2801,13 @@ export function WarRoomLayout() {
                       content={msg.content}
                       isClient={msg.role === 'Client'}
                       shouldType={isNew}
-                      avatarUrl={msg.role === 'Client' ? clientAvatarUrl : undefined}
+                      avatarUrl={
+                        msg.role === 'Client'
+                          ? clientAvatarUrl
+                          : msg.role === 'CEO'
+                            ? undefined
+                            : activeAgent?.whatsappProfilePictureUrl
+                      }
                       onComplete={() => setSeenMessageIds(prev => new Set([...prev, msg.id]))}
                     />
                   )
@@ -2660,6 +2819,7 @@ export function WarRoomLayout() {
                     role={typingAgent.includes("(") ? typingAgent.split("(")[1].replace(")", "") : "AI Agent"}
                     content=""
                     isTyping={true}
+                    avatarUrl={activeAgent?.whatsappProfilePictureUrl}
                   />
                 )}
               </div>
@@ -2680,124 +2840,143 @@ export function WarRoomLayout() {
       <div className="hidden xl:flex w-72 2xl:w-80 border-l border-novian-muted/50 bg-novian-surface/30 flex-col shrink-0">
          <div className="h-16 px-6 border-b border-novian-muted/50 flex items-center justify-between shrink-0">
             <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Contexto do Lead</h3>
-            {activeThreadId && activeThreadId !== "general" && activeThreadId !== "continuous" && (() => {
-              const thread = threads.find(t => t.id === activeThreadId);
-              if (thread) {
-                return (
-                  <button
-                    onClick={async () => {
-                      const btn = document.getElementById('refresh-wa-btn-warroom');
-                      if (btn) btn.innerHTML = '↻...';
-                      try {
-                        const agentId = thread.customData?.agent_id || 'mariana-sdr';
-                        const jid = thread.customData?.whatsapp_jid || thread.id;
-                        await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
-                        await fetchWarRoomData();
-                      } catch (e) {
-                        console.error('Failed to refresh WA profile', e);
-                      } finally {
-                        if (btn) btn.innerHTML = '↻ Atualizar';
-                      }
-                    }}
-                    id="refresh-wa-btn-warroom"
-                    className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
-                  >
-                    ↻ Atualizar
-                  </button>
-                );
-              }
-              return null;
-            })()}
+            {activeThread && (
+              <button
+                onClick={async () => {
+                  const btn = document.getElementById('refresh-wa-btn-warroom');
+                  if (btn) btn.innerHTML = '↻...';
+                  try {
+                    const agentId = activeThread.customData?.agent_id || 'mariana-sdr';
+                    const jid = activeThread.customData?.whatsapp_jid || activeThread.id;
+                    await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
+                    await fetchWarRoomData();
+                    await fetchAgents();
+                  } catch (e) {
+                    console.error('Failed to refresh WA profile', e);
+                  } finally {
+                    if (btn) btn.innerHTML = '↻ Atualizar';
+                  }
+                }}
+                id="refresh-wa-btn-warroom"
+                className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
+              >
+                ↻ Atualizar
+              </button>
+            )}
          </div>
          <div className="p-6 flex-1 overflow-y-auto">
-            {activeThreadId && activeThreadId !== "general" && activeThreadId !== "continuous" ? (
-              (() => {
-                const thread = threads.find(t => t.id === activeThreadId);
-                if (!thread) return <p className="text-xs text-novian-text/40">Carregando detalhes...</p>;
-                return (
-                  <div className="space-y-6">
-                    {thread.customData?.whatsapp_profile_picture_url && (
-                      <div className="flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img 
-                          src={String(thread.customData.whatsapp_profile_picture_url)} 
-                          alt="WhatsApp Profile" 
-                          className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
-                        />
-                        <div>
-                          <p className="text-sm font-semibold text-novian-text">{thread.title}</p>
-                          <p className="text-xs text-novian-text/60 font-mono">{thread.phone}</p>
-                        </div>
-                      </div>
-                    )}
-                    {!thread.customData?.whatsapp_profile_picture_url && (
-                      <>
-                        <div>
-                          <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Nome</p>
-                          <p className="font-medium text-novian-text">{thread.title}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Telefone</p>
-                          <p className="font-mono text-sm text-novian-text/80">{thread.phone}</p>
-                        </div>
-                      </>
-                    )}
-                    <div>
-                      <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Status (Funil)</p>
-                      <span className="inline-block mt-1 bg-novian-muted/30 text-novian-text px-2.5 py-1 rounded-md border border-novian-muted/50 text-xs font-medium">
-                        {thread.status || 'Novo Lead'}
-                      </span>
+            {activeThread ? (
+              <div className="space-y-6">
+                <div className="flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
+                  {activeThread.customData?.whatsapp_profile_picture_url ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={String(activeThread.customData.whatsapp_profile_picture_url)} 
+                        alt="WhatsApp Profile" 
+                        className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
+                      />
+                    </>
+                  ) : (
+                    <div className="w-16 h-16 rounded-full border-2 border-novian-muted bg-novian-primary/60 flex items-center justify-center text-lg font-semibold text-novian-text">
+                      {(activeThread.title || activeThreadPhone).slice(0, 2).toUpperCase()}
                     </div>
-                    {thread.score !== undefined && (
-                      <div>
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Score IA</p>
-                        <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md border mt-1 ${
-                          thread.score > 30 ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 
-                          thread.score > 15 ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                          'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                        }`}>
-                          <Flame size={12} />
-                          {thread.score} pts
-                        </div>
-                      </div>
-                    )}
-                    {(thread.customData?.whatsapp_about || thread.customData?.whatsapp_business_description) && (
-                      <div className="pt-4 border-t border-novian-muted/30">
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
-                        <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
-                          {thread.customData?.whatsapp_about && (
-                            <div>
-                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
-                              <p className="text-sm italic text-novian-text/90">&quot;{String(thread.customData.whatsapp_about)}&quot;</p>
-                            </div>
-                          )}
-                          {thread.customData?.whatsapp_business_description && (
-                            <div className="pt-2 border-t border-novian-muted/20">
-                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
-                              <p className="text-sm text-novian-text/80">{String(thread.customData.whatsapp_business_description)}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {thread.customData && Object.keys(thread.customData).filter(k => !k.startsWith('whatsapp_')).length > 0 && (
-                      <div className="pt-4 border-t border-novian-muted/30">
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
-                        <div className="space-y-3">
-                          {Object.entries(thread.customData)
-                            .filter(([key]) => !key.startsWith('whatsapp_'))
-                            .map(([key, value]) => (
-                            <div key={key}>
-                              <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
-                              <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-novian-text truncate">{activeThread.title}</p>
+                    <p className="text-xs text-novian-text/60 font-mono break-all">{activeThreadPhone || "Nao informado"}</p>
                   </div>
-                );
-              })()
+                </div>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Telefone</p>
+                    <p className="font-mono text-sm text-novian-text/80 break-all">{activeThreadPhone || "Nao informado"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Atendido Por</p>
+                    <p className="text-sm text-novian-text/80">
+                      {activeAgent?.whatsappPhone || activeAgent?.whatsappDisplayName || activeAgent?.name || "Agente conectado"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Status (Funil)</p>
+                    <span className="inline-block mt-1 bg-novian-muted/30 text-novian-text px-2.5 py-1 rounded-md border border-novian-muted/50 text-xs font-medium">
+                      {activeThread.status || 'Novo Lead'}
+                    </span>
+                  </div>
+                  {activeThread.score !== undefined && (
+                    <div>
+                      <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Score IA</p>
+                      <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md border mt-1 ${
+                        activeThread.score > 30 ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 
+                        activeThread.score > 15 ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                        'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      }`}>
+                        <Flame size={12} />
+                        {activeThread.score} pts
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {activeThreadMetadataDetails.length > 0 && (
+                  <div className="pt-4 border-t border-novian-muted/30">
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Detalhes do Contato</p>
+                    <div className="space-y-3">
+                      {activeThreadMetadataDetails.map((detail) => (
+                        <div key={detail.label}>
+                          <p className="text-[10px] uppercase text-novian-text/40">{detail.label}</p>
+                          {detail.href ? (
+                            <a
+                              href={detail.href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sm text-novian-accent hover:text-white transition-colors break-all"
+                            >
+                              {detail.value}
+                            </a>
+                          ) : (
+                            <p className="text-sm text-novian-text/80 break-all">{detail.value}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(activeThread.customData?.whatsapp_about || activeThread.customData?.whatsapp_business_description) && (
+                  <div className="pt-4 border-t border-novian-muted/30">
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
+                    <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
+                      {activeThread.customData?.whatsapp_about && (
+                        <div>
+                          <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
+                          <p className="text-sm italic text-novian-text/90">&quot;{String(activeThread.customData.whatsapp_about)}&quot;</p>
+                        </div>
+                      )}
+                      {activeThread.customData?.whatsapp_business_description && (
+                        <div className="pt-2 border-t border-novian-muted/20">
+                          <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
+                          <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_description)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {activeThread.customData && Object.keys(activeThread.customData).filter(k => !k.startsWith('whatsapp_')).length > 0 && (
+                  <div className="pt-4 border-t border-novian-muted/30">
+                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
+                    <div className="space-y-3">
+                      {Object.entries(activeThread.customData)
+                        .filter(([key]) => !key.startsWith('whatsapp_'))
+                        .map(([key, value]) => (
+                        <div key={key}>
+                          <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
+                          <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : activeThreadId === "general" || activeThreadId === "continuous" ? (
               <div className="space-y-4">
                 <div>
@@ -3082,10 +3261,20 @@ function ThreadItem({ title, preview, time, active, unread, onClick }: { title: 
   )
 }
 
-function AgentAvatar({ name, initials }: { name: string, initials: string }) {
+function AgentAvatar({ name, initials, avatarUrl }: { name: string, initials: string, avatarUrl?: string }) {
   return (
     <div className="w-8 h-8 rounded-full bg-novian-muted border-2 border-novian-surface flex items-center justify-center text-[10px] font-bold text-novian-text z-10" title={name}>
-      {initials}
+      {avatarUrl ? (
+        <Image
+          src={avatarUrl}
+          alt={name}
+          width={32}
+          height={32}
+          className="w-full h-full rounded-full object-cover"
+        />
+      ) : (
+        initials
+      )}
     </div>
   )
 }

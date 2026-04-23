@@ -63,6 +63,9 @@ export type Database = {
           role: string
           system_prompt: string
           updated_at: string
+          whatsapp_display_name: string | null
+          whatsapp_phone: string | null
+          whatsapp_profile_picture_url: string | null
         }
         Insert: {
           created_at?: string
@@ -73,6 +76,9 @@ export type Database = {
           role: string
           system_prompt: string
           updated_at?: string
+          whatsapp_display_name?: string | null
+          whatsapp_phone?: string | null
+          whatsapp_profile_picture_url?: string | null
         }
         Update: {
           created_at?: string
@@ -83,6 +89,9 @@ export type Database = {
           role?: string
           system_prompt?: string
           updated_at?: string
+          whatsapp_display_name?: string | null
+          whatsapp_phone?: string | null
+          whatsapp_profile_picture_url?: string | null
         }
         Relationships: []
       }

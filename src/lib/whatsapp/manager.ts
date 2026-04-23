@@ -1,9 +1,11 @@
-          import makeWASocket, { DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+          import makeWASocket, { DisconnectReason, Browsers, fetchLatestBaileysVersion, isLidUser, isPnUser, jidNormalizedUser } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { novianAIGraph } from '../agents/graph';
 import type { AgentState } from '../agents/state';
+import { updateAgentWhatsAppProfile } from '../agents/configStore';
 import { addMessage, getThreadHistoryForGraph, normalizeChatThreadId, syncLeadThreadFromLead } from '../chatStore';
+import type { Database } from '../database.types';
 
 import { clearSupabaseAuthState, getSupabaseAuthState } from './supabaseAuth';
 import { createAdminSupabaseClient } from '../supabase/admin';
@@ -50,16 +52,190 @@ function normalizeWhatsAppJid(value: string) {
     return `${digits}@s.whatsapp.net`;
 }
 
-async function persistContactMetadata(agentId: string, jid: string, metadata: WhatsAppContactMetadata) {
-    const normalizedJid = normalizeWhatsAppJid(jid);
-    const normalizedThreadId = normalizeChatThreadId(normalizedJid);
-    const phone = normalizedThreadId.split("@")[0];
+function extractWhatsAppPhone(value?: string | null) {
+    if (!value) {
+        return null;
+    }
+
+    const [jidPart] = value.split('@');
+    const [phonePart] = jidPart.split(':');
+    const digits = phonePart.replace(/\D/g, '');
+    return digits || null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveThreadIdentity(sock: any, jid: string) {
+    const normalizedJid = jidNormalizedUser(normalizeWhatsAppJid(jid)) || normalizeWhatsAppJid(jid);
+
+    if (isLidUser(normalizedJid)) {
+        try {
+            const mappedPn = await sock.signalRepository.lidMapping.getPNForLID(normalizedJid);
+            const normalizedPn = mappedPn ? jidNormalizedUser(mappedPn) : '';
+            const phone = normalizedPn && isPnUser(normalizedPn) ? extractWhatsAppPhone(normalizedPn) : null;
+
+            return {
+                rawJid: normalizedJid,
+                threadId: normalizedPn || normalizedJid,
+                phone,
+            };
+        } catch (error) {
+            console.warn(`Unable to resolve LID mapping for ${normalizedJid}:`, error);
+        }
+    }
+
+    return {
+        rawJid: normalizedJid,
+        threadId: normalizedJid,
+        phone: isPnUser(normalizedJid) ? extractWhatsAppPhone(normalizedJid) : null,
+    };
+}
+
+async function mergeLegacyThread(agentId: string, rawThreadId: string, canonicalThreadId: string) {
+    if (!rawThreadId || rawThreadId === canonicalThreadId) {
+        return;
+    }
+
+    const supabase = createAdminSupabaseClient();
+    const { data: legacyThread, error: legacyThreadError } = await supabase
+        .from('chat_threads')
+        .select('*')
+        .eq('thread_id', rawThreadId)
+        .maybeSingle();
+
+    if (legacyThreadError) {
+        throw legacyThreadError;
+    }
+
+    if (!legacyThread) {
+        return;
+    }
+
+    const { data: canonicalThread, error: canonicalThreadError } = await supabase
+        .from('chat_threads')
+        .select('*')
+        .eq('thread_id', canonicalThreadId)
+        .maybeSingle();
+
+    if (canonicalThreadError) {
+        throw canonicalThreadError;
+    }
+
+    if (!canonicalThread) {
+        return;
+    }
+
+    const mergedAgentIds = Array.from(new Set([...(canonicalThread.agent_ids || []), ...(legacyThread.agent_ids || [])]));
+    const mergedCustomData = {
+        ...((legacyThread.custom_data as Record<string, unknown> | null) || {}),
+        ...((canonicalThread.custom_data as Record<string, unknown> | null) || {}),
+        source: 'WhatsApp',
+        agent_id: agentId,
+    };
+
+    const { error: messagesError } = await supabase
+        .from('chat_messages')
+        .update({ thread_id: canonicalThreadId })
+        .eq('thread_id', rawThreadId);
+
+    if (messagesError) {
+        throw messagesError;
+    }
+
+    const { error: updateThreadError } = await supabase
+        .from('chat_threads')
+        .update({
+            title: canonicalThread.title || legacyThread.title,
+            preview: canonicalThread.preview || legacyThread.preview,
+            unread: canonicalThread.unread || legacyThread.unread,
+            agent_ids: mergedAgentIds,
+            custom_data: mergedCustomData,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('thread_id', canonicalThreadId);
+
+    if (updateThreadError) {
+        throw updateThreadError;
+    }
+
+    const { error: deleteThreadError } = await supabase
+        .from('chat_threads')
+        .delete()
+        .eq('thread_id', rawThreadId);
+
+    if (deleteThreadError) {
+        throw deleteThreadError;
+    }
+}
+
+async function upsertUnresolvedThread(params: {
+    agentId: string;
+    threadId: string;
+    pushName: string;
+    textMessage: string;
+    metadataCustomData: Record<string, unknown>;
+}) {
+    const supabase = createAdminSupabaseClient();
+    const nowIso = new Date().toISOString();
+
+    const { error } = await supabase
+        .from('chat_threads')
+        .upsert({
+            thread_id: params.threadId,
+            title: params.pushName,
+            preview: params.textMessage.substring(0, 100),
+            phone: null,
+            unread: true,
+            agent_ids: [],
+            status: 'Novo Lead',
+            score: 0,
+            custom_data: params.metadataCustomData as Database['public']['Tables']['chat_threads']['Insert']['custom_data'],
+            thread_kind: 'lead',
+            lead_id: null,
+            last_message_at: nowIso,
+            updated_at: nowIso,
+        }, { onConflict: 'thread_id' });
+
+    if (error) {
+        throw error;
+    }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function persistAgentSessionProfile(agentId: string, sock: any) {
+    const userId = typeof sock.user?.id === 'string' ? sock.user.id : null;
+    const displayName = typeof sock.user?.name === 'string' ? sock.user.name : null;
+    const phone = extractWhatsAppPhone(userId);
+
+    let profilePictureUrl: string | null = null;
+    if (userId) {
+        try {
+            const normalizedUserJid = normalizeWhatsAppJid(userId);
+            const result = await sock.profilePictureUrl(normalizedUserJid, 'image');
+            profilePictureUrl = typeof result === 'string' ? result : null;
+        } catch (error) {
+            console.warn(`[${agentId}] Unable to fetch signed-in WhatsApp profile photo:`, error);
+        }
+    }
+
+    await updateAgentWhatsAppProfile(agentId, {
+        displayName,
+        phone,
+        profilePictureUrl,
+    });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function persistContactMetadata(agentId: string, sock: any, jid: string, metadata: WhatsAppContactMetadata) {
+    const identity = await resolveThreadIdentity(sock, jid);
+    const normalizedThreadId = normalizeChatThreadId(identity.threadId);
+    const phone = identity.phone;
     const supabase = createAdminSupabaseClient();
 
     const metadataCustomData = {
         source: 'WhatsApp',
         agent_id: agentId,
-        whatsapp_jid: jid,
+        whatsapp_jid: identity.rawJid,
+        whatsapp_thread_id: normalizedThreadId,
         whatsapp_profile_picture_url: metadata.profilePictureUrl || null,
         whatsapp_about: metadata.about || null,
         whatsapp_business_description: metadata.businessProfile?.description || null,
@@ -69,11 +245,13 @@ async function persistContactMetadata(agentId: string, jid: string, metadata: Wh
         whatsapp_business_address: metadata.businessProfile?.address || null,
     };
 
-    const { data: lead } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("phone", phone)
-        .maybeSingle();
+    const { data: lead } = phone
+        ? await supabase
+            .from("leads")
+            .select("*")
+            .eq("phone", phone)
+            .maybeSingle()
+        : { data: null };
 
     if (lead) {
         const mergedCustomData = {
@@ -96,6 +274,10 @@ async function persistContactMetadata(agentId: string, jid: string, metadata: Wh
         }
 
         await syncLeadThreadFromLead(updatedLead);
+    }
+
+    if (phone) {
+        await mergeLegacyThread(agentId, identity.rawJid, normalizedThreadId);
     }
 
     const { data: thread } = await supabase
@@ -248,7 +430,7 @@ export async function refreshWhatsAppContactMetadata(agentId: string, jid: strin
     }
 
     const contact = await readWhatsAppContactMetadata(session.sock, jid);
-    await persistContactMetadata(agentId, jid, contact);
+    await persistContactMetadata(agentId, session.sock, jid, contact);
     return contact;
 }
 
@@ -355,6 +537,11 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
                     heartbeatAt: new Date().toISOString(),
                     connectedAt: new Date().toISOString(),
                 });
+                try {
+                    await persistAgentSessionProfile(agentId, sock);
+                } catch (error) {
+                    console.error(`[${agentId}] Failed to persist signed-in WhatsApp profile`, error);
+                }
                 console.log(`[${agentId}] WhatsApp Connected Successfully!`);
             }
         });
@@ -362,56 +549,65 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
         sock.ev.on('creds.update', saveCreds);
 
         sock.ev.on('messages.upsert', async (m) => {
-            const msg = m.messages[0];
-            if (!msg.key.fromMe && m.type === 'notify') {
+            if (m.type !== 'notify') {
+                return;
+            }
+
+            for (const msg of m.messages) {
+                if (msg.key.fromMe) {
+                    continue;
+                }
+
                 const textMessage = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
-                if (textMessage) {
-                    console.log(`[${agentId}] Received message from ${msg.key.remoteJid}:`, textMessage);
-                    const remoteJid = msg.key.remoteJid || "unknown";
-                    const normalizedThreadId = normalizeChatThreadId(remoteJid);
-                    const pushName = msg.pushName || "Lead";
-                    const phone = normalizedThreadId.split('@')[0];
+                if (!textMessage) {
+                    continue;
+                }
 
-                    // Send typing indicator to WhatsApp IMMEDIATELY upon receiving message
-                    try {
-                        await sock.sendPresenceUpdate('composing', remoteJid);
-                    } catch (e) {
-                        console.warn(`[${agentId}] Error sending presence update:`, e);
-                    }
+                const remoteJid = msg.key.remoteJid || 'unknown';
+                console.log(`[${agentId}] Received message from ${remoteJid}:`, textMessage);
 
-                    let contactMetadata: WhatsAppContactMetadata | null = null;
+                const identity = await resolveThreadIdentity(sock, remoteJid);
+                const normalizedThreadId = normalizeChatThreadId(identity.threadId);
+                const pushName = msg.pushName || 'Lead';
 
-                    try {
-                        contactMetadata = await readWhatsAppContactMetadata(sock, remoteJid);
-                    } catch (metadataErr) {
-                        console.warn(`[${agentId}] Unable to fetch WhatsApp contact metadata for ${remoteJid}:`, metadataErr);
-                    }
+                try {
+                    await sock.sendPresenceUpdate('composing', remoteJid);
+                } catch (e) {
+                    console.warn(`[${agentId}] Error sending presence update:`, e);
+                }
 
-                    // Upsert lead into Supabase
-                    try {
-                        const supabase = createAdminSupabaseClient();
-                        const metadataCustomData = {
-                            source: 'WhatsApp',
-                            agent_id: agentId,
-                            whatsapp_jid: remoteJid,
-                            whatsapp_profile_picture_url: contactMetadata?.profilePictureUrl || null,
-                            whatsapp_about: contactMetadata?.about || null,
-                            whatsapp_business_description: contactMetadata?.businessProfile?.description || null,
-                            whatsapp_business_category: contactMetadata?.businessProfile?.category || null,
-                            whatsapp_business_email: contactMetadata?.businessProfile?.email || null,
-                            whatsapp_business_website: contactMetadata?.businessProfile?.website || null,
-                            whatsapp_business_address: contactMetadata?.businessProfile?.address || null,
-                        };
-                        
-                        // Check if lead exists
+                let contactMetadata: WhatsAppContactMetadata | null = null;
+
+                try {
+                    contactMetadata = await readWhatsAppContactMetadata(sock, remoteJid);
+                } catch (metadataErr) {
+                    console.warn(`[${agentId}] Unable to fetch WhatsApp contact metadata for ${remoteJid}:`, metadataErr);
+                }
+
+                try {
+                    const supabase = createAdminSupabaseClient();
+                    const metadataCustomData = {
+                        source: 'WhatsApp',
+                        agent_id: agentId,
+                        whatsapp_jid: identity.rawJid,
+                        whatsapp_thread_id: normalizedThreadId,
+                        whatsapp_profile_picture_url: contactMetadata?.profilePictureUrl || null,
+                        whatsapp_about: contactMetadata?.about || null,
+                        whatsapp_business_description: contactMetadata?.businessProfile?.description || null,
+                        whatsapp_business_category: contactMetadata?.businessProfile?.category || null,
+                        whatsapp_business_email: contactMetadata?.businessProfile?.email || null,
+                        whatsapp_business_website: contactMetadata?.businessProfile?.website || null,
+                        whatsapp_business_address: contactMetadata?.businessProfile?.address || null,
+                    };
+
+                    if (identity.phone) {
                         const { data: existingLead } = await supabase
                             .from('leads')
                             .select('*')
-                            .eq('phone', phone)
+                            .eq('phone', identity.phone)
                             .maybeSingle();
 
                         if (!existingLead) {
-                            // Get the default funnel
                             const { data: funnel } = await supabase
                                 .from('funnels')
                                 .select('id')
@@ -424,13 +620,13 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
 
                             const { data: insertedLead, error: insertError } = await supabase.from('leads').insert({
                                 name: pushName,
-                                phone: phone,
+                                phone: identity.phone,
                                 preview: textMessage.substring(0, 100),
                                 status: 'Novo Lead',
                                 unread: true,
                                 funnel_id: funnelId,
                                 score: 0,
-                                custom_data: metadataCustomData
+                                custom_data: metadataCustomData,
                             }).select('*').single();
 
                             if (insertError) {
@@ -438,14 +634,13 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
                             }
 
                             await syncLeadThreadFromLead(insertedLead);
-                            console.log(`[${agentId}] Created new lead in Supabase for ${phone} (${pushName})`);
+                            console.log(`[${agentId}] Created new lead in Supabase for ${identity.phone} (${pushName})`);
                         } else {
                             const mergedCustomData = {
                                 ...((existingLead.custom_data as Record<string, unknown> | null) || {}),
                                 ...metadataCustomData,
                             };
 
-                            // Update existing lead preview and unread status
                             const { data: updatedLead, error: updateError } = await supabase.from('leads').update({
                                 name: existingLead.name && existingLead.name !== 'Lead' ? existingLead.name : pushName,
                                 preview: textMessage.substring(0, 100),
@@ -460,57 +655,60 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
                             await syncLeadThreadFromLead(updatedLead);
                         }
 
-                        if (contactMetadata) {
-                            await persistContactMetadata(agentId, remoteJid, contactMetadata);
-                        }
-                    } catch (dbErr) {
-                        console.error(`[${agentId}] Error upserting lead in Supabase:`, dbErr);
+                        await mergeLegacyThread(agentId, identity.rawJid, normalizedThreadId);
+                    } else {
+                        await upsertUnresolvedThread({
+                            agentId,
+                            threadId: normalizedThreadId,
+                            pushName,
+                            textMessage,
+                            metadataCustomData,
+                        });
                     }
-                    
-                    // Log incoming message to War Room Store
-                    await addMessage({
-                        threadId: normalizedThreadId,
-                        agent: pushName,
-                        role: "Client",
-                        content: textMessage
-                    });
-                    
-                    try {
-                        // Route message to LangGraph, telling it which agent owns this session!
-                        const history = await getThreadHistoryForGraph(normalizedThreadId);
-                        const response = await novianAIGraph.invoke(
-                            { 
-                                messages: history,
-                                sender: normalizedThreadId,
-                                threadId: normalizedThreadId,
-                                leadInfo: {},
-                                nextAgent: agentId
-                            } satisfies AgentState, 
-                            { recursionLimit: 50 }
-                        );
-                        
-                        // Extract the AI's reply
-                        const allMsgs = (response as { messages?: Array<{ content?: unknown; _getType?: () => string }> }).messages ?? [];
-                        const lastMessage = allMsgs[allMsgs.length - 1];
-                        
-                        // Fix: Don't rely purely on "lastMessage.content" if the agent didn't output text (e.g. only tool call)
-                        // Or if it was an internal thought. Let's make sure it's an AIMessage.
-                        if (lastMessage && lastMessage.content && lastMessage._getType?.() === 'ai') {
-                            console.log(`[${agentId}] Sending reply to ${remoteJid}`);
-                            
-                            const replyContent = lastMessage.content.toString();
-                            
-                            // Stop typing indicator and send WhatsApp message!
-                            await sock.sendPresenceUpdate('paused', remoteJid);
-                            await sock.sendMessage(remoteJid, { text: replyContent });
-                        } else {
-                            console.log(`[${agentId}] No valid text reply generated for ${remoteJid}`);
-                            await sock.sendPresenceUpdate('paused', remoteJid);
-                        }
-                    } catch (err) {
-                        console.error(`[${agentId}] Error in LangGraph execution:`, err);
+
+                    if (contactMetadata) {
+                        await persistContactMetadata(agentId, sock, remoteJid, contactMetadata);
+                    }
+                } catch (dbErr) {
+                    console.error(`[${agentId}] Error upserting lead in Supabase:`, dbErr);
+                }
+
+                await addMessage({
+                    threadId: normalizedThreadId,
+                    agent: pushName,
+                    role: 'Client',
+                    content: textMessage,
+                });
+
+                try {
+                    const history = await getThreadHistoryForGraph(normalizedThreadId);
+                    const response = await novianAIGraph.invoke(
+                        {
+                            messages: history,
+                            sender: normalizedThreadId,
+                            threadId: normalizedThreadId,
+                            leadInfo: {},
+                            nextAgent: agentId,
+                        } satisfies AgentState,
+                        { recursionLimit: 50 }
+                    );
+
+                    const allMsgs = (response as { messages?: Array<{ content?: unknown; _getType?: () => string }> }).messages ?? [];
+                    const lastMessage = allMsgs[allMsgs.length - 1];
+
+                    if (lastMessage && lastMessage.content && lastMessage._getType?.() === 'ai') {
+                        console.log(`[${agentId}] Sending reply to ${remoteJid}`);
+                        const replyContent = lastMessage.content.toString();
+
+                        await sock.sendPresenceUpdate('paused', remoteJid);
+                        await sock.sendMessage(remoteJid, { text: replyContent });
+                    } else {
+                        console.log(`[${agentId}] No valid text reply generated for ${remoteJid}`);
                         await sock.sendPresenceUpdate('paused', remoteJid);
                     }
+                } catch (err) {
+                    console.error(`[${agentId}] Error in LangGraph execution:`, err);
+                    await sock.sendPresenceUpdate('paused', remoteJid);
                 }
             }
         });

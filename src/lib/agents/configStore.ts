@@ -9,6 +9,9 @@ type AgentRow = {
   name: string;
   role: string;
   system_prompt: string;
+  whatsapp_display_name?: string | null;
+  whatsapp_phone?: string | null;
+  whatsapp_profile_picture_url?: string | null;
 };
 
 let hasSeededAgents = false;
@@ -21,6 +24,9 @@ function mapRowToAgentConfig(row: AgentRow): AgentConfig {
     systemPrompt: row.system_prompt,
     modules: row.modules || [],
     knowledgeBase: row.knowledge_base || "",
+    whatsappDisplayName: row.whatsapp_display_name || undefined,
+    whatsappPhone: row.whatsapp_phone || undefined,
+    whatsappProfilePictureUrl: row.whatsapp_profile_picture_url || undefined,
   };
 }
 
@@ -107,4 +113,30 @@ export async function upsertAgentConfig(agent: AgentConfig): Promise<AgentConfig
   }
 
   return mapRowToAgentConfig(data as AgentRow);
+}
+
+export async function updateAgentWhatsAppProfile(
+  agentId: string,
+  profile: {
+    displayName?: string | null;
+    phone?: string | null;
+    profilePictureUrl?: string | null;
+  },
+): Promise<void> {
+  await ensureDefaultAgentsSeeded();
+
+  const supabase = createAdminSupabaseClient();
+  const { error } = await supabase
+    .from("agents")
+    .update({
+      whatsapp_display_name: profile.displayName ?? null,
+      whatsapp_phone: profile.phone ?? null,
+      whatsapp_profile_picture_url: profile.profilePictureUrl ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", agentId);
+
+  if (error) {
+    throw error;
+  }
 }

@@ -1,3 +1,4 @@
+import { jidNormalizedUser, isPnUser } from "@whiskeysockets/baileys";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
@@ -24,13 +25,32 @@ function isChannelThread(threadId: string) {
   return threadId === "general" || threadId === "continuous";
 }
 
+function extractPhoneFromThreadId(threadId: string) {
+  if (isChannelThread(threadId)) {
+    return null;
+  }
+
+  const normalized = jidNormalizedUser(threadId) || threadId;
+  if (!isPnUser(normalized)) {
+    return null;
+  }
+
+  const [user] = normalized.split("@");
+  return user || null;
+}
+
 export function normalizeChatThreadId(threadIdOrJid: string) {
   if (isChannelThread(threadIdOrJid)) {
     return threadIdOrJid;
   }
 
-  const phone = threadIdOrJid.split("@")[0];
-  return `${phone}@s.whatsapp.net`;
+  const trimmed = threadIdOrJid.trim();
+  if (!trimmed.includes("@")) {
+    const digits = trimmed.replace(/\D/g, "");
+    return digits ? `${digits}@s.whatsapp.net` : trimmed;
+  }
+
+  return jidNormalizedUser(trimmed) || trimmed;
 }
 
 function channelDefaults(threadId: string) {
@@ -102,13 +122,15 @@ function isChatVisibleThread(row: ChatThreadRow) {
 }
 
 function mapThread(row: ChatThreadRow): Thread {
+  const derivedPhone = extractPhoneFromThreadId(row.thread_id);
+
   return {
     id: row.thread_id,
     title: row.title,
     preview: row.preview || "",
     time: formatClock(row.last_message_at),
     unread: row.unread,
-    phone: row.phone || row.thread_id.split("@")[0] || row.thread_id,
+    phone: row.phone || derivedPhone || "",
     agentIds: row.agent_ids || [],
     status: row.status || undefined,
     score: row.score || 0,
@@ -160,7 +182,11 @@ async function getLeadByThreadId(threadId: string) {
     return null;
   }
 
-  const phone = normalizeChatThreadId(threadId).split("@")[0];
+  const phone = extractPhoneFromThreadId(normalizeChatThreadId(threadId));
+  if (!phone) {
+    return null;
+  }
+
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase
     .from("leads")
@@ -194,7 +220,7 @@ async function ensureThreadRecord(threadId: string, seed?: Partial<Thread>) {
 
   const lead = await getLeadByThreadId(normalizedThreadId);
   const defaults = isChannelThread(normalizedThreadId) ? channelDefaults(normalizedThreadId) : null;
-  const phone = seed?.phone || lead?.phone || (isChannelThread(normalizedThreadId) ? null : normalizedThreadId.split("@")[0]);
+  const phone = seed?.phone || lead?.phone || extractPhoneFromThreadId(normalizedThreadId);
 
   const insertPayload: Database["public"]["Tables"]["chat_threads"]["Insert"] = {
     thread_id: normalizedThreadId,
@@ -406,7 +432,7 @@ export async function addMessage(msg: Omit<ChatMessage, "id" | "time">) {
   const titleShouldUpdate =
     msg.role === "Client" &&
     msg.agent !== "Lead" &&
-    (thread.title.startsWith("Lead: ") || thread.title === normalizedThreadId.split("@")[0]);
+    (thread.title.startsWith("Lead: ") || (!!thread.phone && thread.title === thread.phone));
 
   const updatedTitle = titleShouldUpdate ? msg.agent : thread.title;
 
