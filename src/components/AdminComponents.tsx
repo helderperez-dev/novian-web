@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Pencil } from "lucide-react";
+import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock } from "lucide-react";
 import Image from "next/image";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField } from "@/lib/store";
@@ -286,8 +286,27 @@ function LeadNotesPanel({
   const [draft, setDraft] = useState("");
   const [visibility, setVisibility] = useState<LeadNoteVisibility>("ai");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const notes = getLeadNotes(customData as Record<string, unknown> | null | undefined);
+
+  useEffect(() => {
+    if (!openMenuId) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-note-menu-root='true']")) {
+        return;
+      }
+
+      setOpenMenuId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [openMenuId]);
 
   const resetComposer = () => {
     setDraft("");
@@ -309,6 +328,31 @@ function LeadNotesPanel({
     setDraft(note.content);
     setVisibility(note.visibility);
     setEditingNoteId(note.id);
+    setOpenMenuId(null);
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!leadId) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const nextNotes = notes.filter((note) => note.id !== noteId);
+      await persistNotes(nextNotes);
+
+      if (editingNoteId === noteId) {
+        resetComposer();
+      }
+
+      setOpenMenuId(null);
+      await onSaved?.();
+    } catch (error) {
+      console.error("Failed to delete lead note", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveNote = async () => {
@@ -408,7 +452,7 @@ function LeadNotesPanel({
               ? "Ex.: Cliente prefere apartamento em Jundiai e aceita visita aos sabados."
               : "Ex.: Confirmar com o time comercial antes de oferecer condicoes especiais."
           }
-          className="mt-4 min-h-[110px] w-full resize-none rounded-xl border border-novian-muted/30 bg-transparent px-0 py-0 text-sm text-novian-text outline-none placeholder:text-novian-text/35"
+          className="mt-4 min-h-[140px] w-full resize-none rounded-2xl border border-novian-muted/30 bg-novian-surface/10 px-4 py-3 text-sm leading-7 text-novian-text outline-none transition placeholder:text-novian-text/35 focus:border-novian-accent/35"
         />
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-xs leading-relaxed text-novian-text/40">
@@ -477,14 +521,40 @@ function LeadNotesPanel({
                       {note.author} · {formatNoteTimestamp(note.updatedAt)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleEditNote(note)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-novian-text/50 transition hover:text-novian-text"
-                  >
-                    <Pencil size={12} />
-                    Editar
-                  </button>
+                  <div className="relative" data-note-menu-root="true">
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenuId((current) => (current === note.id ? null : note.id))}
+                      aria-label="Acoes da nota"
+                      aria-haspopup="menu"
+                      aria-expanded={openMenuId === note.id}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-novian-text/45 transition hover:bg-novian-surface/25 hover:text-novian-text"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+
+                    {openMenuId === note.id ? (
+                      <div className="absolute top-10 right-0 z-20 min-w-[150px] rounded-2xl border border-novian-muted/25 bg-novian-surface/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.24)] backdrop-blur">
+                        <button
+                          type="button"
+                          onClick={() => handleEditNote(note)}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-novian-text/80 transition hover:bg-novian-surface/40 hover:text-novian-text"
+                        >
+                          <Edit size={14} />
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(note.id)}
+                          disabled={isSaving}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/10 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Trash2 size={14} />
+                          Excluir
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-novian-text/88">
                   {note.content}
@@ -492,6 +562,138 @@ function LeadNotesPanel({
               </div>
             );
           })
+        )}
+      </div>
+    </div>
+  );
+}
+
+type MarkdownAction = "heading" | "bold" | "italic" | "bullet" | "paragraph";
+
+function MarkdownEditor({
+  name,
+  value,
+  onChange,
+  required = false,
+  minHeightClass = "min-h-56",
+}: {
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  minHeightClass?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const applyMarkdown = (action: MarkdownAction) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const selection = value.slice(start, end);
+    const fallbackText = selection || "texto";
+
+    let nextValue = value;
+    let nextSelectionStart = start;
+    let nextSelectionEnd = end;
+
+    if (action === "bold") {
+      const inserted = `**${fallbackText}**`;
+      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+      nextSelectionStart = start + 2;
+      nextSelectionEnd = start + 2 + fallbackText.length;
+    }
+
+    if (action === "italic") {
+      const inserted = `*${fallbackText}*`;
+      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+      nextSelectionStart = start + 1;
+      nextSelectionEnd = start + 1 + fallbackText.length;
+    }
+
+    if (action === "heading") {
+      const inserted = `## ${selection || "Novo destaque"}`;
+      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+      nextSelectionStart = start + 3;
+      nextSelectionEnd = start + inserted.length;
+    }
+
+    if (action === "bullet") {
+      const selectedLines = selection ? selection.split("\n") : ["Novo item"];
+      const inserted = selectedLines.map((line) => `- ${line}`).join("\n");
+      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+      nextSelectionStart = start;
+      nextSelectionEnd = start + inserted.length;
+    }
+
+    if (action === "paragraph") {
+      const inserted = `${selection || "Novo paragrafo"}\n\n`;
+      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
+      nextSelectionStart = start;
+      nextSelectionEnd = start + inserted.trimEnd().length;
+    }
+
+    onChange(nextValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd);
+    });
+  };
+
+  const actions: Array<{ id: MarkdownAction; label: string }> = [
+    { id: "heading", label: "Titulo" },
+    { id: "bold", label: "Negrito" },
+    { id: "italic", label: "Italico" },
+    { id: "bullet", label: "Lista" },
+    { id: "paragraph", label: "Paragrafo" },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-novian-muted/40 bg-novian-primary/35">
+      <div className="flex flex-wrap items-center gap-2 border-b border-novian-muted/30 px-3 py-3">
+        {actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            onClick={() => applyMarkdown(action.id)}
+            className="rounded-full border border-novian-muted/30 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+          >
+            {action.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] text-novian-text/40">
+          Markdown simples com preview ao vivo
+        </span>
+      </div>
+
+      <textarea
+        ref={textareaRef}
+        name={name}
+        required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`w-full resize-y bg-transparent px-4 py-4 text-sm leading-7 text-novian-text outline-none placeholder:text-novian-text/35 ${minHeightClass}`}
+        placeholder="Descreva o imovel com detalhes, diferenciais e contexto da localizacao."
+      />
+
+      <div className="border-t border-novian-muted/30 px-4 py-4">
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-novian-text/40">
+          Preview
+        </p>
+        {value.trim() ? (
+          <div className="prose prose-sm prose-invert max-w-none text-novian-text/85 prose-p:leading-7 prose-headings:text-novian-text prose-strong:text-novian-text prose-li:marker:text-novian-accent">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {value}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <p className="text-sm text-novian-text/35">
+            O preview aparece aqui conforme voce escreve.
+          </p>
         )}
       </div>
     </div>
@@ -1574,6 +1776,15 @@ const COLOR_PRESETS = [
   { id: 'gray', classes: 'border-gray-500/30 text-gray-400 bg-gray-500/10', bg: 'bg-gray-500' },
 ];
 
+const buildGoogleMapsEmbedUrl = (address: string) => {
+  const normalizedAddress = address.trim();
+  if (!normalizedAddress) {
+    return "";
+  }
+
+  return `https://maps.google.com/maps?q=${encodeURIComponent(normalizedAddress)}&output=embed`;
+};
+
 export function PropertiesLayout() {
   const searchParams = useSearchParams();
   const deepLinkPropertyId = searchParams.get("id");
@@ -1585,6 +1796,9 @@ export function PropertiesLayout() {
   const [currentImages, setCurrentImages] = useState<string[]>([]);
   const [currentCover, setCurrentCover] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const [address, setAddress] = useState<string>("");
+  const [mapEmbedUrl, setMapEmbedUrl] = useState<string>("");
+  const [isMapEditedManually, setIsMapEditedManually] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
@@ -1613,12 +1827,29 @@ export function PropertiesLayout() {
       setCurrentImages(selectedProperty.images || []);
       setCurrentCover(selectedProperty.coverImage || "");
       setDescription(selectedProperty.description || "");
+      setAddress(selectedProperty.address || "");
+      const generatedMapUrl = buildGoogleMapsEmbedUrl(selectedProperty.address || "");
+      const existingMapUrl = selectedProperty.mapEmbedUrl || "";
+      const hasManualMapUrl = Boolean(existingMapUrl) && existingMapUrl !== generatedMapUrl;
+      setMapEmbedUrl(existingMapUrl || generatedMapUrl);
+      setIsMapEditedManually(hasManualMapUrl);
     } else {
       setCurrentImages([]);
       setCurrentCover("");
       setDescription("");
+      setAddress("");
+      setMapEmbedUrl("");
+      setIsMapEditedManually(false);
     }
   }, [selectedProperty, isDrawerOpen]);
+
+  useEffect(() => {
+    if (isMapEditedManually) {
+      return;
+    }
+
+    setMapEmbedUrl(buildGoogleMapsEmbedUrl(address));
+  }, [address, isMapEditedManually]);
 
   useEffect(() => {
     didAutoOpenPropertyFromQueryRef.current = false;
@@ -1651,7 +1882,7 @@ export function PropertiesLayout() {
       }
     });
 
-    let mapUrl = formData.get("mapEmbedUrl") as string;
+    let mapUrl = mapEmbedUrl;
     if (mapUrl && mapUrl.includes('<iframe') && mapUrl.includes('src="')) {
       const match = mapUrl.match(/src="([^"]+)"/);
       if (match) {
@@ -1663,7 +1894,7 @@ export function PropertiesLayout() {
       ...(selectedProperty ? { id: selectedProperty.id, slug: selectedProperty.slug } : {}),
       title: formData.get("title"),
       description: formData.get("description"),
-      address: formData.get("address"),
+      address,
       mapEmbedUrl: mapUrl,
       price: Number(formData.get("price")),
       status: formData.get("status"),
@@ -1835,23 +2066,76 @@ export function PropertiesLayout() {
                   <div className="col-span-2">
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-xs font-medium text-novian-text/70">Descrição</label>
-                      <span className="text-[11px] text-novian-text/45">Use a descrição completa do imóvel.</span>
+                      <span className="text-[11px] text-novian-text/45">Use markdown simples para destacar pontos importantes.</span>
                     </div>
-                    <textarea 
-                      name="description" 
-                      required 
-                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none min-h-56 resize-y" 
+                    <MarkdownEditor
+                      name="description"
+                      required
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                    ></textarea>
+                      onChange={setDescription}
+                    />
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Endereço Completo</label>
-                    <input name="address" required type="text" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.address} placeholder="Ex: Rua Amauri, 123 - Itaim Bibi, São Paulo - SP" />
+                    <input
+                      name="address"
+                      required
+                      type="text"
+                      value={address}
+                      onChange={(event) => setAddress(event.target.value)}
+                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                      placeholder="Ex: Rua Amauri, 123 - Itaim Bibi, São Paulo - SP"
+                    />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-novian-text/70 mb-1">URL de Incorporação do Mapa (Google Maps Embed)</label>
-                    <input name="mapEmbedUrl" type="text" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.mapEmbedUrl} placeholder="<iframe src='...'> ou https://www.google.com/maps/embed?..." />
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <label className="block text-xs font-medium text-novian-text/70">Mapa</label>
+                      <span className="text-[11px] text-novian-text/45">
+                        Gerado automaticamente a partir do endereco completo.
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-novian-muted/40 bg-novian-primary/30 p-4 space-y-3">
+                      <input
+                        name="mapEmbedUrl"
+                        type="text"
+                        value={mapEmbedUrl}
+                        onChange={(event) => {
+                          setMapEmbedUrl(event.target.value);
+                          setIsMapEditedManually(true);
+                        }}
+                        className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                        placeholder="O mapa sera preenchido automaticamente quando voce informar o endereco."
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-novian-text/45">
+                          {isMapEditedManually
+                            ? "Mapa ajustado manualmente. Use o automatico para recriar a partir do endereco."
+                            : "Atualiza sozinho conforme o endereco e pode ser ajustado manualmente se precisar."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMapEmbedUrl(buildGoogleMapsEmbedUrl(address));
+                            setIsMapEditedManually(false);
+                          }}
+                          disabled={!address.trim()}
+                          className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Usar automatico
+                        </button>
+                      </div>
+                      {mapEmbedUrl ? (
+                        <div className="overflow-hidden rounded-xl border border-novian-muted/35 bg-novian-surface/20">
+                          <iframe
+                            src={mapEmbedUrl}
+                            title="Preview do mapa"
+                            className="h-52 w-full"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Preço (R$)</label>
@@ -1859,10 +2143,14 @@ export function PropertiesLayout() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Status</label>
-                    <select name="status" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none">
-                      <option value="active" selected={selectedProperty?.status === 'active'}>Ativo</option>
-                      <option value="inactive" selected={selectedProperty?.status === 'inactive'}>Inativo</option>
-                      <option value="sold" selected={selectedProperty?.status === 'sold'}>Vendido</option>
+                    <select
+                      name="status"
+                      defaultValue={selectedProperty?.status ?? "active"}
+                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                    >
+                      <option value="active">Ativo</option>
+                      <option value="inactive">Inativo</option>
+                      <option value="sold">Vendido</option>
                     </select>
                   </div>
                 </div>
