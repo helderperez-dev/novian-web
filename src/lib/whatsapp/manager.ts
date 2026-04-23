@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 import { novianAIGraph } from '../agents/graph';
 import type { AgentState } from '../agents/state';
 import { updateAgentWhatsAppProfile } from '../agents/configStore';
-import { addMessage, getThreadHistoryForGraph, normalizeChatThreadId, syncLeadThreadFromLead } from '../chatStore';
+import { addMessage, getLeadInfoForThread, getThreadHistoryForGraph, normalizeChatThreadId, syncLeadThreadFromLead } from '../chatStore';
 import type { Database } from '../database.types';
 
 import { clearSupabaseAuthState, getSupabaseAuthState } from './supabaseAuth';
@@ -687,7 +687,7 @@ export async function connectAgentWhatsApp(agentId: string, options?: { workerId
                             messages: history,
                             sender: normalizedThreadId,
                             threadId: normalizedThreadId,
-                            leadInfo: {},
+                            leadInfo: await getLeadInfoForThread(normalizedThreadId),
                             nextAgent: agentId,
                         } satisfies AgentState,
                         { recursionLimit: 50 }

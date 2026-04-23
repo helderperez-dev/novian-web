@@ -36,6 +36,7 @@ export interface Funnel {
 
 export interface Thread {
     id: string;
+    leadId?: string;
     title: string;
     preview: string;
     time: string;
@@ -45,7 +46,7 @@ export interface Thread {
     status?: string; // e.g., 'novo', 'qualificacao', 'atendimento', 'proposta', 'fechado'
     score?: number;
     funnelId?: string;
-    customData?: Record<string, string | number | boolean | string[] | null>;
+    customData?: Record<string, unknown>;
 }
 
 export interface AgentConfig {

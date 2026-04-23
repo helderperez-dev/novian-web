@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { markThreadRead, addMessage, getTyping, setTyping, getThreadHistoryForGraph, getThreadMessages } from '@/lib/chatStore';
+import { markThreadRead, addMessage, getLeadInfoForThread, getTyping, setTyping, getThreadHistoryForGraph, getThreadMessages } from '@/lib/chatStore';
 import { novianAIGraph } from '@/lib/agents/graph';
 import type { AgentState } from '@/lib/agents/state';
 
@@ -53,7 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ threadI
                             messages: history,
                             sender: "CEO",
                             threadId: decodedId,
-                            leadInfo: {},
+                            leadInfo: await getLeadInfoForThread(decodedId),
                             nextAgent: "director",
                         } satisfies AgentState,
                         { recursionLimit: 50 }

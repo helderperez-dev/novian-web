@@ -2,6 +2,7 @@ import { jidNormalizedUser, isPnUser } from "@whiskeysockets/baileys";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
+import { getLeadNotesByVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread } from "@/lib/store";
 
 type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
@@ -126,6 +127,7 @@ function mapThread(row: ChatThreadRow): Thread {
 
   return {
     id: row.thread_id,
+    leadId: row.lead_id || undefined,
     title: row.title,
     preview: row.preview || "",
     time: formatClock(row.last_message_at),
@@ -135,7 +137,7 @@ function mapThread(row: ChatThreadRow): Thread {
     status: row.status || undefined,
     score: row.score || 0,
     funnelId: row.funnel_id || undefined,
-    customData: (row.custom_data as Record<string, string | number | boolean | string[] | null>) || {},
+    customData: (row.custom_data as Record<string, unknown>) || {},
   };
 }
 
@@ -199,6 +201,36 @@ async function getLeadByThreadId(threadId: string) {
   }
 
   return isChatEligibleLead(data) ? data : null;
+}
+
+export async function getLeadInfoForThread(threadId: string) {
+  const lead = await getLeadByThreadId(threadId);
+  if (!lead) {
+    return {};
+  }
+
+  const preferences =
+    lead.custom_data && typeof lead.custom_data === "object" && !Array.isArray(lead.custom_data)
+      ? Object.fromEntries(
+          Object.entries(lead.custom_data as Record<string, unknown>).filter(
+            ([key]) => !key.startsWith("whatsapp_") && key !== "lead_notes",
+          ),
+        )
+      : undefined;
+
+  const sharedNotes = getLeadNotesByVisibility(
+    lead.custom_data as Record<string, unknown> | null | undefined,
+    "ai",
+  );
+
+  return {
+    id: lead.id,
+    name: lead.name || undefined,
+    phone: lead.phone || undefined,
+    status: lead.status || undefined,
+    preferences,
+    notes: sharedNotes.map((note) => note.content),
+  };
 }
 
 async function ensureThreadRecord(threadId: string, seed?: Partial<Thread>) {

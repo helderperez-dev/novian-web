@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical } from "lucide-react";
+import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Pencil } from "lucide-react";
 import Image from "next/image";
+import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
 import ReactMarkdown from "react-markdown";
@@ -146,6 +147,8 @@ type LeadDetailItem = {
   href?: string;
 };
 
+type LeadContextTab = "overview" | "notes";
+
 const getLeadPhoneValue = (thread: Pick<Thread, "phone" | "id">) => {
   const phone = thread.phone?.trim();
   if (phone) {
@@ -212,6 +215,288 @@ const getLeadMetadataDetails = (customData?: Thread["customData"]): LeadDetailIt
     return items;
   }, []);
 };
+
+const getLeadCustomEntries = (customData?: Thread["customData"]) => {
+  if (!customData) {
+    return [];
+  }
+
+  return Object.entries(customData).filter(
+    ([key]) => !key.startsWith("whatsapp_") && key !== LEAD_NOTES_KEY,
+  );
+};
+
+const formatNoteTimestamp = (value: string) =>
+  new Date(value).toLocaleString([], {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+function LeadContextTabs({
+  value,
+  onChange,
+}: {
+  value: LeadContextTab;
+  onChange: (value: LeadContextTab) => void;
+}) {
+  const tabs: Array<{ id: LeadContextTab; label: string; icon: typeof Bot }> = [
+    { id: "overview", label: "Resumo", icon: MessageSquare },
+    { id: "notes", label: "Notas", icon: FileText },
+  ];
+
+  return (
+    <div className="border-b border-novian-muted/30">
+      <div className="flex items-center gap-6 overflow-x-auto">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = value === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={`relative flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+              isActive
+                ? "border-novian-accent text-novian-text"
+                : "border-transparent text-novian-text/50 hover:text-novian-text/80"
+            }`}
+          >
+            <Icon size={14} />
+            <span>{tab.label}</span>
+          </button>
+        );
+      })}
+      </div>
+    </div>
+  );
+}
+
+function LeadNotesPanel({
+  leadId,
+  customData,
+  onSaved,
+}: {
+  leadId?: string;
+  customData?: Thread["customData"];
+  onSaved?: () => Promise<void> | void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [visibility, setVisibility] = useState<LeadNoteVisibility>("ai");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const notes = getLeadNotes(customData as Record<string, unknown> | null | undefined);
+
+  const resetComposer = () => {
+    setDraft("");
+    setVisibility("ai");
+    setEditingNoteId(null);
+  };
+
+  const persistNotes = async (nextNotes: LeadNote[]) => {
+    await fetch(`/api/leads/${encodeURIComponent(leadId ?? "")}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customData: upsertLeadNotes(customData as Record<string, unknown> | null | undefined, nextNotes),
+      }),
+    });
+  };
+
+  const handleEditNote = (note: LeadNote) => {
+    setDraft(note.content);
+    setVisibility(note.visibility);
+    setEditingNoteId(note.id);
+  };
+
+  const handleSaveNote = async () => {
+    if (!leadId || !draft.trim()) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const nextNotes = editingNoteId
+        ? notes.map((note) =>
+            note.id === editingNoteId
+              ? {
+                  ...note,
+                  content: draft.trim(),
+                  visibility,
+                  updatedAt: new Date().toISOString(),
+                }
+              : note,
+          )
+        : [
+            createLeadNote({
+              content: draft,
+              visibility,
+              author: "Equipe Novian",
+            }),
+            ...notes,
+          ];
+
+      await persistNotes(nextNotes);
+      resetComposer();
+      await onSaved?.();
+    } catch (error) {
+      console.error("Failed to save lead note", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="border-b border-novian-muted/25 pb-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setVisibility("ai")}
+            className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+              visibility === "ai"
+                ? "bg-novian-accent/15 text-novian-text"
+                : "text-novian-text/50 hover:text-novian-text/80"
+            }`}
+          >
+            IA
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisibility("internal")}
+            className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+              visibility === "internal"
+                ? "bg-novian-accent/15 text-novian-text"
+                : "text-novian-text/50 hover:text-novian-text/80"
+            }`}
+          >
+            Interna
+          </button>
+          <span className="text-xs text-novian-text/45">
+            {visibility === "ai" ? "A IA pode usar esta nota" : "Apenas equipe interna"}
+          </span>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-novian-text">
+              {editingNoteId ? "Editar nota" : "Nova nota"}
+            </p>
+            <p className="text-xs text-novian-text/45">
+              {editingNoteId
+                ? "Atualize o texto ou troque a visibilidade da nota."
+                : "Adicione contexto rapido para o time ou para a IA."}
+            </p>
+          </div>
+          {editingNoteId ? (
+            <button
+              type="button"
+              onClick={resetComposer}
+              className="text-xs font-medium text-novian-text/55 transition hover:text-novian-text"
+            >
+              Cancelar
+            </button>
+          ) : null}
+        </div>
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={
+            visibility === "ai"
+              ? "Ex.: Cliente prefere apartamento em Jundiai e aceita visita aos sabados."
+              : "Ex.: Confirmar com o time comercial antes de oferecer condicoes especiais."
+          }
+          className="mt-4 min-h-[110px] w-full resize-none rounded-xl border border-novian-muted/30 bg-transparent px-0 py-0 text-sm text-novian-text outline-none placeholder:text-novian-text/35"
+        />
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-xs leading-relaxed text-novian-text/40">
+            {editingNoteId
+              ? "As alteracoes atualizam esta nota imediatamente."
+              : visibility === "ai"
+                ? "Visivel para a IA nas conversas."
+                : "Visivel apenas para a equipe interna."}
+          </p>
+          <button
+            type="button"
+            onClick={handleSaveNote}
+            disabled={!leadId || !draft.trim() || isSaving}
+            className="rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSaving ? "Salvando..." : editingNoteId ? "Salvar alteracoes" : "Salvar"}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-novian-text">Historico</span>
+            <span className="rounded-full border border-novian-muted/25 px-2 py-0.5 text-[11px] text-novian-text/45">
+              {notes.length}
+            </span>
+          </div>
+          <p className="text-xs text-novian-text/40">Cada nota indica claramente quem pode usar a informacao.</p>
+        </div>
+
+        {notes.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-novian-muted/30 px-4 py-5 text-center text-sm text-novian-text/40">
+            Nenhuma nota cadastrada ainda.
+          </div>
+        ) : (
+          notes.map((note) => {
+            const isAiNote = note.visibility === "ai";
+            const NoteIcon = isAiNote ? Bot : Lock;
+            const badgeLabel = isAiNote ? "IA" : "Interna";
+            const badgeTone = isAiNote
+              ? "border-novian-accent/20 bg-novian-accent/10 text-novian-text"
+              : "border-novian-muted/30 bg-novian-surface/25 text-novian-text/75";
+
+            return (
+              <div
+                key={note.id}
+                className={`rounded-xl border p-4 transition ${
+                  editingNoteId === note.id
+                    ? "border-novian-accent/35 bg-novian-surface/30"
+                    : "border-novian-muted/25 bg-novian-surface/20"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${badgeTone}`}>
+                        <NoteIcon size={12} />
+                        {badgeLabel}
+                      </span>
+                      <p className="text-xs text-novian-text/45">
+                        {isAiNote ? "Usada pela agente no WhatsApp" : "Visivel apenas para a equipe"}
+                      </p>
+                    </div>
+                    <p className="text-xs font-medium text-novian-text/55">
+                      {note.author} · {formatNoteTimestamp(note.updatedAt)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleEditNote(note)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-novian-text/50 transition hover:text-novian-text"
+                  >
+                    <Pencil size={12} />
+                    Editar
+                  </button>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-novian-text/88">
+                  {note.content}
+                </p>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: () => void, onLeadCreated: () => void, initialData?: Thread }) {
   const [formData, setFormData] = useState<Record<string, string>>(() => {
@@ -562,6 +847,7 @@ function DashboardLoader() {
 export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedLead, setSelectedLead] = useState<Thread | null>(null);
+  const [selectedLeadTab, setSelectedLeadTab] = useState<LeadContextTab>("overview");
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -597,7 +883,15 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
     try {
       const res = await fetch("/api/leads", { cache: 'no-store' });
       const data = await res.json();
-      setThreads(data.leads);
+      const nextLeads = Array.isArray(data.leads) ? data.leads : [];
+      setThreads(nextLeads);
+      setSelectedLead((currentLead) => {
+        if (!currentLead) {
+          return currentLead;
+        }
+
+        return nextLeads.find((lead: Thread) => lead.id === currentLead.id) || currentLead;
+      });
     } catch (e) {
       console.error(e);
     } finally {
@@ -618,6 +912,10 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
       clearInterval(interval);
     };
   }, [refreshTrigger]);
+
+  useEffect(() => {
+    setSelectedLeadTab("overview");
+  }, [selectedLead?.id]);
 
   const activeFunnel = funnelsList.find(f => f.id === activeFunnelId) || funnelsList[0];
   const columns = activeFunnel?.columns || [];
@@ -1083,152 +1381,165 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                 />
               ) : (
                 <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2 flex justify-between items-center">
-                      Informações do Lead
-                      {selectedLead.customData?.whatsapp_jid && (
-                        <button
-                          onClick={async () => {
-                            const btn = document.getElementById('refresh-wa-btn');
-                            if (btn) btn.innerHTML = '↻ Atualizando...';
-                            try {
-                              const agentId = selectedLead.customData?.agent_id || 'mariana-sdr';
-                              const jid = selectedLead.customData?.whatsapp_jid;
-                              await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
-                              await fetchLeads(); // Refresh leads to get updated data
-                            } catch (e) {
-                              console.error('Failed to refresh WA profile', e);
-                            } finally {
-                              if (btn) btn.innerHTML = '↻ Atualizar WA';
-                            }
-                          }}
-                          id="refresh-wa-btn"
-                          className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
-                        >
-                          ↻ Atualizar WA
-                        </button>
-                      )}
-                    </h3>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      {selectedLead.customData?.whatsapp_profile_picture_url && (
-                        <div className="col-span-2 flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img 
-                            src={String(selectedLead.customData.whatsapp_profile_picture_url)} 
-                            alt="WhatsApp Profile" 
-                            className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
-                          />
+                  <LeadContextTabs value={selectedLeadTab} onChange={setSelectedLeadTab} />
+
+                  {selectedLeadTab === "overview" && (
+                    <>
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2 flex justify-between items-center">
+                          Informações do Lead
+                          {typeof selectedLead.customData?.whatsapp_jid === "string" && (
+                            <button
+                              onClick={async () => {
+                                const btn = document.getElementById('refresh-wa-btn');
+                                if (btn) btn.innerHTML = '↻ Atualizando...';
+                                try {
+                                  const agentId = selectedLead.customData?.agent_id || 'mariana-sdr';
+                                  const jid = selectedLead.customData?.whatsapp_jid;
+                                  await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
+                                  await fetchLeads();
+                                } catch (e) {
+                                  console.error('Failed to refresh WA profile', e);
+                                } finally {
+                                  if (btn) btn.innerHTML = '↻ Atualizar WA';
+                                }
+                              }}
+                              id="refresh-wa-btn"
+                              className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
+                            >
+                              ↻ Atualizar WA
+                            </button>
+                          )}
+                        </h3>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          {typeof selectedLead.customData?.whatsapp_profile_picture_url === "string" && (
+                            <div className="col-span-2 flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={String(selectedLead.customData.whatsapp_profile_picture_url)}
+                                alt="WhatsApp Profile"
+                                className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
+                              />
+                              <div>
+                                <p className="text-sm font-semibold text-novian-text">{selectedLead.title || selectedLeadPhone}</p>
+                                <p className="text-xs text-novian-text/60 font-mono">{selectedLeadPhone}</p>
+                              </div>
+                            </div>
+                          )}
+
                           <div>
-                            <p className="text-sm font-semibold text-novian-text">{selectedLead.title || selectedLeadPhone}</p>
-                            <p className="text-xs text-novian-text/60 font-mono">{selectedLeadPhone}</p>
+                            <p className="text-xs text-novian-text/50 mb-1">Telefone / WhatsApp</p>
+                            <p className="text-sm font-mono text-novian-text/90">{selectedLeadPhone || "Nao informado"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-novian-text/50 mb-1">Origem</p>
+                            <p className="text-sm text-novian-text/90">{String(selectedLead.customData?.source || "Manual")}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-novian-text/50 mb-1">Status Atual</p>
+                            <span className="inline-block bg-novian-muted text-novian-text px-2 py-1 rounded-md text-xs font-medium border border-novian-muted/50 uppercase tracking-wider">
+                              {selectedLead.status || 'novo'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs text-novian-text/50 mb-1">Score de Engajamento</p>
+                            <span className="inline-block bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-md text-xs font-bold border border-yellow-500/30">
+                              🔥 {selectedLead.score || 0} pts
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-novian-text/50 mb-1">Criado em</p>
+                            <p className="text-sm">{selectedLead.time}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedLeadMetadataDetails.length > 0 && (
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Detalhes do Contato</h3>
+                          <div className="grid grid-cols-1 gap-4">
+                            {selectedLeadMetadataDetails.map((detail) => (
+                              <div key={detail.label}>
+                                <p className="text-xs text-novian-text/50 mb-1">{detail.label}</p>
+                                {detail.href ? (
+                                  <a
+                                    href={detail.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm font-medium text-novian-accent hover:text-white transition-colors break-all"
+                                  >
+                                    {detail.value}
+                                  </a>
+                                ) : (
+                                  <p className="text-sm font-medium break-all">{detail.value}</p>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
 
-                      <div>
-                        <p className="text-xs text-novian-text/50 mb-1">Telefone / WhatsApp</p>
-                        <p className="text-sm font-mono text-novian-text/90">{selectedLeadPhone || "Nao informado"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-novian-text/50 mb-1">Origem</p>
-                        <p className="text-sm text-novian-text/90">{String(selectedLead.customData?.source || "Manual")}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-novian-text/50 mb-1">Status Atual</p>
-                        <span className="inline-block bg-novian-muted text-novian-text px-2 py-1 rounded-md text-xs font-medium border border-novian-muted/50 uppercase tracking-wider">
-                          {selectedLead.status || 'novo'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-xs text-novian-text/50 mb-1">Score de Engajamento</p>
-                        <span className="inline-block bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-md text-xs font-bold border border-yellow-500/30">
-                          🔥 {selectedLead.score || 0} pts
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-xs text-novian-text/50 mb-1">Criado em</p>
-                        <p className="text-sm">{selectedLead.time}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedLeadMetadataDetails.length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Detalhes do Contato</h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {selectedLeadMetadataDetails.map((detail) => (
-                          <div key={detail.label}>
-                            <p className="text-xs text-novian-text/50 mb-1">{detail.label}</p>
-                            {detail.href ? (
-                              <a
-                                href={detail.href}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-sm font-medium text-novian-accent hover:text-white transition-colors break-all"
-                              >
-                                {detail.value}
-                              </a>
-                            ) : (
-                              <p className="text-sm font-medium break-all">{detail.value}</p>
+                      {(typeof selectedLead.customData?.whatsapp_about === "string" ||
+                        typeof selectedLead.customData?.whatsapp_business_description === "string") && (
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Perfil WhatsApp</h3>
+                          <div className="bg-novian-muted/10 p-4 rounded-xl border border-novian-muted/30 space-y-3">
+                            {typeof selectedLead.customData?.whatsapp_about === "string" && (
+                              <div>
+                                <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado (About)</p>
+                                <p className="text-sm italic text-novian-text/90">&quot;{String(selectedLead.customData.whatsapp_about)}&quot;</p>
+                              </div>
+                            )}
+                            {typeof selectedLead.customData?.whatsapp_business_description === "string" && (
+                              <div className="pt-2 border-t border-novian-muted/20">
+                                <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição (Business)</p>
+                                <p className="text-sm text-novian-text/80">{String(selectedLead.customData.whatsapp_business_description)}</p>
+                              </div>
+                            )}
+                            {typeof selectedLead.customData?.whatsapp_business_category === "string" && (
+                              <div className="pt-2 border-t border-novian-muted/20">
+                                <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Categoria (Business)</p>
+                                <p className="text-sm text-novian-text/80">{String(selectedLead.customData.whatsapp_business_category)}</p>
+                              </div>
                             )}
                           </div>
-                        ))}
+                        </div>
+                      )}
+
+                      {getLeadCustomEntries(selectedLead.customData).length > 0 && (
+                        <div className="space-y-4">
+                          <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos Personalizados</h3>
+                          <div className="grid grid-cols-1 gap-4">
+                            {getLeadCustomEntries(selectedLead.customData).map(([key, value]) => {
+                              const fieldDef = customFieldsStore.find(f => f.id === key);
+                              return (
+                                <div key={key}>
+                                  <p className="text-xs text-novian-text/50 mb-1">{fieldDef ? fieldDef.name : key}</p>
+                                  <p className="text-sm font-medium">{String(value)}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Última Interação</h3>
+                        <p className="text-sm text-novian-text/80 bg-novian-primary/30 p-4 rounded-xl border border-novian-muted/50 italic">
+                          &quot;{selectedLead.preview}&quot;
+                        </p>
                       </div>
-                    </div>
+                    </>
                   )}
 
-                  {(selectedLead.customData?.whatsapp_about || selectedLead.customData?.whatsapp_business_description) && (
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Perfil WhatsApp</h3>
-                      <div className="bg-novian-muted/10 p-4 rounded-xl border border-novian-muted/30 space-y-3">
-                        {selectedLead.customData?.whatsapp_about && (
-                          <div>
-                            <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado (About)</p>
-                            <p className="text-sm italic text-novian-text/90">&quot;{String(selectedLead.customData.whatsapp_about)}&quot;</p>
-                          </div>
-                        )}
-                        {selectedLead.customData?.whatsapp_business_description && (
-                          <div className="pt-2 border-t border-novian-muted/20">
-                            <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição (Business)</p>
-                            <p className="text-sm text-novian-text/80">{String(selectedLead.customData.whatsapp_business_description)}</p>
-                          </div>
-                        )}
-                        {selectedLead.customData?.whatsapp_business_category && (
-                          <div className="pt-2 border-t border-novian-muted/20">
-                            <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Categoria (Business)</p>
-                            <p className="text-sm text-novian-text/80">{String(selectedLead.customData.whatsapp_business_category)}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  {selectedLeadTab === "notes" && (
+                    <LeadNotesPanel
+                      leadId={selectedLead.id}
+                      customData={selectedLead.customData}
+                      onSaved={fetchLeads}
+                    />
                   )}
-
-                  {selectedLead.customData && Object.keys(selectedLead.customData).filter(k => !k.startsWith('whatsapp_')).length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos Personalizados</h3>
-                      <div className="grid grid-cols-1 gap-4">
-                        {Object.entries(selectedLead.customData)
-                          .filter(([key]) => !key.startsWith('whatsapp_'))
-                          .map(([key, value]) => {
-                          const fieldDef = customFieldsStore.find(f => f.id === key);
-                          return (
-                            <div key={key}>
-                              <p className="text-xs text-novian-text/50 mb-1">{fieldDef ? fieldDef.name : key}</p>
-                              <p className="text-sm font-medium">{String(value)}</p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                     <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Última Interação</h3>
-                     <p className="text-sm text-novian-text/80 bg-novian-primary/30 p-4 rounded-xl border border-novian-muted/50 italic">
-                        &quot;{selectedLead.preview}&quot;
-                     </p>
-                  </div>
                 </div>
               )}
             </div>
@@ -2607,6 +2918,7 @@ export function WarRoomLayout() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>("general");
+  const [activeThreadTab, setActiveThreadTab] = useState<LeadContextTab>("overview");
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<AgentConfig[]>([]);
@@ -2669,6 +2981,10 @@ export function WarRoomLayout() {
   useEffect(() => {
     fetchAgents();
   }, []);
+
+  useEffect(() => {
+    setActiveThreadTab("overview");
+  }, [activeThreadId]);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || !activeThreadId) return;
@@ -2868,7 +3184,7 @@ export function WarRoomLayout() {
             {activeThread ? (
               <div className="space-y-6">
                 <div className="flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
-                  {activeThread.customData?.whatsapp_profile_picture_url ? (
+                  {typeof activeThread.customData?.whatsapp_profile_picture_url === "string" ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
@@ -2918,63 +3234,82 @@ export function WarRoomLayout() {
                     </div>
                   )}
                 </div>
-                {activeThreadMetadataDetails.length > 0 && (
-                  <div className="pt-4 border-t border-novian-muted/30">
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Detalhes do Contato</p>
-                    <div className="space-y-3">
-                      {activeThreadMetadataDetails.map((detail) => (
-                        <div key={detail.label}>
-                          <p className="text-[10px] uppercase text-novian-text/40">{detail.label}</p>
-                          {detail.href ? (
-                            <a
-                              href={detail.href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-sm text-novian-accent hover:text-white transition-colors break-all"
-                            >
-                              {detail.value}
-                            </a>
-                          ) : (
-                            <p className="text-sm text-novian-text/80 break-all">{detail.value}</p>
+                <LeadContextTabs value={activeThreadTab} onChange={setActiveThreadTab} />
+
+                {activeThreadTab === "overview" && (
+                  <>
+                    {activeThreadMetadataDetails.length > 0 && (
+                      <div className="pt-4 border-t border-novian-muted/30">
+                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Detalhes do Contato</p>
+                        <div className="space-y-3">
+                          {activeThreadMetadataDetails.map((detail) => (
+                            <div key={detail.label}>
+                              <p className="text-[10px] uppercase text-novian-text/40">{detail.label}</p>
+                              {detail.href ? (
+                                <a
+                                  href={detail.href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sm text-novian-accent hover:text-white transition-colors break-all"
+                                >
+                                  {detail.value}
+                                </a>
+                              ) : (
+                                <p className="text-sm text-novian-text/80 break-all">{detail.value}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {(typeof activeThread.customData?.whatsapp_about === "string" ||
+                      typeof activeThread.customData?.whatsapp_business_description === "string") && (
+                      <div className="pt-4 border-t border-novian-muted/30">
+                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
+                        <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
+                          {typeof activeThread.customData?.whatsapp_about === "string" && (
+                            <div>
+                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
+                              <p className="text-sm italic text-novian-text/90">&quot;{String(activeThread.customData.whatsapp_about)}&quot;</p>
+                            </div>
+                          )}
+                          {typeof activeThread.customData?.whatsapp_business_description === "string" && (
+                            <div className="pt-2 border-t border-novian-muted/20">
+                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
+                              <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_description)}</p>
+                            </div>
+                          )}
+                          {typeof activeThread.customData?.whatsapp_business_category === "string" && (
+                            <div className="pt-2 border-t border-novian-muted/20">
+                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Categoria</p>
+                              <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_category)}</p>
+                            </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
+                    )}
+                    {getLeadCustomEntries(activeThread.customData).length > 0 && (
+                      <div className="pt-4 border-t border-novian-muted/30">
+                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
+                        <div className="space-y-3">
+                          {getLeadCustomEntries(activeThread.customData).map(([key, value]) => (
+                            <div key={key}>
+                              <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
+                              <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-                {(activeThread.customData?.whatsapp_about || activeThread.customData?.whatsapp_business_description) && (
-                  <div className="pt-4 border-t border-novian-muted/30">
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
-                    <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
-                      {activeThread.customData?.whatsapp_about && (
-                        <div>
-                          <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
-                          <p className="text-sm italic text-novian-text/90">&quot;{String(activeThread.customData.whatsapp_about)}&quot;</p>
-                        </div>
-                      )}
-                      {activeThread.customData?.whatsapp_business_description && (
-                        <div className="pt-2 border-t border-novian-muted/20">
-                          <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
-                          <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_description)}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {activeThread.customData && Object.keys(activeThread.customData).filter(k => !k.startsWith('whatsapp_')).length > 0 && (
-                  <div className="pt-4 border-t border-novian-muted/30">
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
-                    <div className="space-y-3">
-                      {Object.entries(activeThread.customData)
-                        .filter(([key]) => !key.startsWith('whatsapp_'))
-                        .map(([key, value]) => (
-                        <div key={key}>
-                          <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
-                          <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+
+                {activeThreadTab === "notes" && (
+                  <LeadNotesPanel
+                    leadId={activeThread.leadId}
+                    customData={activeThread.customData}
+                    onSaved={fetchWarRoomData}
+                  />
                 )}
               </div>
             ) : activeThreadId === "general" || activeThreadId === "continuous" ? (

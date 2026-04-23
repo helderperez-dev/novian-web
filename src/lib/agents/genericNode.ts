@@ -25,6 +25,30 @@ const getLlmWithTools = (agentConfig: any) => {
   return tools.length > 0 ? genericLlm.bindTools(tools) : genericLlm;
 };
 
+function buildLeadContextPrompt(state: AgentState) {
+  if (!state.leadInfo || Object.keys(state.leadInfo).length === 0) {
+    return "";
+  }
+
+  const parts = [
+    state.leadInfo.name ? `Nome: ${state.leadInfo.name}` : null,
+    state.leadInfo.phone ? `Telefone: ${state.leadInfo.phone}` : null,
+    state.leadInfo.status ? `Status: ${state.leadInfo.status}` : null,
+    state.leadInfo.preferences && Object.keys(state.leadInfo.preferences).length > 0
+      ? `Dados do lead: ${JSON.stringify(state.leadInfo.preferences)}`
+      : null,
+    state.leadInfo.notes && state.leadInfo.notes.length > 0
+      ? `Notas compartilhadas com a IA:\n- ${state.leadInfo.notes.join("\n- ")}`
+      : null,
+  ].filter(Boolean);
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `\n<CONTEXTO_DO_LEAD>\n${parts.join("\n")}\n</CONTEXTO_DO_LEAD>\n`;
+}
+
 export async function genericAgentNode(state: AgentState): Promise<Partial<AgentState>> {
   const agentId = state.nextAgent && state.nextAgent !== "generic_agent" && state.nextAgent !== "end" 
     ? state.nextAgent 
@@ -123,6 +147,7 @@ Mantenha suas respostas profissionais, concisas e no tom de voz da marca Novian.
   const systemPrompt = `${agentConfig.systemPrompt}
 ${knowledgeContext}
 ${modulesContext}
+${buildLeadContextPrompt(state)}
 You are chatting directly with a lead via WhatsApp.
 Be helpful, professional, and act exactly as your role dictates.
 

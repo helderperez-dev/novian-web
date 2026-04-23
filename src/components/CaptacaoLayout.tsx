@@ -537,36 +537,38 @@ export function CaptacaoLayout() {
                       </div>
                       <p className="text-xs text-novian-text/60 mb-3 line-clamp-2">{lead.preview}</p>
                       
-                      {lead.customData?.price && (
+                      {lead.customData?.price !== undefined && lead.customData?.price !== null && (
                         <div className="text-xs font-semibold text-novian-accent mb-3">
                           R$ {Number(lead.customData.price).toLocaleString('pt-BR')}
                         </div>
                       )}
 
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {lead.customData?.area && (
+                        {lead.customData?.area !== undefined && lead.customData?.area !== null && (
                           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.area)} m²
                           </span>
                         )}
-                        {lead.customData?.bedrooms && (
+                        {lead.customData?.bedrooms !== undefined && lead.customData?.bedrooms !== null && (
                           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.bedrooms)} dorm.
                           </span>
                         )}
-                        {lead.customData?.source && (
+                        {typeof lead.customData?.source === "string" && (
                           <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[10px] text-blue-300">
                             {String(lead.customData.source).toUpperCase()}
                           </span>
                         )}
-                        {lead.customData?.imageCount && Number(lead.customData.imageCount) > 0 && (
+                        {lead.customData?.imageCount !== undefined &&
+                          lead.customData?.imageCount !== null &&
+                          Number(lead.customData.imageCount) > 0 && (
                           <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.imageCount)} fotos
                           </span>
                         )}
                       </div>
 
-                      {lead.customData?.drafted_proposal && (
+                      {typeof lead.customData?.drafted_proposal === "string" && (
                         <div className="bg-novian-primary/30 p-2 rounded border border-novian-muted/30 mb-3 max-h-24 overflow-y-auto">
                           <p className="text-[10px] text-novian-text/80 whitespace-pre-wrap font-mono leading-relaxed">
                             {lead.customData.drafted_proposal as string}
@@ -852,7 +854,7 @@ export function CaptacaoLayout() {
                       <Sparkles size={14} />
                       Gerar proposta
                     </button>
-                    {selectedLead.customData?.url && (
+                    {typeof selectedLead.customData?.url === "string" && (
                       <a
                         href={String(selectedLead.customData.url)}
                         target="_blank"
@@ -1070,7 +1072,7 @@ export function CaptacaoLayout() {
                   </div>
                 )}
 
-                {selectedLead.customData?.drafted_proposal && (
+                {typeof selectedLead.customData?.drafted_proposal === "string" && (
                   <div>
                     <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Proposta sugerida pela IA</div>
                     <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-4">

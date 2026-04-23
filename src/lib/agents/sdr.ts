@@ -25,6 +25,30 @@ const getLlmWithTools = (agentConfig: any) => {
   return tools.length > 0 ? sdrLlm.bindTools(tools) : sdrLlm;
 };
 
+function buildLeadContextPrompt(state: AgentState) {
+  if (!state.leadInfo || Object.keys(state.leadInfo).length === 0) {
+    return "";
+  }
+
+  const parts = [
+    state.leadInfo.name ? `Nome: ${state.leadInfo.name}` : null,
+    state.leadInfo.phone ? `Telefone: ${state.leadInfo.phone}` : null,
+    state.leadInfo.status ? `Status: ${state.leadInfo.status}` : null,
+    state.leadInfo.preferences && Object.keys(state.leadInfo.preferences).length > 0
+      ? `Dados do lead: ${JSON.stringify(state.leadInfo.preferences)}`
+      : null,
+    state.leadInfo.notes && state.leadInfo.notes.length > 0
+      ? `Notas compartilhadas com a IA:\n- ${state.leadInfo.notes.join("\n- ")}`
+      : null,
+  ].filter(Boolean);
+
+  if (parts.length === 0) {
+    return "";
+  }
+
+  return `\n<CONTEXTO_DO_LEAD>\n${parts.join("\n")}\n</CONTEXTO_DO_LEAD>\n`;
+}
+
 export async function sdrNode(state: AgentState): Promise<Partial<AgentState>> {
   if (state.threadId === "general" || state.threadId === "continuous") {
     setTyping(state.threadId, "Mariana (SDR)");
@@ -121,6 +145,7 @@ Keep your responses professional, concise, and in the Novian brand voice. (Respo
   const systemPrompt = `${agentConfig?.systemPrompt || 'You are Mariana Silva, the AI SDR (Sales Development Representative) at Novian Real Estate.'}
 ${knowledgeContext}
 ${modulesContext}
+${buildLeadContextPrompt(state)}
 You are chatting directly with a lead via WhatsApp.
 Your goal is to be friendly, helpful, and capture their initial interest.
 Do NOT qualify them heavily yet—just establish a connection and ask how you can help them find their next property.

@@ -12,6 +12,7 @@ export interface AgentState {
     budgetMax?: number;
     preferences?: Record<string, unknown>;
     status?: string;
+    notes?: string[];
   };
   nextAgent?: string;
 }
