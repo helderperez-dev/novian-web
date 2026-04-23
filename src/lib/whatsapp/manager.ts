@@ -7,6 +7,7 @@ import { addMessage, getThreadHistoryForGraph, normalizeChatThreadId, syncLeadTh
 
 import { clearSupabaseAuthState, getSupabaseAuthState } from './supabaseAuth';
 import { createAdminSupabaseClient } from '../supabase/admin';
+import { getWhatsAppInstanceRuntime, updateWhatsAppRuntime } from './runtimeStore';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'qr_ready' | 'connected';
 
@@ -37,6 +38,7 @@ const globalForSessions = globalThis as unknown as {
 };
 const sessions = globalForSessions.whatsappSessions ?? new Map<string, AgentSession>();
 if (process.env.NODE_ENV !== 'production') globalForSessions.whatsappSessions = sessions;
+const manuallyDisconnectedAgents = new Set<string>();
 
 function normalizeWhatsAppJid(value: string) {
     const trimmed = value.trim();
@@ -46,6 +48,80 @@ function normalizeWhatsAppJid(value: string) {
 
     const digits = trimmed.replace(/\D/g, '');
     return `${digits}@s.whatsapp.net`;
+}
+
+async function persistContactMetadata(agentId: string, jid: string, metadata: WhatsAppContactMetadata) {
+    const normalizedJid = normalizeWhatsAppJid(jid);
+    const normalizedThreadId = normalizeChatThreadId(normalizedJid);
+    const phone = normalizedThreadId.split("@")[0];
+    const supabase = createAdminSupabaseClient();
+
+    const metadataCustomData = {
+        source: 'WhatsApp',
+        agent_id: agentId,
+        whatsapp_jid: jid,
+        whatsapp_profile_picture_url: metadata.profilePictureUrl || null,
+        whatsapp_about: metadata.about || null,
+        whatsapp_business_description: metadata.businessProfile?.description || null,
+        whatsapp_business_category: metadata.businessProfile?.category || null,
+        whatsapp_business_email: metadata.businessProfile?.email || null,
+        whatsapp_business_website: metadata.businessProfile?.website || null,
+        whatsapp_business_address: metadata.businessProfile?.address || null,
+    };
+
+    const { data: lead } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("phone", phone)
+        .maybeSingle();
+
+    if (lead) {
+        const mergedCustomData = {
+            ...((lead.custom_data as Record<string, unknown> | null) || {}),
+            ...metadataCustomData,
+        };
+
+        const { data: updatedLead, error: leadError } = await supabase
+            .from("leads")
+            .update({
+                custom_data: mergedCustomData,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", lead.id)
+            .select("*")
+            .single();
+
+        if (leadError) {
+            throw leadError;
+        }
+
+        await syncLeadThreadFromLead(updatedLead);
+    }
+
+    const { data: thread } = await supabase
+        .from("chat_threads")
+        .select("*")
+        .eq("thread_id", normalizedThreadId)
+        .maybeSingle();
+
+    if (thread) {
+        const mergedThreadCustomData = {
+            ...((thread.custom_data as Record<string, unknown> | null) || {}),
+            ...metadataCustomData,
+        };
+
+        const { error: threadError } = await supabase
+            .from("chat_threads")
+            .update({
+                custom_data: mergedThreadCustomData,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("thread_id", normalizedThreadId);
+
+        if (threadError) {
+            throw threadError;
+        }
+    }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,14 +179,55 @@ async function readWhatsAppContactMetadata(sock: any, jid: string): Promise<What
     };
 }
 
-export function getSessionStatus(agentId: string): Omit<AgentSession, 'sock'> {
+async function syncRuntimeStatus(
+    agentId: string,
+    updates: {
+        state?: ConnectionState;
+        qrDataUri?: string | null;
+        lastError?: string | null;
+        workerId?: string | null;
+        heartbeatAt?: string | null;
+        connectedAt?: string | null;
+        desiredState?: 'connected' | 'disconnected';
+    },
+) {
+    try {
+        await updateWhatsAppRuntime(agentId, updates);
+    } catch (error) {
+        console.error(`[${agentId}] Failed to sync WhatsApp runtime state`, error);
+    }
+}
+
+function getLocalSessionStatus(agentId: string): Omit<AgentSession, 'sock'> | null {
     const session = sessions.get(agentId);
-    if (!session) return { agentId, state: 'disconnected' };
+    if (!session) return null;
     return {
         agentId: session.agentId,
         state: session.state,
         qrDataUri: session.qrDataUri
     };
+}
+
+export async function getSessionStatus(agentId: string): Promise<Omit<AgentSession, 'sock'>> {
+    const local = getLocalSessionStatus(agentId);
+    if (local) {
+        return local;
+    }
+
+    const runtime = await getWhatsAppInstanceRuntime(agentId);
+    return {
+        agentId,
+        state: runtime.state,
+        qrDataUri: runtime.qrDataUri,
+    };
+}
+
+export function listLocalSessionStatuses(): Array<Omit<AgentSession, 'sock'>> {
+    return Array.from(sessions.values()).map((session) => ({
+        agentId: session.agentId,
+        state: session.state,
+        qrDataUri: session.qrDataUri,
+    }));
 }
 
 export async function fetchWhatsAppContactMetadata(agentId: string, jid: string) {
@@ -123,11 +240,34 @@ export async function fetchWhatsAppContactMetadata(agentId: string, jid: string)
     return readWhatsAppContactMetadata(session.sock, jid);
 }
 
-export async function connectAgentWhatsApp(agentId: string) {
-    if (sessions.get(agentId)?.state === 'connected') return;
+export async function refreshWhatsAppContactMetadata(agentId: string, jid: string) {
+    const session = sessions.get(agentId);
+
+    if (!session?.sock || session.state !== 'connected') {
+        throw new Error(`WhatsApp session for ${agentId} is not connected.`);
+    }
+
+    const contact = await readWhatsAppContactMetadata(session.sock, jid);
+    await persistContactMetadata(agentId, jid, contact);
+    return contact;
+}
+
+export async function connectAgentWhatsApp(agentId: string, options?: { workerId?: string }) {
+    const currentState = sessions.get(agentId)?.state;
+    if (currentState === 'connected' || currentState === 'connecting' || currentState === 'qr_ready') return;
 
     // Initialize session state
     sessions.set(agentId, { agentId, state: 'connecting' });
+    manuallyDisconnectedAgents.delete(agentId);
+    await syncRuntimeStatus(agentId, {
+        desiredState: 'connected',
+        state: 'connecting',
+        qrDataUri: null,
+        lastError: null,
+        workerId: options?.workerId ?? null,
+        heartbeatAt: new Date().toISOString(),
+        connectedAt: null,
+    });
 
     try {
         // We now use the Supabase Custom Auth state to persist keys in the database instead of the file system
@@ -154,29 +294,67 @@ export async function connectAgentWhatsApp(agentId: string) {
                 // Generate base64 Data URI for the frontend to render as an image
                 const qrDataUri = await QRCode.toDataURL(qr);
                 sessions.set(agentId, { ...session, state: 'qr_ready', qrDataUri });
+                await syncRuntimeStatus(agentId, {
+                    state: 'qr_ready',
+                    qrDataUri,
+                    workerId: options?.workerId ?? null,
+                    heartbeatAt: new Date().toISOString(),
+                });
                 console.log(`[${agentId}] QR Code ready for scanning.`);
             }
 
             if (connection === 'close') {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                const wasManualDisconnect = manuallyDisconnectedAgents.has(agentId);
+                const shouldReconnect = !wasManualDisconnect && statusCode !== DisconnectReason.loggedOut;
                 sessions.set(agentId, { agentId, state: 'disconnected' });
+                await syncRuntimeStatus(agentId, {
+                    state: 'disconnected',
+                    qrDataUri: null,
+                    lastError: statusCode ? `Connection closed (${statusCode})` : 'Connection closed',
+                    workerId: options?.workerId ?? null,
+                    heartbeatAt: new Date().toISOString(),
+                    connectedAt: null,
+                    desiredState: wasManualDisconnect ? 'disconnected' : undefined,
+                });
                 console.log(`[${agentId}] Connection closed (Status: ${statusCode}). Error:`, lastDisconnect?.error);
                 
                 if (statusCode === 401) {
                     console.log(`[${agentId}] Unauthorized (401). Disconnecting and dropping credentials.`);
                     await clearSupabaseAuthState(agentId);
                     sessions.set(agentId, { agentId, state: 'disconnected' });
+                    await syncRuntimeStatus(agentId, {
+                        state: 'disconnected',
+                        qrDataUri: null,
+                        lastError: 'WhatsApp session expired. Scan the QR code again.',
+                        workerId: options?.workerId ?? null,
+                        heartbeatAt: new Date().toISOString(),
+                        connectedAt: null,
+                        desiredState: 'disconnected',
+                    });
                     return; 
+                }
+
+                if (wasManualDisconnect) {
+                    manuallyDisconnectedAgents.delete(agentId);
+                    return;
                 }
 
                 if (shouldReconnect) {
                     // Wait 5 seconds before trying to reconnect automatically
-                    setTimeout(() => connectAgentWhatsApp(agentId), 5000);
+                    setTimeout(() => void connectAgentWhatsApp(agentId, options), 5000);
                 }
             } else if (connection === 'open') {
                 sessions.set(agentId, { agentId, state: 'connected', sock, qrDataUri: undefined });
+                await syncRuntimeStatus(agentId, {
+                    state: 'connected',
+                    qrDataUri: null,
+                    lastError: null,
+                    workerId: options?.workerId ?? null,
+                    heartbeatAt: new Date().toISOString(),
+                    connectedAt: new Date().toISOString(),
+                });
                 console.log(`[${agentId}] WhatsApp Connected Successfully!`);
             }
         });
@@ -281,6 +459,10 @@ export async function connectAgentWhatsApp(agentId: string) {
 
                             await syncLeadThreadFromLead(updatedLead);
                         }
+
+                        if (contactMetadata) {
+                            await persistContactMetadata(agentId, remoteJid, contactMetadata);
+                        }
                     } catch (dbErr) {
                         console.error(`[${agentId}] Error upserting lead in Supabase:`, dbErr);
                     }
@@ -335,10 +517,20 @@ export async function connectAgentWhatsApp(agentId: string) {
     } catch (error) {
         console.error(`[${agentId}] Error connecting:`, error);
         sessions.set(agentId, { agentId, state: 'disconnected' });
+        const message = error instanceof Error ? error.message : 'Unknown connection error';
+        await syncRuntimeStatus(agentId, {
+            state: 'disconnected',
+            qrDataUri: null,
+            lastError: message,
+            workerId: options?.workerId ?? null,
+            heartbeatAt: new Date().toISOString(),
+            connectedAt: null,
+        });
     }
 }
 
-export async function disconnectAgentWhatsApp(agentId: string) {
+export async function disconnectAgentWhatsApp(agentId: string, options?: { clearAuth?: boolean }) {
+    manuallyDisconnectedAgents.add(agentId);
     const session = sessions.get(agentId);
     if (session?.sock) {
         await session.sock.logout();
@@ -346,5 +538,30 @@ export async function disconnectAgentWhatsApp(agentId: string) {
         console.log(`[${agentId}] Logged out manually.`);
     }
 
-    await clearSupabaseAuthState(agentId);
+    await syncRuntimeStatus(agentId, {
+        desiredState: 'disconnected',
+        state: 'disconnected',
+        qrDataUri: null,
+        lastError: null,
+        workerId: null,
+        heartbeatAt: new Date().toISOString(),
+        connectedAt: null,
+    });
+
+    if (options?.clearAuth !== false) {
+        await clearSupabaseAuthState(agentId);
+    }
+}
+
+export async function touchSessionHeartbeat(agentId: string, workerId?: string) {
+    const session = sessions.get(agentId);
+    if (!session || session.state !== 'connected') {
+        return;
+    }
+
+    await syncRuntimeStatus(agentId, {
+        state: 'connected',
+        workerId: workerId ?? null,
+        heartbeatAt: new Date().toISOString(),
+    });
 }

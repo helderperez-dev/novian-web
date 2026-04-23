@@ -57,6 +57,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          knowledge_base: string | null
+          modules: string[] | null
           name: string
           role: string
           system_prompt: string
@@ -65,6 +67,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          knowledge_base?: string | null
+          modules?: string[] | null
           name: string
           role: string
           system_prompt: string
@@ -73,6 +77,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          knowledge_base?: string | null
+          modules?: string[] | null
           name?: string
           role?: string
           system_prompt?: string
@@ -566,6 +572,84 @@ export type Database = {
           agent_id?: string
           data?: Json
           key_id?: string
+        }
+        Relationships: []
+      }
+      whatsapp_instances: {
+        Row: {
+          agent_id: string
+          connected_at: string | null
+          created_at: string
+          desired_state: string
+          heartbeat_at: string | null
+          last_error: string | null
+          qr_data_uri: string | null
+          state: string
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          agent_id: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          heartbeat_at?: string | null
+          last_error?: string | null
+          qr_data_uri?: string | null
+          state?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          agent_id?: string
+          connected_at?: string | null
+          created_at?: string
+          desired_state?: string
+          heartbeat_at?: string | null
+          last_error?: string | null
+          qr_data_uri?: string | null
+          state?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_tasks: {
+        Row: {
+          agent_id: string
+          created_at: string
+          error: string | null
+          id: string
+          payload: Json
+          processed_at: string | null
+          result: Json | null
+          status: string
+          task_type: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          result?: Json | null
+          status?: string
+          task_type: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          result?: Json | null
+          status?: string
+          task_type?: string
+          updated_at?: string
         }
         Relationships: []
       }

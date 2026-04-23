@@ -1,9 +1,9 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { SystemMessage, AIMessage, ToolMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./state";
-import { agentsStore } from "../store";
 import { addMessage, setTyping } from "../chatStore";
 import { searchPropertiesTool, searchLeadsTool } from "./tools";
+import { getAgentConfig, listAgentConfigs } from "./configStore";
 
 // OpenRouter Configuration (GPT-4o or Claude 3.5 Sonnet)
 export const llm = new ChatOpenAI({
@@ -30,12 +30,13 @@ export async function directorNode(state: AgentState): Promise<Partial<AgentStat
     setTyping(state.threadId, "Daniel (Dir)");
     const isContinuous = state.threadId === "continuous";
 
-    const dynamicAgentsList = Array.from(agentsStore.values())
+    const allAgents = await listAgentConfigs();
+    const dynamicAgentsList = allAgents
         .filter(a => a.id !== "daniel-dir") // exclude self
         .map(a => `- [PASS TO ${a.id.toUpperCase()}] for ${a.name} (${a.role})`)
         .join("\n");
 
-    const agentConfig = agentsStore.get("daniel-dir");
+    const agentConfig = await getAgentConfig("daniel-dir");
     const knowledgeContext = agentConfig?.knowledgeBase 
       ? `\n<BASE_DE_CONHECIMENTO>\n${agentConfig.knowledgeBase}\n</BASE_DE_CONHECIMENTO>\n` 
       : '';
@@ -145,7 +146,7 @@ Keep your responses professional, concise, and in the Novian brand voice. (Respo
   }
 
   // Routing for external messages (leads)
-  const leadRoutingList = Array.from(agentsStore.values())
+  const leadRoutingList = (await listAgentConfigs())
       .filter(a => a.id !== "daniel-dir")
       .map(a => `- "${a.id}": For ${a.name} (${a.role})`)
       .join("\n");

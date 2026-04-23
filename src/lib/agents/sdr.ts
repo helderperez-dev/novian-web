@@ -1,9 +1,9 @@
 import { AIMessage, SystemMessage, ToolMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./state";
 import { ChatOpenAI } from "@langchain/openai";
-import { agentsStore } from "../store";
 import { addMessage, setTyping } from "../chatStore";
 import { searchPropertiesTool, searchLeadsTool } from "./tools";
+import { getAgentConfig, listAgentConfigs } from "./configStore";
 
 // OpenRouter Configuration for SDR
 const sdrLlm = new ChatOpenAI({
@@ -30,12 +30,13 @@ export async function sdrNode(state: AgentState): Promise<Partial<AgentState>> {
     setTyping(state.threadId, "Mariana (SDR)");
     const isContinuous = state.threadId === "continuous";
 
-    const dynamicAgentsList = Array.from(agentsStore.values())
+    const allAgents = await listAgentConfigs();
+    const dynamicAgentsList = allAgents
         .filter(a => a.id !== "mariana-sdr")
         .map(a => `- [PASS TO ${a.id.toUpperCase()}] for ${a.name} (${a.role})`)
         .join("\n");
 
-    const agentConfig = agentsStore.get("mariana-sdr");
+    const agentConfig = await getAgentConfig("mariana-sdr");
     const knowledgeContext = agentConfig?.knowledgeBase 
       ? `\n<BASE_DE_CONHECIMENTO>\n${agentConfig.knowledgeBase}\n</BASE_DE_CONHECIMENTO>\n` 
       : '';
@@ -108,7 +109,7 @@ Keep your responses professional, concise, and in the Novian brand voice. (Respo
     };
   }
 
-  const agentConfig = agentsStore.get("mariana-sdr");
+  const agentConfig = await getAgentConfig("mariana-sdr");
   const knowledgeContext = agentConfig?.knowledgeBase 
     ? `\n<BASE_DE_CONHECIMENTO>\n${agentConfig.knowledgeBase}\n</BASE_DE_CONHECIMENTO>\n` 
     : '';

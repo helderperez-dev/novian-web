@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "whatsapp:worker": "DOTENV_CONFIG_PATH=.env.local tsx --require dotenv/config src/worker/whatsapp.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -43,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

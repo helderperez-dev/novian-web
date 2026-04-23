@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { agentsStore } from '@/lib/store';
+import { listAgentConfigs, upsertAgentConfig } from '@/lib/agents/configStore';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const agents = Array.from(agentsStore.values());
+    const agents = await listAgentConfigs();
     return NextResponse.json({ agents });
 }
 
@@ -25,9 +25,9 @@ export async function POST(req: Request) {
             modules: modules || [],
             knowledgeBase: knowledgeBase || ""
         };
-        agentsStore.set(id, newAgent);
+        const savedAgent = await upsertAgentConfig(newAgent);
 
-        return NextResponse.json({ success: true, agent: newAgent });
+        return NextResponse.json({ success: true, agent: savedAgent });
     } catch (e) {
         console.error(e);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

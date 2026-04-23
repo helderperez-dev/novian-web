@@ -1,9 +1,9 @@
 import { SystemMessage, AIMessage, ToolMessage, BaseMessage } from "@langchain/core/messages";
 import { AgentState } from "./state";
 import { ChatOpenAI } from "@langchain/openai";
-import { agentsStore } from "../store";
 import { addMessage, setTyping } from "../chatStore";
 import { searchPropertiesTool, searchLeadsTool } from "./tools";
+import { findAgentConfig, listAgentConfigs } from "./configStore";
 
 // We can reuse the LLM config or instantiate a new one
 const genericLlm = new ChatOpenAI({
@@ -29,16 +29,10 @@ export async function genericAgentNode(state: AgentState): Promise<Partial<Agent
   const agentId = state.nextAgent && state.nextAgent !== "generic_agent" && state.nextAgent !== "end" 
     ? state.nextAgent 
     : "lucas-qual"; // Fallback
-  let agentConfig = agentsStore.get(agentId);
+  const agentConfig = await findAgentConfig(agentId);
 
   if (!agentConfig) {
-      // Fallback if agent doesn't exist exactly, try partial match (e.g. "lucas" matches "lucas-qual")
-      const found = Array.from(agentsStore.values()).find(a => a.id.startsWith(agentId) || a.id.includes(agentId));
-      if (found) {
-          agentConfig = found;
-      } else {
-          return { nextAgent: "end" };
-      }
+      return { nextAgent: "end" };
   }
 
   const agentLabel = `${agentConfig.name.split(" ")[0]} (${agentConfig.role})`;
@@ -56,7 +50,7 @@ export async function genericAgentNode(state: AgentState): Promise<Partial<Agent
     const isContinuous = state.threadId === "continuous";
 
     // Dynamic list of other agents to allow passing the baton
-    const otherAgentsList = Array.from(agentsStore.values())
+    const otherAgentsList = (await listAgentConfigs())
         .filter(a => a.id !== agentId)
         .map(a => `- [PASS TO ${a.id.toUpperCase()}] for ${a.name} (${a.role})`)
         .join("\n");
