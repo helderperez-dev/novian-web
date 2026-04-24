@@ -3,6 +3,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
 import { getLeadNotesByVisibility } from "@/lib/leadNotes";
+import { ensurePersonForLead, syncPersonFromLead, unlinkPersonFromLead } from "@/lib/people";
 import type { ChatMessage, Thread } from "@/lib/store";
 
 type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
@@ -364,7 +365,7 @@ export async function getRecentMessages(limit = 50) {
   return (data || []).map(mapMessage).reverse();
 }
 
-export async function createLead(data: Partial<Thread> & { phone: string; title?: string }) {
+export async function createLead(data: Partial<Thread> & { phone: string; title?: string; personId?: string | null }) {
   const supabase = createAdminSupabaseClient();
   const defaultLeadFunnel = await getDefaultLeadFunnel();
   const funnelId =
@@ -375,16 +376,32 @@ export async function createLead(data: Partial<Thread> & { phone: string; title?
     !data.status || data.status === "novo"
       ? defaultLeadFunnel.firstStageTitle || "Novo Lead"
       : data.status;
+  const metadata =
+    data.customData && typeof data.customData === "object" && !Array.isArray(data.customData)
+      ? data.customData
+      : {};
+  const person = await ensurePersonForLead({
+    name: data.title,
+    phone: data.phone,
+    personId: data.personId,
+    email: typeof metadata.email === "string" ? metadata.email : null,
+    status: normalizedStatus,
+    funnelId,
+    score: data.score,
+    preview: "Lead criado manualmente",
+    customData: metadata as Database["public"]["Tables"]["leads"]["Insert"]["custom_data"],
+  });
 
   const insertPayload: Database["public"]["Tables"]["leads"]["Insert"] = {
     phone: data.phone,
     name: data.title || `Lead: ${data.phone}`,
+    person_id: person.id,
     preview: "Lead criado manualmente",
     status: normalizedStatus,
     unread: false,
     funnel_id: funnelId,
     score: data.score || 0,
-    custom_data: (data.customData || {}) as Database["public"]["Tables"]["leads"]["Insert"]["custom_data"],
+    custom_data: metadata as Database["public"]["Tables"]["leads"]["Insert"]["custom_data"],
   };
 
   const { data: lead, error } = await supabase
@@ -397,6 +414,7 @@ export async function createLead(data: Partial<Thread> & { phone: string; title?
     throw error;
   }
 
+  await syncPersonFromLead(lead);
   await syncLeadThreadFromLead(lead);
   return mapThread(await ensureThreadRecord(`${lead.phone}@s.whatsapp.net`));
 }
@@ -407,6 +425,16 @@ export async function updateLeadStatus(leadId: string, status: string) {
 
 export async function updateLead(leadId: string, data: Partial<Thread>) {
   const supabase = createAdminSupabaseClient();
+  const { data: currentLead, error: currentLeadError } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", leadId)
+    .single();
+
+  if (currentLeadError) {
+    throw currentLeadError;
+  }
+
   const updatePayload: Database["public"]["Tables"]["leads"]["Update"] = {};
 
   if (data.title !== undefined) updatePayload.name = data.title;
@@ -431,6 +459,11 @@ export async function updateLead(leadId: string, data: Partial<Thread>) {
     throw error;
   }
 
+  if (currentLead.phone !== updatedLead.phone && currentLead.phone) {
+    await supabase.from("chat_threads").delete().eq("thread_id", `${currentLead.phone}@s.whatsapp.net`);
+  }
+
+  await syncPersonFromLead(updatedLead);
   await syncLeadThreadFromLead(updatedLead);
   return updatedLead;
 }
@@ -439,7 +472,7 @@ export async function deleteLead(leadId: string) {
   const supabase = createAdminSupabaseClient();
   const { data: lead } = await supabase
     .from("leads")
-    .select("phone")
+    .select("id, phone, person_id")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -450,6 +483,10 @@ export async function deleteLead(leadId: string) {
 
   if (lead?.phone) {
     await supabase.from("chat_threads").delete().eq("thread_id", `${lead.phone}@s.whatsapp.net`);
+  }
+
+  if (lead) {
+    await unlinkPersonFromLead(lead);
   }
 }
 
@@ -520,6 +557,18 @@ export async function addMessage(msg: Omit<ChatMessage, "id" | "time">) {
     if (leadError) {
       throw leadError;
     }
+
+    const { data: refreshedLead, error: refreshedLeadError } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("id", thread.lead_id)
+      .single();
+
+    if (refreshedLeadError) {
+      throw refreshedLeadError;
+    }
+
+    await syncPersonFromLead(refreshedLead);
   }
 
   return mapMessage(insertedMessage);

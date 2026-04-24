@@ -1,3 +1,5 @@
-"use client";
-import { LeadsLayout } from "@/components/AdminComponents";
-export default function LeadsPage() { return <LeadsLayout />; }
+import { redirect } from "next/navigation";
+
+export default function LeadsPage() {
+  redirect("/admin/people");
+}

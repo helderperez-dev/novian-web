@@ -10,16 +10,14 @@ import {
   Users, 
   Target, 
   Home as HomeIcon, 
+  FolderOpen,
   Settings, 
   ChevronLeft, 
   ChevronRight,
-  Bot,
   Search,
-  Bell,
-  Plus
+  Bell
 } from "lucide-react";
 import type { Database } from "@/lib/database.types";
-import { NewLeadForm } from "@/components/AdminComponents";
 
 type ManagedAppUser = Database["public"]["Tables"]["app_users"]["Row"];
 
@@ -32,13 +30,6 @@ const getUserInitials = (user: ManagedAppUser | null) => {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "NV";
-};
-
-const getUserRoleLabel = (user: ManagedAppUser | null) => {
-  if (!user) return "Carregando...";
-  if (user.role === "admin") return "Admin";
-  if (user.role === "broker") return "Corretor";
-  return "Cliente";
 };
 
 const NavItem = ({ icon, label, href, active, collapsed }: { icon: React.ReactNode, label: string, href: string, active: boolean, collapsed: boolean }) => (
@@ -69,7 +60,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentAppUser, setCurrentAppUser] = useState<ManagedAppUser | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isNewLeadDrawerOpen, setIsNewLeadDrawerOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -143,9 +133,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             />
             <NavItem 
               icon={<Users size={20} />} 
-              label="Leads" 
-              href="/admin/leads"
-              active={pathname.startsWith("/admin/leads")} 
+              label="Pessoas" 
+              href="/admin/people"
+              active={pathname.startsWith("/admin/people")} 
               collapsed={!isSidebarOpen} 
             />
             <NavItem 
@@ -161,6 +151,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               href="/admin/properties"
               active={pathname.startsWith("/admin/properties")} 
               collapsed={!isSidebarOpen} 
+            />
+            <NavItem
+              icon={<FolderOpen size={20} />}
+              label="Documentos"
+              href="/admin/documents"
+              active={pathname.startsWith("/admin/documents")}
+              collapsed={!isSidebarOpen}
             />
           </nav>
         </div>
@@ -231,9 +228,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-medium tracking-wide uppercase text-novian-text/90">
               {pathname === "/admin/chat" ? "Chat" : 
-               pathname === "/admin/leads" ? "Leads" :
+               pathname === "/admin/people" ? "Pessoas" :
                pathname === "/admin/captacao" ? "Captação" :
                pathname === "/admin/properties" ? "Imóveis" :
+               pathname === "/admin/documents" ? "Documentos" :
                pathname === "/admin/settings" ? "Configurações" :
                pathname === "/admin/dashboard" ? "Dashboard" :
                "Dashboard"}
@@ -253,12 +251,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <Bell size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-novian-accent rounded-full animate-pulse"></span>
             </button>
-            <button 
-              onClick={() => setIsNewLeadDrawerOpen(true)}
-              className="bg-novian-accent text-novian-primary px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 hover:bg-white transition-colors"
-            >
-              <Plus size={16} /> Novo Lead
-            </button>
           </div>
         </header>
 
@@ -267,35 +259,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         </div>
       </main>
 
-      {/* New Lead Drawer Overlay */}
-      {isNewLeadDrawerOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-end">
-          <div className="w-full max-w-md bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-6 border-b border-novian-muted/50 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-novian-text">Criar Novo Lead</h2>
-              <button 
-                onClick={() => setIsNewLeadDrawerOpen(false)}
-                className="text-novian-text/50 hover:text-novian-text p-2"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <NewLeadForm 
-                onClose={() => setIsNewLeadDrawerOpen(false)} 
-                onLeadCreated={() => {
-                  setIsNewLeadDrawerOpen(false);
-                  if (pathname !== "/admin/leads") {
-                    window.location.href = "/admin/leads";
-                  } else {
-                    window.location.reload();
-                  }
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

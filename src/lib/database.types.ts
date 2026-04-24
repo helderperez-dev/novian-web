@@ -285,6 +285,85 @@ export type Database = {
         }
         Relationships: []
       }
+      documents: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          file_extension: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          file_url: string
+          id: string
+          mime_type: string | null
+          person_id: string | null
+          property_id: string | null
+          tags: string[]
+          title: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          file_extension?: string | null
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          file_url: string
+          id?: string
+          mime_type?: string | null
+          person_id?: string | null
+          property_id?: string | null
+          tags?: string[]
+          title: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          file_extension?: string | null
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          file_url?: string
+          id?: string
+          mime_type?: string | null
+          person_id?: string | null
+          property_id?: string | null
+          tags?: string[]
+          title?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_documents: {
         Row: {
           created_at: string
@@ -396,6 +475,63 @@ export type Database = {
           },
         ]
       }
+      funnel_stage_people_rules: {
+        Row: {
+          add_roles: Database["public"]["Enums"]["person_role"][]
+          add_tags: string[]
+          created_at: string
+          funnel_id: string
+          id: string
+          points_delta: number
+          remove_roles: Database["public"]["Enums"]["person_role"][]
+          remove_tags: string[]
+          stage_id: string | null
+          stage_title: string
+          updated_at: string
+        }
+        Insert: {
+          add_roles?: Database["public"]["Enums"]["person_role"][]
+          add_tags?: string[]
+          created_at?: string
+          funnel_id: string
+          id?: string
+          points_delta?: number
+          remove_roles?: Database["public"]["Enums"]["person_role"][]
+          remove_tags?: string[]
+          stage_id?: string | null
+          stage_title: string
+          updated_at?: string
+        }
+        Update: {
+          add_roles?: Database["public"]["Enums"]["person_role"][]
+          add_tags?: string[]
+          created_at?: string
+          funnel_id?: string
+          id?: string
+          points_delta?: number
+          remove_roles?: Database["public"]["Enums"]["person_role"][]
+          remove_tags?: string[]
+          stage_id?: string | null
+          stage_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_stage_people_rules_funnel_id_fkey"
+            columns: ["funnel_id"]
+            isOneToOne: false
+            referencedRelation: "funnels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funnel_stage_people_rules_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funnels: {
         Row: {
           created_at: string
@@ -428,6 +564,7 @@ export type Database = {
           id: string
           name: string
           phone: string
+          person_id: string | null
           preview: string | null
           score: number | null
           status: string | null
@@ -441,6 +578,7 @@ export type Database = {
           id?: string
           name: string
           phone: string
+          person_id?: string | null
           preview?: string | null
           score?: number | null
           status?: string | null
@@ -454,6 +592,7 @@ export type Database = {
           id?: string
           name?: string
           phone?: string
+          person_id?: string | null
           preview?: string | null
           score?: number | null
           status?: string | null
@@ -466,6 +605,13 @@ export type Database = {
             columns: ["funnel_id"]
             isOneToOne: false
             referencedRelation: "funnels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
         ]
@@ -562,6 +708,51 @@ export type Database = {
           slug?: string
           status?: Database["public"]["Enums"]["property_status"]
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      people: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          last_interaction_preview: string | null
+          metadata: Json
+          origin: string | null
+          primary_phone: string | null
+          roles: Database["public"]["Enums"]["person_role"][]
+          stage_points: number
+          tags: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          last_interaction_preview?: string | null
+          metadata?: Json
+          origin?: string | null
+          primary_phone?: string | null
+          roles?: Database["public"]["Enums"]["person_role"][]
+          stage_points?: number
+          tags?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          last_interaction_preview?: string | null
+          metadata?: Json
+          origin?: string | null
+          primary_phone?: string | null
+          roles?: Database["public"]["Enums"]["person_role"][]
+          stage_points?: number
+          tags?: string[]
           updated_at?: string
         }
         Relationships: []
@@ -680,6 +871,7 @@ export type Database = {
       app_role: "admin" | "broker" | "client"
       app_user_type: "internal" | "client"
       custom_field_type: "text" | "number" | "dropdown" | "date"
+      person_role: "lead" | "client" | "buyer" | "seller"
       property_status: "active" | "inactive" | "sold"
     }
     CompositeTypes: {
@@ -809,6 +1001,7 @@ export const Constants = {
   public: {
     Enums: {
       custom_field_type: ["text", "number", "dropdown", "date"],
+      person_role: ["lead", "client", "buyer", "seller"],
       property_status: ["active", "inactive", "sold"],
     },
   },

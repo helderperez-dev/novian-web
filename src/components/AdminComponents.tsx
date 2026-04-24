@@ -11,7 +11,9 @@ import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelTyp
 import { customFieldsStore } from "@/lib/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import DocumentsWorkspace from "@/components/DocumentsWorkspace";
 import ImageGalleryUploader from "@/components/ImageGalleryUploader";
+import FunnelAutomationSettings from "@/components/FunnelAutomationSettings";
 import PopupSelect from "@/components/PopupSelect";
 import { CaptacaoLayout } from "@/components/CaptacaoLayout";
 import type { Database } from "@/lib/database.types";
@@ -2215,6 +2217,7 @@ export function PropertiesLayout() {
   const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [activePropertyTab, setActivePropertyTab] = useState<"details" | "media" | "landing" | "documents">("details");
 
   const fetchProps = async () => {
     try {
@@ -2235,6 +2238,7 @@ export function PropertiesLayout() {
 
   useEffect(() => {
     if (selectedProperty) {
+      setActivePropertyTab("details");
       setCurrentImages(selectedProperty.images || []);
       setCurrentCover(selectedProperty.coverImage || "");
       setCurrentImageDescriptions(getImageDescriptionsFromCustomData(selectedProperty.customData));
@@ -2275,6 +2279,7 @@ export function PropertiesLayout() {
       setLeadMagnetTitle(selectedProperty.landingPage?.leadMagnetTitle || "Baixar Apresentação do Imóvel");
       setLeadMagnetFileUrl(selectedProperty.landingPage?.leadMagnetFileUrl || "");
     } else {
+      setActivePropertyTab("details");
       setCurrentImages([]);
       setCurrentCover("");
       setCurrentImageDescriptions({});
@@ -2662,7 +2667,34 @@ export function PropertiesLayout() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* Basic Info */}
+              <div className="flex flex-wrap gap-2 border-b border-novian-muted/35 pb-4">
+                {[
+                  { value: "details" as const, label: "Detalhes" },
+                  { value: "media" as const, label: "Midia" },
+                  { value: "landing" as const, label: "Landing Page" },
+                  { value: "documents" as const, label: "Documentos", disabled: !selectedProperty },
+                ].map((tab) => {
+                  const active = activePropertyTab === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      disabled={tab.disabled}
+                      onClick={() => setActivePropertyTab(tab.value)}
+                      className={`rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition ${
+                        active
+                          ? "bg-novian-accent text-novian-primary"
+                          : "border border-novian-muted/40 bg-novian-primary/25 text-novian-text/60 hover:text-novian-text"
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activePropertyTab === "details" ? (
+              <>
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -2944,7 +2976,6 @@ export function PropertiesLayout() {
                 </div>
               </section>
 
-              {/* Dynamic Fields */}
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos Personalizados</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -2979,8 +3010,10 @@ export function PropertiesLayout() {
                   ))}
                 </div>
               </section>
+              </>
+              ) : null}
 
-              {/* Imagens / Galeria */}
+              {activePropertyTab === "media" ? (
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Galeria de Imagens</h3>
                 <div className="space-y-6">
@@ -2999,8 +3032,9 @@ export function PropertiesLayout() {
                   </div>
                 </div>
               </section>
+              ) : null}
 
-              {/* Landing Page Editor */}
+              {activePropertyTab === "landing" ? (
               <section className="space-y-4">
                 <div className="flex items-center justify-between border-b border-novian-muted/50 pb-2">
                   <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Editor de Landing Page (Geração de Leads)</h3>
@@ -3149,12 +3183,30 @@ export function PropertiesLayout() {
                   </div>
                 </div>
               </section>
+              ) : null}
+
+              {activePropertyTab === "documents" ? (
+                selectedProperty ? (
+                  <DocumentsWorkspace
+                    embedded
+                    propertyId={selectedProperty.id}
+                    title="Documentos do imóvel"
+                    description="Gerencie contratos, matrículas, book comercial e demais arquivos vinculados a este imóvel."
+                  />
+                ) : (
+                  <section className="rounded-[24px] border border-dashed border-novian-muted/35 bg-novian-primary/20 px-5 py-12 text-center text-sm text-novian-text/55">
+                    Salve o imóvel primeiro para começar a anexar documentos.
+                  </section>
+                )
+              ) : null}
 
               <div className="pt-6 border-t border-novian-muted/50 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold hover:bg-novian-muted transition-colors">Cancelar</button>
-                <button type="submit" disabled={isSaving} className="bg-novian-accent text-novian-primary px-6 py-2 rounded-xl text-sm font-semibold hover:bg-white transition-colors disabled:opacity-50">
-                  {isSaving ? "Salvando..." : "Salvar Imóvel"}
-                </button>
+                {activePropertyTab !== "documents" ? (
+                  <button type="submit" disabled={isSaving} className="bg-novian-accent text-novian-primary px-6 py-2 rounded-xl text-sm font-semibold hover:bg-white transition-colors disabled:opacity-50">
+                    {isSaving ? "Salvando..." : "Salvar Imóvel"}
+                  </button>
+                ) : null}
               </div>
             </div>
           </form>
@@ -3755,6 +3807,24 @@ export function SettingsLayout() {
                         <p className="text-xs text-novian-text/45">Drag and drop the columns to organize the funnel from left to right.</p>
                       )}
                     </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-novian-text/50">
+                        Configuracao de People
+                      </div>
+                      <div className="mt-2 text-sm text-novian-text/55">
+                        Automacoes de perfis, tags e pontos ficam no proprio funil para centralizar a configuracao do pipeline.
+                      </div>
+                    </div>
+                    <FunnelAutomationSettings
+                      funnelId={editingFunnel.id}
+                      funnelName={editingFunnel.name}
+                      funnelType={editingFunnel.type}
+                      columns={editingFunnel.columns}
+                      disabled={!isEditingExistingFunnel}
+                    />
                   </div>
 
                   <div className="flex justify-end gap-3 pt-4 border-t border-novian-muted/50">
