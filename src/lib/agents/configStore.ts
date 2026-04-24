@@ -16,6 +16,22 @@ type AgentRow = {
 
 let hasSeededAgents = false;
 
+export const AI_COPY_ASSISTANT_ID = "novian-copy-assistant";
+export const DEFAULT_AI_COPY_PROMPT = `You are Novian's premium real-estate copy assistant.
+
+Your job is to help internal users write sharper text for CRM and property marketing fields.
+
+Rules:
+- Always write in Brazilian Portuguese unless the user explicitly requests another language.
+- Preserve factual details already provided. Never invent numbers, addresses, amenities, legal claims, or availability.
+- Match the requested field. Short fields stay concise. Rich-description fields can be more elaborate.
+- Keep the tone refined, premium, clear, persuasive, and natural. Avoid exaggerated or generic AI phrasing.
+- If the request is to enhance text, keep the original intent and improve clarity, flow, and impact.
+- If the request is to generate text, use the provided context to create the best possible draft for that field.
+- Return only the requested content, with no explanations.
+- For "rich_html" output, return clean HTML fragments only using tags like p, h2, ul, li, strong, and em.
+- For "plain_text" output, return plain text only.`;
+
 function mapRowToAgentConfig(row: AgentRow): AgentConfig {
   return {
     id: row.id,
@@ -28,6 +44,10 @@ function mapRowToAgentConfig(row: AgentRow): AgentConfig {
     whatsappPhone: row.whatsapp_phone || undefined,
     whatsappProfilePictureUrl: row.whatsapp_profile_picture_url || undefined,
   };
+}
+
+function isReservedSystemAgent(row: { id: string; role: string }) {
+  return row.id === AI_COPY_ASSISTANT_ID || row.role === "system";
 }
 
 async function ensureDefaultAgentsSeeded() {
@@ -70,7 +90,9 @@ export async function listAgentConfigs(): Promise<AgentConfig[]> {
     return defaultAgentConfigs;
   }
 
-  return (data as AgentRow[]).map(mapRowToAgentConfig);
+  return (data as AgentRow[])
+    .filter((row) => !isReservedSystemAgent(row))
+    .map(mapRowToAgentConfig);
 }
 
 export async function getAgentConfig(agentId: string): Promise<AgentConfig | null> {
@@ -113,6 +135,55 @@ export async function upsertAgentConfig(agent: AgentConfig): Promise<AgentConfig
   }
 
   return mapRowToAgentConfig(data as AgentRow);
+}
+
+export async function getAiCopyAssistantPrompt(): Promise<string> {
+  await ensureDefaultAgentsSeeded();
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("id", AI_COPY_ASSISTANT_ID)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return DEFAULT_AI_COPY_PROMPT;
+  }
+
+  return (data as AgentRow).system_prompt || DEFAULT_AI_COPY_PROMPT;
+}
+
+export async function saveAiCopyAssistantPrompt(systemPrompt: string): Promise<string> {
+  await ensureDefaultAgentsSeeded();
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("agents")
+    .upsert(
+      {
+        id: AI_COPY_ASSISTANT_ID,
+        name: "Assistente de Texto",
+        role: "system",
+        system_prompt: systemPrompt || DEFAULT_AI_COPY_PROMPT,
+        modules: [],
+        knowledge_base: "",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    )
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as AgentRow).system_prompt || DEFAULT_AI_COPY_PROMPT;
 }
 
 export async function updateAgentWhatsAppProfile(

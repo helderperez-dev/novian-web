@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import PropertyLightbox from "@/components/PropertyLightbox";
 
 interface PropertyGalleryViewerProps {
   coverImage: string;
@@ -11,82 +11,16 @@ interface PropertyGalleryViewerProps {
 export default function PropertyGalleryViewer({ coverImage, images }: PropertyGalleryViewerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [scale, setScale] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  
-  const imgRef = useRef<HTMLImageElement>(null);
 
   const allImages = [coverImage, ...(images || [])].filter(Boolean);
 
   const openGallery = (index: number) => {
     setCurrentIndex(index);
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
     setIsOpen(true);
   };
 
   const closeGallery = () => {
     setIsOpen(false);
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-  };
-
-  const prevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-    setCurrentIndex((prev) => (prev === 0 ? allImages.length - 1 : prev - 1));
-  };
-
-  const nextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setScale(1);
-    setPosition({ x: 0, y: 0 });
-    setCurrentIndex((prev) => (prev === allImages.length - 1 ? 0 : prev + 1));
-  };
-
-  const handleZoomIn = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setScale((prev) => Math.min(prev + 0.5, 4));
-  };
-
-  const handleZoomOut = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setScale((prev) => {
-      const newScale = Math.max(prev - 0.5, 1);
-      if (newScale === 1) setPosition({ x: 0, y: 0 });
-      return newScale;
-    });
-  };
-
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (scale > 1) {
-      setScale(1);
-      setPosition({ x: 0, y: 0 });
-    } else {
-      setScale(2);
-    }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (scale === 1) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setPosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
   };
 
   useEffect(() => {
@@ -170,98 +104,13 @@ export default function PropertyGalleryViewer({ coverImage, images }: PropertyGa
         )}
       </div>
 
-      {/* Fullscreen Lightbox Modal */}
-      {isOpen && (
-        <div 
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center"
-          onClick={closeGallery}
-        >
-          {/* Top Bar */}
-          <div className="absolute top-0 inset-x-0 p-6 flex items-center justify-between z-50 bg-gradient-to-b from-black/80 to-transparent">
-            <span className="text-white/70 font-medium tracking-widest text-sm">
-              {currentIndex + 1} / {allImages.length}
-            </span>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full p-1 mr-4">
-                <button 
-                  onClick={handleZoomOut}
-                  className="text-white/70 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors"
-                  title="Diminuir Zoom"
-                >
-                  <ZoomOut size={20} />
-                </button>
-                <span className="text-white/70 text-xs font-medium min-w-[40px] text-center">
-                  {Math.round(scale * 100)}%
-                </span>
-                <button 
-                  onClick={handleZoomIn}
-                  className="text-white/70 hover:text-white hover:bg-white/20 p-2 rounded-full transition-colors"
-                  title="Aumentar Zoom"
-                >
-                  <ZoomIn size={20} />
-                </button>
-              </div>
-              
-              <button 
-                onClick={closeGallery}
-                className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full backdrop-blur-md transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-          </div>
-
-          {/* Prev Button */}
-          <button 
-            onClick={prevImage}
-            className="absolute left-6 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 p-3 rounded-full backdrop-blur-md transition-all z-10 hidden md:block"
-          >
-            <ChevronLeft size={32} />
-          </button>
-
-          {/* Main Image Container */}
-          <div 
-            className={`w-full h-full flex items-center justify-center overflow-hidden relative ${scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}`} 
-            onClick={(e) => {
-              if (scale === 1) e.stopPropagation();
-            }}
-            onDoubleClick={handleDoubleClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-          >
-            <div
-              className="transition-transform duration-200 ease-out origin-center"
-              style={{ 
-                transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-                transition: isDragging ? 'none' : 'transform 0.2s ease-out'
-              }}
-            >
-              <img 
-                ref={imgRef}
-                src={allImages[currentIndex]} 
-                alt={`Imagem ${currentIndex + 1}`} 
-                className="max-w-[95vw] max-h-[90vh] object-contain rounded-lg shadow-2xl pointer-events-none select-none"
-                draggable={false}
-              />
-            </div>
-          </div>
-
-          {/* Next Button */}
-          <button 
-            onClick={nextImage}
-            className="absolute right-6 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 p-3 rounded-full backdrop-blur-md transition-all z-10 hidden md:block"
-          >
-            <ChevronRight size={32} />
-          </button>
-
-          {/* Mobile swipe hint / tap areas */}
-          <div className="absolute inset-y-0 left-0 w-1/3 md:hidden z-0" onClick={prevImage} />
-          <div className="absolute inset-y-0 right-0 w-1/3 md:hidden z-0" onClick={nextImage} />
-        </div>
-      )}
+      <PropertyLightbox
+        key={isOpen ? `${allImages[currentIndex]}-${currentIndex}` : "property-lightbox-closed"}
+        images={allImages}
+        initialIndex={currentIndex}
+        isOpen={isOpen}
+        onClose={closeGallery}
+      />
     </>
   );
 }

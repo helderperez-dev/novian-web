@@ -1,11 +1,12 @@
 import { getProperties } from "@/lib/store";
+import { connection } from "next/server";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, MapPin, Bed, Car, Maximize } from "lucide-react";
 
 export default async function PropertiesListingPage() {
-  const propertiesData = await getProperties();
-  const properties = Array.from(propertiesData.values()).filter(p => p.status === 'active');
+  await connection();
+  const properties = (await getProperties()).filter((property) => property.status === "active");
 
   return (
     <div className="min-h-screen bg-[#0d1514] text-white font-sans selection:bg-[#DEC0A6]/30">

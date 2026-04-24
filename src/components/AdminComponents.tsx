@@ -3,14 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, RefreshCw, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, Star, Flame, Sparkles, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock } from "lucide-react";
+import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type } from "lucide-react";
 import Image from "next/image";
+import { supabase } from "@/lib/supabase";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ImageGalleryUploader from "@/components/ImageGalleryUploader";
+import PopupSelect from "@/components/PopupSelect";
 import { CaptacaoLayout } from "@/components/CaptacaoLayout";
 import type { Database } from "@/lib/database.types";
 import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, ResponsiveContainer } from "recharts";
@@ -568,133 +570,357 @@ function LeadNotesPanel({
   );
 }
 
-type MarkdownAction = "heading" | "bold" | "italic" | "bullet" | "paragraph";
+type RichTextAction = "heading" | "bold" | "italic" | "bullet" | "paragraph";
+type AiAssistAction = "generate" | "enhance";
+type AiAssistFormat = "plain_text" | "rich_html";
 
-function MarkdownEditor({
+const RICH_TEXT_HTML_PATTERN = /<\/?[a-z][\s\S]*>/i;
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function formatInlineMarkdown(value: string) {
+  return value
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>");
+}
+
+function convertPlainTextToRichHtml(value: string) {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return "<p></p>";
+  }
+
+  const lines = normalized.split("\n");
+  const blocks: string[] = [];
+  let listItems: string[] = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+
+    blocks.push(`<ul>${listItems.map((item) => `<li>${item}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushList();
+      continue;
+    }
+
+    const escaped = formatInlineMarkdown(escapeHtml(line));
+
+    if (line.startsWith("## ")) {
+      flushList();
+      blocks.push(`<h2>${formatInlineMarkdown(escapeHtml(line.slice(3)))}</h2>`);
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      listItems.push(formatInlineMarkdown(escapeHtml(line.slice(2))));
+      continue;
+    }
+
+    flushList();
+    blocks.push(`<p>${escaped}</p>`);
+  }
+
+  flushList();
+  return blocks.join("");
+}
+
+function normalizeRichTextValue(value: string) {
+  return RICH_TEXT_HTML_PATTERN.test(value) ? value : convertPlainTextToRichHtml(value);
+}
+
+function stripRichTextToPlainText(value: string) {
+  return value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function AiAssistMenuTrigger({
+  onGenerate,
+  onEnhance,
+  onToggleMenu,
+  isLoading,
+  canEnhance = true,
+  menuOpen = false,
+  insideEditor = false,
+}: {
+  onGenerate: () => void;
+  onEnhance: () => void;
+  onToggleMenu: () => void;
+  isLoading: boolean;
+  canEnhance?: boolean;
+  menuOpen?: boolean;
+  insideEditor?: boolean;
+}) {
+  const wrapperClassName = insideEditor
+    ? "absolute top-3 right-3 z-60"
+    : "absolute inset-y-0 right-3 z-60 flex items-center";
+
+  const triggerClassName = insideEditor
+    ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-novian-muted/30 bg-novian-surface/88 text-novian-text/65 backdrop-blur transition hover:bg-novian-primary/60 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-45"
+    : "inline-flex h-8 w-8 items-center justify-center rounded-full text-novian-text/55 transition hover:bg-novian-surface/50 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-45";
+
+  if (isLoading) {
+    return (
+      <div className={wrapperClassName} onClick={(event) => event.stopPropagation()} data-ai-menu-root="true">
+        <div className={triggerClassName} aria-hidden="true">
+          <LoaderCircle size={14} className="animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={wrapperClassName} onClick={(event) => event.stopPropagation()} data-ai-menu-root="true">
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        className={triggerClassName}
+        aria-label="Opções de IA"
+        title="Opções de IA"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+      >
+        <WandSparkles size={14} />
+      </button>
+      {menuOpen ? (
+        <div
+          className={`absolute z-70 min-w-[160px] rounded-2xl border border-novian-muted/30 bg-novian-surface/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.24)] backdrop-blur ${
+            insideEditor ? "top-10 right-0" : "top-[calc(100%+8px)] right-0"
+          }`}
+          role="menu"
+        >
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-novian-text/80 transition hover:bg-novian-primary/50 hover:text-novian-text"
+            role="menuitem"
+          >
+            <WandSparkles size={14} />
+            Criar com IA
+          </button>
+          <button
+            type="button"
+            onClick={onEnhance}
+            disabled={!canEnhance}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-novian-text/80 transition hover:bg-novian-primary/50 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-45"
+            role="menuitem"
+          >
+            <Edit size={14} />
+            Melhorar
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AiInputField({
+  label,
+  name,
+  value,
+  onChange,
+  onGenerate,
+  onEnhance,
+  onToggleMenu,
+  isLoading,
+  menuOpen,
+  required = false,
+  placeholder,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (value: string) => void;
+  onGenerate: () => void;
+  onEnhance: () => void;
+  onToggleMenu: () => void;
+  isLoading: boolean;
+  menuOpen: boolean;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-novian-text/70">{label}</label>
+      <div className="relative overflow-visible">
+        <input
+          name={name}
+          required={required}
+          type="text"
+          value={value}
+          disabled={isLoading}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full bg-novian-primary border border-novian-muted/50 rounded-xl px-3 py-2.5 pr-24 text-sm focus:border-novian-accent/50 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          placeholder={placeholder}
+        />
+        <AiAssistMenuTrigger
+          onGenerate={onGenerate}
+          onEnhance={onEnhance}
+          onToggleMenu={onToggleMenu}
+          isLoading={isLoading}
+          menuOpen={menuOpen}
+          canEnhance={Boolean(value.trim())}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RichTextEditor({
+  label,
   name,
   value,
   onChange,
   required = false,
   minHeightClass = "min-h-56",
+  onGenerate,
+  onEnhance,
+  onToggleMenu,
+  isLoading = false,
+  menuOpen = false,
 }: {
+  label: string;
   name: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
   minHeightClass?: string;
+  onGenerate: () => void;
+  onEnhance: () => void;
+  onToggleMenu: () => void;
+  isLoading?: boolean;
+  menuOpen?: boolean;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editorRef = useRef<HTMLDivElement | null>(null);
 
-  const applyMarkdown = (action: MarkdownAction) => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
       return;
     }
 
-    const start = textarea.selectionStart ?? 0;
-    const end = textarea.selectionEnd ?? 0;
-    const selection = value.slice(start, end);
-    const fallbackText = selection || "texto";
+    const nextHtml = normalizeRichTextValue(value);
+    if (editor.innerHTML !== nextHtml) {
+      editor.innerHTML = nextHtml;
+    }
+  }, [value]);
 
-    let nextValue = value;
-    let nextSelectionStart = start;
-    let nextSelectionEnd = end;
+  const exec = (command: string, commandValue?: string) => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
 
+    if (isLoading) {
+      return;
+    }
+
+    editor.focus();
+    document.execCommand(command, false, commandValue);
+    onChange(editor.innerHTML);
+  };
+
+  const applyRichText = (action: RichTextAction) => {
     if (action === "bold") {
-      const inserted = `**${fallbackText}**`;
-      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
-      nextSelectionStart = start + 2;
-      nextSelectionEnd = start + 2 + fallbackText.length;
+      exec("bold");
+      return;
     }
 
     if (action === "italic") {
-      const inserted = `*${fallbackText}*`;
-      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
-      nextSelectionStart = start + 1;
-      nextSelectionEnd = start + 1 + fallbackText.length;
+      exec("italic");
+      return;
     }
 
     if (action === "heading") {
-      const inserted = `## ${selection || "Novo destaque"}`;
-      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
-      nextSelectionStart = start + 3;
-      nextSelectionEnd = start + inserted.length;
+      exec("formatBlock", "h2");
+      return;
     }
 
     if (action === "bullet") {
-      const selectedLines = selection ? selection.split("\n") : ["Novo item"];
-      const inserted = selectedLines.map((line) => `- ${line}`).join("\n");
-      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
-      nextSelectionStart = start;
-      nextSelectionEnd = start + inserted.length;
+      exec("insertUnorderedList");
+      return;
     }
 
-    if (action === "paragraph") {
-      const inserted = `${selection || "Novo paragrafo"}\n\n`;
-      nextValue = `${value.slice(0, start)}${inserted}${value.slice(end)}`;
-      nextSelectionStart = start;
-      nextSelectionEnd = start + inserted.trimEnd().length;
-    }
-
-    onChange(nextValue);
-
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd);
-    });
+    exec("formatBlock", "p");
   };
 
-  const actions: Array<{ id: MarkdownAction; label: string }> = [
-    { id: "heading", label: "Titulo" },
-    { id: "bold", label: "Negrito" },
-    { id: "italic", label: "Italico" },
-    { id: "bullet", label: "Lista" },
-    { id: "paragraph", label: "Paragrafo" },
+  const actions: Array<{ id: RichTextAction; label: string; icon: typeof Type }> = [
+    { id: "heading", label: "Titulo", icon: Type },
+    { id: "bold", label: "Negrito", icon: Bold },
+    { id: "italic", label: "Italico", icon: Italic },
+    { id: "bullet", label: "Lista", icon: List },
+    { id: "paragraph", label: "Paragrafo", icon: FileText },
   ];
 
   return (
-    <div className="rounded-2xl border border-novian-muted/40 bg-novian-primary/35">
-      <div className="flex flex-wrap items-center gap-2 border-b border-novian-muted/30 px-3 py-3">
-        {actions.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            onClick={() => applyMarkdown(action.id)}
-            className="rounded-full border border-novian-muted/30 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
-          >
-            {action.label}
-          </button>
-        ))}
-        <span className="ml-auto text-[11px] text-novian-text/40">
-          Markdown simples com preview ao vivo
-        </span>
+    <div className="overflow-visible rounded-2xl border border-novian-muted/40 bg-novian-primary/35">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 border-b border-novian-muted/30 px-3 py-3">
+        <label className="block text-xs font-medium text-novian-text/70">{label}</label>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              onClick={() => applyRichText(action.id)}
+              disabled={isLoading}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-novian-muted/30 px-3 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label={action.label}
+              title={action.label}
+            >
+              <action.icon size={14} />
+              {action.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <textarea
-        ref={textareaRef}
-        name={name}
-        required={required}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`w-full resize-y bg-transparent px-4 py-4 text-sm leading-7 text-novian-text outline-none placeholder:text-novian-text/35 ${minHeightClass}`}
-        placeholder="Descreva o imovel com detalhes, diferenciais e contexto da localizacao."
-      />
+      <input type="hidden" name={name} value={value} />
 
-      <div className="border-t border-novian-muted/30 px-4 py-4">
-        <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.18em] text-novian-text/40">
-          Preview
-        </p>
-        {value.trim() ? (
-          <div className="prose prose-sm prose-invert max-w-none text-novian-text/85 prose-p:leading-7 prose-headings:text-novian-text prose-strong:text-novian-text prose-li:marker:text-novian-accent">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {value}
-            </ReactMarkdown>
+      <div className="relative overflow-visible">
+        <AiAssistMenuTrigger
+          insideEditor
+          onGenerate={onGenerate}
+          onEnhance={onEnhance}
+          onToggleMenu={onToggleMenu}
+          isLoading={isLoading}
+          menuOpen={menuOpen}
+          canEnhance={Boolean(stripRichTextToPlainText(value))}
+        />
+        <div
+          ref={editorRef}
+          contentEditable={!isLoading}
+          suppressContentEditableWarning
+          onInput={(event) => onChange((event.currentTarget as HTMLDivElement).innerHTML)}
+          onPaste={(event) => {
+            if (isLoading) {
+              event.preventDefault();
+              return;
+            }
+            event.preventDefault();
+            const text = event.clipboardData.getData("text/plain");
+            document.execCommand("insertText", false, text);
+          }}
+          role="textbox"
+          aria-multiline="true"
+          data-required={required ? "true" : "false"}
+          data-placeholder="Descreva o imovel com detalhes, diferenciais e contexto da localizacao."
+          className={`prose prose-sm prose-invert max-w-none overflow-y-auto bg-transparent px-4 py-4 pr-24 text-novian-text outline-none before:pointer-events-none before:block before:text-novian-text/35 empty:before:content-[attr(data-placeholder)] prose-p:my-0 prose-p:leading-7 prose-headings:mb-3 prose-headings:mt-0 prose-headings:text-novian-text prose-strong:text-novian-text prose-li:my-1 prose-li:marker:text-novian-accent [&_ul]:pl-5 ${minHeightClass} ${isLoading ? "cursor-not-allowed opacity-55" : ""}`}
+        />
+        {isLoading ? (
+          <div className="pointer-events-none absolute inset-0 rounded-b-2xl bg-novian-primary/10 backdrop-blur-[1px]">
           </div>
-        ) : (
-          <p className="text-sm text-novian-text/35">
-            O preview aparece aqui conforme voce escreve.
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -810,17 +1036,14 @@ export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: 
             </label>
             
             {field.type === 'dropdown' ? (
-              <select 
+              <PopupSelect
+                value={String(formData[field.id] || "")}
+                onChange={(value) => handleChange(field.id, value)}
                 required={field.required}
-                value={formData[field.id] || ""}
-                onChange={(e) => handleChange(field.id, e.target.value)}
-                className="w-full bg-novian-surface/80 rounded-xl px-4 py-3 text-sm focus:outline-none focus:bg-novian-surface focus:ring-1 focus:ring-novian-accent/50 transition-all border border-novian-muted/50 appearance-none"
-              >
-                <option value="" disabled>Selecione...</option>
-                {field.options?.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
+                placeholder="Selecione..."
+                buttonClassName="w-full bg-novian-surface/80 focus:bg-novian-surface focus:border-novian-accent/50"
+                options={(field.options || []).map((opt) => ({ value: opt, label: opt }))}
+              />
             ) : (
               <input 
                 type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'} 
@@ -1270,15 +1493,14 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
           <span className="text-sm text-novian-text/50">{visibleLeads.length} Leads Totais</span>
         </div>
         <div className="flex items-center gap-3">
-           <select 
-              value={activeFunnelId}
-              onChange={(e) => setActiveFunnelId(e.target.value)}
-              className="bg-novian-surface border border-novian-muted/50 text-novian-text px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 hover:bg-novian-muted transition-colors appearance-none outline-none"
-           >
-             {funnelsList.map(funnel => (
-               <option key={funnel.id} value={funnel.id}>{funnel.name}</option>
-             ))}
-           </select>
+           <div className="min-w-[220px]">
+             <PopupSelect
+               value={activeFunnelId}
+               onChange={setActiveFunnelId}
+               buttonClassName="bg-novian-surface py-2 text-novian-text hover:bg-novian-muted"
+               options={funnelsList.map((funnel) => ({ value: funnel.id, label: funnel.name }))}
+             />
+           </div>
            <div className="flex bg-novian-surface border border-novian-muted/50 rounded-lg p-0.5">
              <button 
                 onClick={() => setViewMode('kanban')}
@@ -1785,20 +2007,209 @@ const buildGoogleMapsEmbedUrl = (address: string) => {
   return `https://maps.google.com/maps?q=${encodeURIComponent(normalizedAddress)}&output=embed`;
 };
 
+const PROPERTY_OWNER_PRICE_KEY = "owner_price";
+const PROPERTY_COMMISSION_RATE_KEY = "commission_rate";
+const PROPERTY_IMAGE_DESCRIPTIONS_KEY = "image_descriptions";
+const DEFAULT_PROPERTY_COMMISSION_RATE = 6;
+
+const roundCurrencyValue = (value: number) => Number((Number.isFinite(value) ? value : 0).toFixed(2));
+const roundPercentageValue = (value: number) => Number((Number.isFinite(value) ? value : 0).toFixed(4));
+const roundUpToStep = (value: number, step: number) => {
+  if (!Number.isFinite(value) || step <= 0) return 0;
+  return roundCurrencyValue(Math.ceil(value / step) * step);
+};
+
+const getNumericCustomDataValue = (customData: Property["customData"] | undefined, key: string) => {
+  const value = customData?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+};
+
+const getImageDescriptionsFromCustomData = (customData: Property["customData"] | undefined) => {
+  const rawValue = customData?.[PROPERTY_IMAGE_DESCRIPTIONS_KEY];
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return {} as Record<string, string>;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.entries(parsed).reduce<Record<string, string>>((acc, [imageUrl, description]) => {
+      if (typeof description === "string" && description.trim()) {
+        acc[imageUrl] = description;
+      }
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(value) ? value : 0);
+
+const getFileNameFromUrl = (fileUrl: string) => {
+  if (!fileUrl) {
+    return "";
+  }
+
+  try {
+    const pathname = new URL(fileUrl).pathname;
+    return decodeURIComponent(pathname.split("/").pop() || "");
+  } catch {
+    return fileUrl.split("/").pop() || fileUrl;
+  }
+};
+
+function LeadMagnetUploader({
+  fileUrl,
+  onChange,
+}: {
+  fileUrl: string;
+  onChange: (fileUrl: string) => void;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const uploadFile = async (file: File) => {
+    setIsUploading(true);
+
+    try {
+      const fileExt = file.name.split(".").pop();
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const filePath = `lead-magnets/${Date.now()}-${sanitizedName}${fileExt ? "" : ".bin"}`;
+
+      const { error: uploadError } = await supabase.storage.from("assets").upload(filePath, file, {
+        upsert: false,
+      });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
+      onChange(data.publicUrl);
+    } catch (error) {
+      console.error("Falha ao enviar lead magnet", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextFile = event.target.files?.[0];
+    if (!nextFile) {
+      return;
+    }
+
+    await uploadFile(nextFile);
+    event.target.value = "";
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-novian-text/70">Arquivo</label>
+      <div className="rounded-2xl border border-novian-muted/35 bg-novian-primary/25 p-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-novian-text">
+              {fileUrl ? getFileNameFromUrl(fileUrl) : "Nenhum arquivo selecionado"}
+            </p>
+            <p className="mt-1 text-xs text-novian-text/50">
+              PDF, DOCX, PPTX ou qualquer material complementar do imovel.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="inline-flex items-center gap-2 rounded-full border border-novian-muted/40 px-3 py-2 text-sm font-medium text-novian-text/80 transition hover:border-novian-accent/40 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isUploading ? <LoaderCircle size={14} className="animate-spin" /> : <FileText size={14} />}
+              {isUploading ? "Enviando..." : fileUrl ? "Substituir arquivo" : "Selecionar arquivo"}
+            </button>
+            {fileUrl ? (
+              <>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full border border-novian-muted/40 px-3 py-2 text-sm font-medium text-novian-text/80 transition hover:border-novian-accent/40 hover:text-novian-text"
+                >
+                  Ver arquivo
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onChange("")}
+                  className="inline-flex items-center gap-2 rounded-full border border-red-400/25 px-3 py-2 text-sm font-medium text-red-200 transition hover:border-red-300/45 hover:text-red-100"
+                >
+                  Remover
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleFileChange}
+          disabled={isUploading}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function PropertiesLayout() {
   const searchParams = useSearchParams();
   const deepLinkPropertyId = searchParams.get("id");
   const didAutoOpenPropertyFromQueryRef = useRef(false);
+  const propertyFormRef = useRef<HTMLFormElement | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [fields, setFields] = useState<CustomField[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [currentImages, setCurrentImages] = useState<string[]>([]);
   const [currentCover, setCurrentCover] = useState<string>("");
+  const [currentImageDescriptions, setCurrentImageDescriptions] = useState<Record<string, string>>({});
+  const [title, setTitle] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [address, setAddress] = useState<string>("");
   const [mapEmbedUrl, setMapEmbedUrl] = useState<string>("");
   const [isMapEditedManually, setIsMapEditedManually] = useState(false);
+  const [isMapAdvancedOpen, setIsMapAdvancedOpen] = useState(false);
+  const [ownerPrice, setOwnerPrice] = useState<number>(0);
+  const [commissionRate, setCommissionRate] = useState<number>(DEFAULT_PROPERTY_COMMISSION_RATE);
+  const [finalPrice, setFinalPrice] = useState<number>(0);
+  const [propertyStatus, setPropertyStatus] = useState<Property["status"]>("active");
+  const [propertyDropdownValues, setPropertyDropdownValues] = useState<Record<string, string>>({});
+  const [heroTitle, setHeroTitle] = useState<string>("Descubra seu novo lar");
+  const [heroSubtitle, setHeroSubtitle] = useState<string>("Cadastre-se para receber mais informações exclusivas.");
+  const [callToActionText, setCallToActionText] = useState<string>("Quero Saber Mais");
+  const [leadMagnetTitle, setLeadMagnetTitle] = useState<string>("Baixar Apresentação do Imóvel");
+  const [leadMagnetFileUrl, setLeadMagnetFileUrl] = useState<string>("");
+  const [activeAiField, setActiveAiField] = useState<string | null>(null);
+  const [openAiMenuField, setOpenAiMenuField] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
@@ -1826,20 +2237,63 @@ export function PropertiesLayout() {
     if (selectedProperty) {
       setCurrentImages(selectedProperty.images || []);
       setCurrentCover(selectedProperty.coverImage || "");
+      setCurrentImageDescriptions(getImageDescriptionsFromCustomData(selectedProperty.customData));
+      setTitle(selectedProperty.title || "");
       setDescription(selectedProperty.description || "");
       setAddress(selectedProperty.address || "");
+      const storedCommissionRate = getNumericCustomDataValue(selectedProperty.customData, PROPERTY_COMMISSION_RATE_KEY);
+      const nextCommissionRate = storedCommissionRate ?? DEFAULT_PROPERTY_COMMISSION_RATE;
+      const storedOwnerPrice = getNumericCustomDataValue(selectedProperty.customData, PROPERTY_OWNER_PRICE_KEY);
+      const derivedOwnerPrice =
+        nextCommissionRate > 0
+          ? selectedProperty.price * (1 - nextCommissionRate / 100)
+          : selectedProperty.price;
+      const nextOwnerPrice = roundCurrencyValue(storedOwnerPrice ?? derivedOwnerPrice);
+      const nextFinalPrice = roundCurrencyValue(selectedProperty.price);
+      setCommissionRate(roundPercentageValue(nextCommissionRate));
+      setOwnerPrice(nextOwnerPrice);
+      setFinalPrice(nextFinalPrice);
+      setPropertyStatus(selectedProperty.status || "active");
+      setPropertyDropdownValues(
+        fields.reduce<Record<string, string>>((acc, field) => {
+          if (field.type === "dropdown") {
+            const rawValue = selectedProperty.customData?.[field.id];
+            acc[field.id] = typeof rawValue === "string" ? rawValue : rawValue != null ? String(rawValue) : "";
+          }
+          return acc;
+        }, {}),
+      );
       const generatedMapUrl = buildGoogleMapsEmbedUrl(selectedProperty.address || "");
       const existingMapUrl = selectedProperty.mapEmbedUrl || "";
       const hasManualMapUrl = Boolean(existingMapUrl) && existingMapUrl !== generatedMapUrl;
       setMapEmbedUrl(existingMapUrl || generatedMapUrl);
       setIsMapEditedManually(hasManualMapUrl);
+      setIsMapAdvancedOpen(hasManualMapUrl);
+      setHeroTitle(selectedProperty.landingPage?.heroTitle || "Descubra seu novo lar");
+      setHeroSubtitle(selectedProperty.landingPage?.heroSubtitle || "Cadastre-se para receber mais informações exclusivas.");
+      setCallToActionText(selectedProperty.landingPage?.callToActionText || "Quero Saber Mais");
+      setLeadMagnetTitle(selectedProperty.landingPage?.leadMagnetTitle || "Baixar Apresentação do Imóvel");
+      setLeadMagnetFileUrl(selectedProperty.landingPage?.leadMagnetFileUrl || "");
     } else {
       setCurrentImages([]);
       setCurrentCover("");
+      setCurrentImageDescriptions({});
+      setTitle("");
       setDescription("");
       setAddress("");
       setMapEmbedUrl("");
       setIsMapEditedManually(false);
+      setIsMapAdvancedOpen(false);
+      setOwnerPrice(0);
+      setCommissionRate(DEFAULT_PROPERTY_COMMISSION_RATE);
+      setFinalPrice(0);
+      setPropertyStatus("active");
+      setPropertyDropdownValues({});
+      setHeroTitle("Descubra seu novo lar");
+      setHeroSubtitle("Cadastre-se para receber mais informações exclusivas.");
+      setCallToActionText("Quero Saber Mais");
+      setLeadMagnetTitle("Baixar Apresentação do Imóvel");
+      setLeadMagnetFileUrl("");
     }
   }, [selectedProperty, isDrawerOpen]);
 
@@ -1850,6 +2304,151 @@ export function PropertiesLayout() {
 
     setMapEmbedUrl(buildGoogleMapsEmbedUrl(address));
   }, [address, isMapEditedManually]);
+
+  useEffect(() => {
+    if (!openAiMenuField) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        setOpenAiMenuField(null);
+        return;
+      }
+
+      if (target.closest("[data-ai-menu-root='true']")) {
+        return;
+      }
+
+      setOpenAiMenuField(null);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenAiMenuField(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openAiMenuField]);
+
+  const buildPropertyAiContext = () => {
+    const formData = propertyFormRef.current ? new FormData(propertyFormRef.current) : null;
+    const customFieldValues = fields.reduce<Record<string, string>>((acc, field) => {
+      const rawValue = formData?.get(`custom_${field.id}`);
+      const normalizedValue = String(rawValue ?? "").trim();
+      if (normalizedValue) {
+        acc[field.name] = normalizedValue;
+      }
+      return acc;
+    }, {});
+
+    return {
+      tituloDoImovel: title,
+      descricaoAtual: stripRichTextToPlainText(description),
+      endereco: address,
+      status: String(formData?.get("status") || selectedProperty?.status || "active"),
+      precoFinal: formatCurrency(finalPrice),
+      precoFinalSugerido: formatCurrency(suggestedFinalPrice),
+      valorDoProprietario: formatCurrency(ownerPrice),
+      liquidoDoProprietario: formatCurrency(ownerReceives),
+      ajusteLiquidoVsDesejado: formatCurrency(ownerAdjustment),
+      comissaoPercentual: `${commissionRate}%`,
+      valorDaComissao: formatCurrency(commissionAmount),
+      heroTitle,
+      heroSubtitle,
+      callToActionText,
+      leadMagnetTitle,
+      leadMagnetFileUrl,
+      corPrincipal: String(formData?.get("primaryColor") || ""),
+      exibirLeadMagnet: formData?.get("showLeadMagnet") === "on",
+      imagens: {
+        capa: currentCover,
+        total: currentImages.length,
+        descricoes: currentImageDescriptions,
+      },
+      camposPersonalizados: customFieldValues,
+    };
+  };
+
+  const handleAiAssist = async ({
+    fieldKey,
+    fieldLabel,
+    action,
+    format,
+    value,
+    onApply,
+  }: {
+    fieldKey: string;
+    fieldLabel: string;
+    action: AiAssistAction;
+    format: AiAssistFormat;
+    value: string;
+    onApply: (nextValue: string) => void;
+  }) => {
+    setOpenAiMenuField(null);
+    setActiveAiField(fieldKey);
+    try {
+      const response = await fetch("/api/admin/ai-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          format,
+          fieldLabel,
+          sourceText: value,
+          context: buildPropertyAiContext(),
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Falha ao gerar texto com IA");
+      }
+
+      onApply(payload.content || "");
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setActiveAiField(null);
+    }
+  };
+
+  const handleOwnerPriceChange = (rawValue: string) => {
+    const nextOwnerPrice = roundCurrencyValue(Number(rawValue || 0));
+    setOwnerPrice(nextOwnerPrice);
+    const suggestedFinal = commissionRate >= 100
+      ? nextOwnerPrice
+      : roundCurrencyValue(nextOwnerPrice / (1 - commissionRate / 100));
+    setFinalPrice(suggestedFinal);
+  };
+
+  const handleCommissionRateChange = (rawValue: string) => {
+    const nextCommissionRate = Math.max(0, roundPercentageValue(Number(rawValue || 0)));
+    setCommissionRate(nextCommissionRate);
+    const suggestedFinal = nextCommissionRate >= 100
+      ? ownerPrice
+      : roundCurrencyValue(ownerPrice / (1 - nextCommissionRate / 100));
+    setFinalPrice(suggestedFinal);
+  };
+
+  const handleFinalPriceChange = (rawValue: string) => {
+    const nextFinalPrice = roundCurrencyValue(Number(rawValue || 0));
+    setFinalPrice(nextFinalPrice);
+  };
+
+  const suggestedFinalPrice =
+    commissionRate >= 100 ? ownerPrice : roundCurrencyValue(ownerPrice / Math.max(1 - commissionRate / 100, 0.0001));
+  const commissionAmount = roundCurrencyValue(finalPrice * (commissionRate / 100));
+  const ownerReceives = roundCurrencyValue(finalPrice - commissionAmount);
+  const ownerAdjustment = roundCurrencyValue(ownerReceives - ownerPrice);
 
   useEffect(() => {
     didAutoOpenPropertyFromQueryRef.current = false;
@@ -1882,6 +2481,12 @@ export function PropertiesLayout() {
       }
     });
 
+    customData[PROPERTY_OWNER_PRICE_KEY] = ownerPrice;
+    customData[PROPERTY_COMMISSION_RATE_KEY] = commissionRate;
+    if (Object.keys(currentImageDescriptions).length > 0) {
+      customData[PROPERTY_IMAGE_DESCRIPTIONS_KEY] = JSON.stringify(currentImageDescriptions);
+    }
+
     let mapUrl = mapEmbedUrl;
     if (mapUrl && mapUrl.includes('<iframe') && mapUrl.includes('src="')) {
       const match = mapUrl.match(/src="([^"]+)"/);
@@ -1892,22 +2497,23 @@ export function PropertiesLayout() {
 
     const propertyData = {
       ...(selectedProperty ? { id: selectedProperty.id, slug: selectedProperty.slug } : {}),
-      title: formData.get("title"),
-      description: formData.get("description"),
+      title,
+      description,
       address,
       mapEmbedUrl: mapUrl,
-      price: Number(formData.get("price")),
+      price: finalPrice,
       status: formData.get("status"),
       coverImage: currentCover,
       images: currentImages,
       customData,
       landingPage: {
-        heroTitle: formData.get("heroTitle"),
-        heroSubtitle: formData.get("heroSubtitle"),
-        callToActionText: formData.get("callToActionText"),
+        heroTitle,
+        heroSubtitle,
+        callToActionText,
         primaryColor: formData.get("primaryColor"),
         showLeadMagnet: formData.get("showLeadMagnet") === "on",
-        leadMagnetTitle: formData.get("leadMagnetTitle"),
+        leadMagnetTitle,
+        leadMagnetFileUrl,
       }
     };
 
@@ -1943,7 +2549,7 @@ export function PropertiesLayout() {
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full p-6" onClick={() => setOpenDropdownId(null)}>
+    <div className="flex flex-col flex-1 h-full p-6" onClick={() => { setOpenDropdownId(null); setOpenAiMenuField(null); }}>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-light text-novian-text">Gerenciamento de Imóveis</h2>
         <button 
@@ -2042,6 +2648,7 @@ export function PropertiesLayout() {
           onClick={() => setIsDrawerOpen(false)}
         >
           <form
+            ref={propertyFormRef}
             onSubmit={handleSaveProperty}
             onClick={(event) => event.stopPropagation()}
             className="w-full max-w-2xl bg-novian-surface border-l border-novian-muted h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
@@ -2060,19 +2667,67 @@ export function PropertiesLayout() {
                 <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-novian-text/70 mb-1">Título do Imóvel</label>
-                    <input name="title" required type="text" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.title} />
+                    <AiInputField
+                      label="Título do Imóvel"
+                      name="title"
+                      required
+                      value={title}
+                      onChange={setTitle}
+                      isLoading={activeAiField === "title"}
+                      menuOpen={openAiMenuField === "title"}
+                      onToggleMenu={() => setOpenAiMenuField((current) => current === "title" ? null : "title")}
+                      onGenerate={() =>
+                        handleAiAssist({
+                          fieldKey: "title",
+                          fieldLabel: "Título do Imóvel",
+                          action: "generate",
+                          format: "plain_text",
+                          value: title,
+                          onApply: setTitle,
+                        })
+                      }
+                      onEnhance={() =>
+                        handleAiAssist({
+                          fieldKey: "title",
+                          fieldLabel: "Título do Imóvel",
+                          action: "enhance",
+                          format: "plain_text",
+                          value: title,
+                          onApply: setTitle,
+                        })
+                      }
+                    />
                   </div>
                   <div className="col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-medium text-novian-text/70">Descrição</label>
-                      <span className="text-[11px] text-novian-text/45">Use markdown simples para destacar pontos importantes.</span>
-                    </div>
-                    <MarkdownEditor
+                    <RichTextEditor
+                      label="Descrição"
                       name="description"
                       required
                       value={description}
                       onChange={setDescription}
+                      menuOpen={openAiMenuField === "description"}
+                      onToggleMenu={() => setOpenAiMenuField((current) => current === "description" ? null : "description")}
+                      onGenerate={() =>
+                        handleAiAssist({
+                          fieldKey: "description",
+                          fieldLabel: "Descrição do Imóvel",
+                          action: "generate",
+                          format: "rich_html",
+                          value: description,
+                          onApply: setDescription,
+                        })
+                      }
+                      onEnhance={() =>
+                        handleAiAssist({
+                          fieldKey: "description",
+                          fieldLabel: "Descrição do Imóvel",
+                          action: "enhance",
+                          format: "rich_html",
+                          value: description,
+                          onApply: setDescription,
+                        })
+                      }
+                      isLoading={activeAiField === "description"}
                     />
                   </div>
                   <div className="col-span-2">
@@ -2090,40 +2745,57 @@ export function PropertiesLayout() {
                   <div className="col-span-2">
                     <div className="flex items-center justify-between gap-3 mb-1">
                       <label className="block text-xs font-medium text-novian-text/70">Mapa</label>
-                      <span className="text-[11px] text-novian-text/45">
-                        Gerado automaticamente a partir do endereco completo.
-                      </span>
                     </div>
                     <div className="rounded-xl border border-novian-muted/40 bg-novian-primary/30 p-4 space-y-3">
-                      <input
-                        name="mapEmbedUrl"
-                        type="text"
-                        value={mapEmbedUrl}
-                        onChange={(event) => {
-                          setMapEmbedUrl(event.target.value);
-                          setIsMapEditedManually(true);
-                        }}
-                        className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
-                        placeholder="O mapa sera preenchido automaticamente quando voce informar o endereco."
-                      />
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs text-novian-text/45">
                           {isMapEditedManually
-                            ? "Mapa ajustado manualmente. Use o automatico para recriar a partir do endereco."
-                            : "Atualiza sozinho conforme o endereco e pode ser ajustado manualmente se precisar."}
+                            ? "Mapa ajustado manualmente."
+                            : "Automatico pelo endereco."}
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMapEmbedUrl(buildGoogleMapsEmbedUrl(address));
-                            setIsMapEditedManually(false);
-                          }}
-                          disabled={!address.trim()}
-                          className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Usar automatico
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsMapAdvancedOpen((current) => !current)}
+                            className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text"
+                          >
+                            {isMapAdvancedOpen ? "Ocultar avancado" : "Editar mapa"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMapEmbedUrl(buildGoogleMapsEmbedUrl(address));
+                              setIsMapEditedManually(false);
+                              setIsMapAdvancedOpen(false);
+                            }}
+                            disabled={!address.trim()}
+                            className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Usar automatico
+                          </button>
+                        </div>
                       </div>
+                      {isMapAdvancedOpen ? (
+                        <div className="space-y-2 rounded-xl border border-novian-muted/25 bg-novian-surface/15 p-3">
+                          <div className="flex items-center gap-2 text-xs text-novian-text/55">
+                            <MapPin size={12} />
+                            <span>URL manual do mapa</span>
+                          </div>
+                          <input
+                            name="mapEmbedUrl"
+                            type="text"
+                            value={mapEmbedUrl}
+                            onChange={(event) => {
+                              setMapEmbedUrl(event.target.value);
+                              setIsMapEditedManually(true);
+                            }}
+                            className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                            placeholder="O mapa sera preenchido automaticamente quando voce informar o endereco."
+                          />
+                        </div>
+                      ) : (
+                        <input type="hidden" name="mapEmbedUrl" value={mapEmbedUrl} />
+                      )}
                       {mapEmbedUrl ? (
                         <div className="overflow-hidden rounded-xl border border-novian-muted/35 bg-novian-surface/20">
                           <iframe
@@ -2137,21 +2809,137 @@ export function PropertiesLayout() {
                       ) : null}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-novian-text/70 mb-1">Preço (R$)</label>
-                    <input name="price" required type="number" className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.price} />
+                  <div className="col-span-2 rounded-2xl border border-novian-muted/35 bg-novian-primary/25 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-novian-text/45">Precificacao</p>
+                        <p className="mt-1 text-xs text-novian-text/50">
+                          Informe quanto o proprietario quer receber, defina a comissao e ajuste o preco final com arredondamento simples.
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-novian-accent/25 bg-novian-accent/10 px-4 py-3 text-right">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Preco final</p>
+                        <p className="mt-1 text-lg font-semibold text-novian-text">{formatCurrency(finalPrice)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Valor do proprietario (R$)</label>
+                        <input
+                          name="ownerPrice"
+                          required
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={ownerPrice}
+                          onChange={(event) => handleOwnerPriceChange(event.target.value)}
+                          className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Comissao (%)</label>
+                        <input
+                          name="commissionRate"
+                          required
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={commissionRate}
+                          onChange={(event) => handleCommissionRateChange(event.target.value)}
+                          className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Preco final de venda</label>
+                        <input
+                          name="finalPrice"
+                          required
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={finalPrice}
+                          onChange={(event) => handleFinalPriceChange(event.target.value)}
+                          className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFinalPrice(suggestedFinalPrice)}
+                        className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                      >
+                        Usar sugerido
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalPrice(roundUpToStep(suggestedFinalPrice, 1000))}
+                        className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                      >
+                        Arredondar 1 mil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalPrice(roundUpToStep(suggestedFinalPrice, 5000))}
+                        className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                      >
+                        Arredondar 5 mil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalPrice((current) => Math.max(0, roundCurrencyValue(current - 1000)))}
+                        className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                      >
+                        -1 mil
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalPrice((current) => roundCurrencyValue(current + 1000))}
+                        className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                      >
+                        +1 mil
+                      </button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                      <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Preco sugerido</p>
+                        <p className="mt-1 text-sm font-medium text-novian-text/85">
+                          {formatCurrency(suggestedFinalPrice)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Valor da comissao</p>
+                        <p className="mt-1 text-sm font-medium text-novian-text/85">
+                          {formatCurrency(commissionAmount)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Liquido do proprietario</p>
+                        <p className="mt-1 text-sm font-medium text-novian-text/85">
+                          {formatCurrency(ownerReceives)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Ajuste vs. desejado</p>
+                        <p className={`mt-1 text-sm font-medium ${ownerAdjustment >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                          {ownerAdjustment >= 0 ? "+" : "-"} {formatCurrency(Math.abs(ownerAdjustment))}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Status</label>
-                    <select
+                    <PopupSelect
                       name="status"
-                      defaultValue={selectedProperty?.status ?? "active"}
-                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
-                    >
-                      <option value="active">Ativo</option>
-                      <option value="inactive">Inativo</option>
-                      <option value="sold">Vendido</option>
-                    </select>
+                      value={propertyStatus}
+                      onChange={(value) => setPropertyStatus(value as Property["status"])}
+                      options={[
+                        { value: "active", label: "Ativo" },
+                        { value: "inactive", label: "Inativo" },
+                        { value: "sold", label: "Vendido" },
+                      ]}
+                    />
                   </div>
                 </div>
               </section>
@@ -2163,12 +2951,30 @@ export function PropertiesLayout() {
                   {fields.map(field => (
                     <div key={field.id}>
                       <label className="block text-xs font-medium text-novian-text/70 mb-1">{field.name}</label>
-                      <input 
-                        name={`custom_${field.id}`}
-                        type={field.type === 'number' ? 'number' : 'text'} 
-                        className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" 
-                        defaultValue={selectedProperty?.customData?.[field.id] as string | number | undefined} 
-                      />
+                      {field.type === "dropdown" ? (
+                        <PopupSelect
+                          name={`custom_${field.id}`}
+                          value={propertyDropdownValues[field.id] || ""}
+                          onChange={(value) =>
+                            setPropertyDropdownValues((current) => ({
+                              ...current,
+                              [field.id]: value,
+                            }))
+                          }
+                          placeholder="Selecione..."
+                          options={(field.options || []).map((option) => ({
+                            value: option,
+                            label: option,
+                          }))}
+                        />
+                      ) : (
+                        <input 
+                          name={`custom_${field.id}`}
+                          type={field.type === 'number' ? 'number' : 'text'} 
+                          className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" 
+                          defaultValue={selectedProperty?.customData?.[field.id] as string | number | undefined} 
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2182,11 +2988,13 @@ export function PropertiesLayout() {
                     <label className="block text-xs font-medium text-novian-text/70 mb-2">Faça o upload, organize e selecione a capa do imóvel</label>
                     <ImageGalleryUploader 
                       initialCover={selectedProperty?.coverImage}
-                      initialImages={selectedProperty?.images || []} 
-                      onChange={(imgs, cover) => {
+                      initialImages={selectedProperty?.images || []}
+                      initialDescriptions={currentImageDescriptions}
+                      onChange={(imgs, cover, descriptions) => {
                         setCurrentImages(imgs);
                         setCurrentCover(cover);
-                      }} 
+                        setCurrentImageDescriptions(descriptions);
+                      }}
                     />
                   </div>
                 </div>
@@ -2202,19 +3010,94 @@ export function PropertiesLayout() {
                 </div>
                 
                 <div className="bg-novian-primary/50 border border-novian-accent/20 rounded-xl p-4 space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-novian-text/70 mb-1">Título Principal (Hero)</label>
-                    <input name="heroTitle" type="text" className="w-full bg-novian-surface border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.landingPage?.heroTitle || 'Descubra seu novo lar'} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-novian-text/70 mb-1">Subtítulo</label>
-                    <input name="heroSubtitle" type="text" className="w-full bg-novian-surface border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.landingPage?.heroSubtitle || 'Cadastre-se para receber mais informações exclusivas.'} />
-                  </div>
+                  <AiInputField
+                    label="Título Principal (Hero)"
+                    name="heroTitle"
+                    value={heroTitle}
+                    onChange={setHeroTitle}
+                    isLoading={activeAiField === "heroTitle"}
+                    menuOpen={openAiMenuField === "heroTitle"}
+                    onToggleMenu={() => setOpenAiMenuField((current) => current === "heroTitle" ? null : "heroTitle")}
+                    onGenerate={() =>
+                      handleAiAssist({
+                        fieldKey: "heroTitle",
+                        fieldLabel: "Título Principal da Landing Page",
+                        action: "generate",
+                        format: "plain_text",
+                        value: heroTitle,
+                        onApply: setHeroTitle,
+                      })
+                    }
+                    onEnhance={() =>
+                      handleAiAssist({
+                        fieldKey: "heroTitle",
+                        fieldLabel: "Título Principal da Landing Page",
+                        action: "enhance",
+                        format: "plain_text",
+                        value: heroTitle,
+                        onApply: setHeroTitle,
+                      })
+                    }
+                  />
+                  <AiInputField
+                    label="Subtítulo"
+                    name="heroSubtitle"
+                    value={heroSubtitle}
+                    onChange={setHeroSubtitle}
+                    isLoading={activeAiField === "heroSubtitle"}
+                    menuOpen={openAiMenuField === "heroSubtitle"}
+                    onToggleMenu={() => setOpenAiMenuField((current) => current === "heroSubtitle" ? null : "heroSubtitle")}
+                    onGenerate={() =>
+                      handleAiAssist({
+                        fieldKey: "heroSubtitle",
+                        fieldLabel: "Subtítulo da Landing Page",
+                        action: "generate",
+                        format: "plain_text",
+                        value: heroSubtitle,
+                        onApply: setHeroSubtitle,
+                      })
+                    }
+                    onEnhance={() =>
+                      handleAiAssist({
+                        fieldKey: "heroSubtitle",
+                        fieldLabel: "Subtítulo da Landing Page",
+                        action: "enhance",
+                        format: "plain_text",
+                        value: heroSubtitle,
+                        onApply: setHeroSubtitle,
+                      })
+                    }
+                  />
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-novian-text/70 mb-1">Texto do Botão (CTA)</label>
-                      <input name="callToActionText" type="text" className="w-full bg-novian-surface border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.landingPage?.callToActionText || 'Quero Saber Mais'} />
-                    </div>
+                    <AiInputField
+                      label="Texto do Botão (CTA)"
+                      name="callToActionText"
+                      value={callToActionText}
+                      onChange={setCallToActionText}
+                      isLoading={activeAiField === "callToActionText"}
+                      menuOpen={openAiMenuField === "callToActionText"}
+                      onToggleMenu={() => setOpenAiMenuField((current) => current === "callToActionText" ? null : "callToActionText")}
+                      onGenerate={() =>
+                        handleAiAssist({
+                          fieldKey: "callToActionText",
+                          fieldLabel: "Texto do Botão CTA",
+                          action: "generate",
+                          format: "plain_text",
+                          value: callToActionText,
+                          onApply: setCallToActionText,
+                        })
+                      }
+                      onEnhance={() =>
+                        handleAiAssist({
+                          fieldKey: "callToActionText",
+                          fieldLabel: "Texto do Botão CTA",
+                          action: "enhance",
+                          format: "plain_text",
+                          value: callToActionText,
+                          onApply: setCallToActionText,
+                        })
+                      }
+                    />
                     <div>
                       <label className="block text-xs font-medium text-novian-text/70 mb-1">Cor Principal (Hex)</label>
                       <div className="flex items-center gap-2">
@@ -2232,14 +3115,36 @@ export function PropertiesLayout() {
                     </label>
                     
                     <div className="pl-6 space-y-4 border-l-2 border-novian-muted/30">
-                      <div>
-                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Título do Material</label>
-                        <input name="leadMagnetTitle" type="text" className="w-full bg-novian-surface border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" defaultValue={selectedProperty?.landingPage?.leadMagnetTitle || 'Baixar Apresentação do Imóvel'} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Arquivo (Upload Supabase Storage)</label>
-                        <input type="file" className="w-full text-sm text-novian-text/70 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-novian-accent/10 file:text-novian-accent hover:file:bg-novian-accent/20 cursor-pointer" />
-                      </div>
+                      <AiInputField
+                        label="Título do Material"
+                        name="leadMagnetTitle"
+                        value={leadMagnetTitle}
+                        onChange={setLeadMagnetTitle}
+                        isLoading={activeAiField === "leadMagnetTitle"}
+                        menuOpen={openAiMenuField === "leadMagnetTitle"}
+                        onToggleMenu={() => setOpenAiMenuField((current) => current === "leadMagnetTitle" ? null : "leadMagnetTitle")}
+                        onGenerate={() =>
+                          handleAiAssist({
+                            fieldKey: "leadMagnetTitle",
+                            fieldLabel: "Título do Lead Magnet",
+                            action: "generate",
+                            format: "plain_text",
+                            value: leadMagnetTitle,
+                            onApply: setLeadMagnetTitle,
+                          })
+                        }
+                        onEnhance={() =>
+                          handleAiAssist({
+                            fieldKey: "leadMagnetTitle",
+                            fieldLabel: "Título do Lead Magnet",
+                            action: "enhance",
+                            format: "plain_text",
+                            value: leadMagnetTitle,
+                            onApply: setLeadMagnetTitle,
+                          })
+                        }
+                      />
+                      <LeadMagnetUploader fileUrl={leadMagnetFileUrl} onChange={setLeadMagnetFileUrl} />
                     </div>
                   </div>
                 </div>
@@ -2287,10 +3192,14 @@ export function PropertiesLayout() {
 }
 
 export function SettingsLayout() {
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"agents" | "fields" | "funnels" | "users">("agents");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"agents" | "copy" | "fields" | "funnels" | "users">("agents");
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newAgent, setNewAgent] = useState({ id: "", name: "", role: "", systemPrompt: "" });
+  const [aiCopyPrompt, setAiCopyPrompt] = useState("");
+  const [defaultAiCopyPrompt, setDefaultAiCopyPrompt] = useState("");
+  const [isLoadingAiCopyPrompt, setIsLoadingAiCopyPrompt] = useState(false);
+  const [isSavingAiCopyPrompt, setIsSavingAiCopyPrompt] = useState(false);
 
   const [funnels, setFunnels] = useState<StoreFunnel[]>([]);
   const [editingFunnel, setEditingFunnel] = useState<StoreFunnel | null>(null);
@@ -2450,11 +3359,29 @@ export function SettingsLayout() {
     }
   };
 
+  const fetchAiCopySettings = async () => {
+    setIsLoadingAiCopyPrompt(true);
+    try {
+      const res = await fetch("/api/admin/ai-copy-settings", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Failed to load AI copy settings");
+      }
+      const data = await res.json();
+      setAiCopyPrompt(data.prompt || "");
+      setDefaultAiCopyPrompt(data.defaultPrompt || "");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingAiCopyPrompt(false);
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line
     fetchAgents();
     fetchFunnels();
     fetchCurrentAppUser();
+    fetchAiCopySettings();
   }, []);
 
   useEffect(() => {
@@ -2483,6 +3410,30 @@ export function SettingsLayout() {
     }
   };
 
+  const handleSaveAiCopyPrompt = async () => {
+    if (!isAdmin) return;
+
+    setIsSavingAiCopyPrompt(true);
+    try {
+      const res = await fetch("/api/admin/ai-copy-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: aiCopyPrompt }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save AI copy settings");
+      }
+
+      const data = await res.json();
+      setAiCopyPrompt(data.prompt || "");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingAiCopyPrompt(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-novian-primary overflow-hidden min-w-0">
       <div className="h-16 px-8 flex items-center gap-6 border-b border-novian-muted/50 bg-novian-surface/30 shrink-0">
@@ -2497,6 +3448,12 @@ export function SettingsLayout() {
           className={`text-sm font-medium transition-colors ${activeSettingsTab === 'fields' ? 'text-novian-accent border-b-2 border-novian-accent h-full' : 'text-novian-text/50 hover:text-novian-text'}`}
         >
           Campos Personalizados
+        </button>
+        <button
+          onClick={() => setActiveSettingsTab("copy")}
+          className={`text-sm font-medium transition-colors ${activeSettingsTab === 'copy' ? 'text-novian-accent border-b-2 border-novian-accent h-full' : 'text-novian-text/50 hover:text-novian-text'}`}
+        >
+          Texto com IA
         </button>
         <button 
           onClick={() => setActiveSettingsTab("funnels")}
@@ -2601,6 +3558,63 @@ export function SettingsLayout() {
             </div>
           )}
 
+          {activeSettingsTab === "copy" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-novian-text mb-2">Assistente de Texto com IA</h2>
+                <p className="text-sm text-novian-text/60">
+                  Configure o prompt base usado para criar e melhorar textos nos campos editoriais do CRM.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-novian-muted bg-novian-surface p-6 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-novian-text">Prompt base</h3>
+                    <p className="text-sm text-novian-text/50">Este prompt orienta a IA em títulos, descrições, CTA e textos de landing page.</p>
+                  </div>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setAiCopyPrompt(defaultAiCopyPrompt)}
+                      className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/40 hover:text-novian-text"
+                    >
+                      Restaurar padrão
+                    </button>
+                  ) : null}
+                </div>
+
+                <textarea
+                  value={aiCopyPrompt}
+                  readOnly={!isAdmin}
+                  onChange={(e) => setAiCopyPrompt(e.target.value)}
+                  className="h-72 w-full resize-none rounded-2xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm leading-7 text-novian-text outline-none transition focus:border-novian-accent/40 disabled:cursor-not-allowed disabled:opacity-70"
+                  placeholder="Defina aqui o prompt base do assistente de texto."
+                />
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-novian-text/45">
+                    {isLoadingAiCopyPrompt
+                      ? "Carregando prompt..."
+                      : isAdmin
+                        ? "As alteracoes se aplicam aos botoes de IA dos campos de texto."
+                        : "Somente administradores podem alterar este prompt."}
+                  </p>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={handleSaveAiCopyPrompt}
+                      disabled={isSavingAiCopyPrompt || isLoadingAiCopyPrompt}
+                      className="bg-novian-accent text-novian-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white transition-colors disabled:opacity-60"
+                    >
+                      {isSavingAiCopyPrompt ? "Salvando..." : "Salvar Prompt"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeSettingsTab === "funnels" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -2631,15 +3645,15 @@ export function SettingsLayout() {
 
                   <div>
                     <label className="block text-xs text-novian-text/60 mb-1">Tipo do Funil</label>
-                    <select
+                    <PopupSelect
                       value={editingFunnel.type}
                       disabled={isEditingExistingFunnel}
-                      onChange={(e) => setEditingFunnel({ ...editingFunnel, type: e.target.value as FunnelType })}
-                      className="w-full bg-novian-primary border border-novian-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-novian-accent disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <option value="lead">Lead</option>
-                      <option value="captacao">Captação</option>
-                    </select>
+                      onChange={(value) => setEditingFunnel({ ...editingFunnel, type: value as FunnelType })}
+                      options={[
+                        { value: "lead", label: "Lead" },
+                        { value: "captacao", label: "Captação" },
+                      ]}
+                    />
                     {isEditingExistingFunnel && (
                       <p className="mt-2 text-xs text-novian-text/45">O tipo do funil é definido na criação para evitar conflito entre Leads e Captação.</p>
                     )}
@@ -2837,10 +3851,10 @@ export function SettingsLayout() {
                     </div>
                     <div>
                       <label className="block text-xs text-novian-text/60 mb-1">Tipo de usuário</label>
-                      <select
+                      <PopupSelect
                         value={userForm.userType}
-                        onChange={(e) => {
-                          const nextType = e.target.value as ManagedUserType;
+                        onChange={(value) => {
+                          const nextType = value as ManagedUserType;
                           setUserForm((prev) => ({
                             ...prev,
                             userType: nextType,
@@ -2848,29 +3862,27 @@ export function SettingsLayout() {
                             permissions: nextType === "client" ? "client.portal.access" : prev.permissions || "crm.access, properties.manage",
                           }));
                         }}
-                        className="w-full bg-novian-primary border border-novian-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-novian-accent"
-                      >
-                        <option value="internal">Interno</option>
-                        <option value="client">Cliente</option>
-                      </select>
+                        options={[
+                          { value: "internal", label: "Interno" },
+                          { value: "client", label: "Cliente" },
+                        ]}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-novian-text/60 mb-1">Papel</label>
-                      <select
+                      <PopupSelect
                         value={userForm.role}
                         disabled={userForm.userType === "client"}
-                        onChange={(e) => setUserForm((prev) => ({ ...prev, role: e.target.value as ManagedUserRole }))}
-                        className="w-full bg-novian-primary border border-novian-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-novian-accent disabled:opacity-60"
-                      >
-                        {userForm.userType === "client" ? (
-                          <option value="client">Cliente</option>
-                        ) : (
-                          <>
-                            <option value="broker">Corretor</option>
-                            <option value="admin">Admin</option>
-                          </>
-                        )}
-                      </select>
+                        onChange={(value) => setUserForm((prev) => ({ ...prev, role: value as ManagedUserRole }))}
+                        options={
+                          userForm.userType === "client"
+                            ? [{ value: "client", label: "Cliente" }]
+                            : [
+                                { value: "broker", label: "Corretor" },
+                                { value: "admin", label: "Admin" },
+                              ]
+                        }
+                      />
                     </div>
                   </div>
 
@@ -3134,7 +4146,7 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
 
             {status === 'connecting' && (
               <div className="text-center text-novian-text/60">
-                <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin text-novian-accent" />
+                <LoaderCircle className="w-8 h-8 mx-auto mb-2 animate-spin text-novian-accent" />
                 <p className="text-sm">Inicializando Conexão...</p>
               </div>
             )}

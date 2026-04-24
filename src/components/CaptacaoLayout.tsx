@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, Sparkles, MessageSquare, SlidersHorizontal, X, Trash2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import type { Funnel, Thread, FunnelColumn } from "@/lib/store";
+import PopupSelect from "@/components/PopupSelect";
 
 interface ExtendedFunnel extends Funnel {
   columns: FunnelColumn[];
@@ -412,17 +413,17 @@ export function CaptacaoLayout() {
         </div>
         <div className="flex items-center gap-3">
           {funnelsList.length > 0 && (
-            <select
-              value={activeFunnelId}
-              onChange={(e) => setActiveFunnelId(e.target.value)}
-              className="rounded-xl border border-novian-muted/40 bg-[#071615] px-4 py-2 text-sm text-novian-text outline-none transition-colors focus:border-blue-500/50"
-            >
-              {funnelsList.map((funnel) => (
-                <option key={funnel.id} value={funnel.id}>
-                  {funnel.name}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[220px]">
+              <PopupSelect
+                value={activeFunnelId}
+                onChange={setActiveFunnelId}
+                buttonClassName="bg-[#071615] focus:border-blue-500/50"
+                options={funnelsList.map((funnel) => ({
+                  value: funnel.id,
+                  label: funnel.name,
+                }))}
+              />
+            </div>
           )}
           <button 
             onClick={() => setIsApifyModalOpen(true)}
@@ -660,43 +661,46 @@ export function CaptacaoLayout() {
 
                 <div>
                   <label className="mb-1 block text-xs font-medium text-novian-text/70">Fonte</label>
-                  <select
+                  <PopupSelect
                     value={apifyConfig.sources}
-                    onChange={(e) => setApifyConfig(prev => ({ ...prev, sources: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
-                  >
-                    <option value="olx">OLX</option>
-                    <option value="zap">ZAP</option>
-                    <option value="vivareal">VivaReal</option>
-                    <option value="all">Todas</option>
-                  </select>
+                    onChange={(value) => setApifyConfig(prev => ({ ...prev, sources: value }))}
+                    buttonClassName="focus:border-blue-500/50"
+                    options={[
+                      { value: "olx", label: "OLX" },
+                      { value: "zap", label: "ZAP" },
+                      { value: "vivareal", label: "VivaReal" },
+                      { value: "all", label: "Todas" },
+                    ]}
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1 block text-xs font-medium text-novian-text/70">Transação</label>
-                  <select
+                  <PopupSelect
                     value={apifyConfig.transactionType}
-                    onChange={(e) => setApifyConfig(prev => ({ ...prev, transactionType: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
-                  >
-                    <option value="sale">Venda</option>
-                    <option value="rent">Locação</option>
-                  </select>
+                    onChange={(value) => setApifyConfig(prev => ({ ...prev, transactionType: value }))}
+                    buttonClassName="focus:border-blue-500/50"
+                    options={[
+                      { value: "sale", label: "Venda" },
+                      { value: "rent", label: "Locação" },
+                    ]}
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1 block text-xs font-medium text-novian-text/70">Tipo de Imóvel</label>
-                  <select
+                  <PopupSelect
                     value={apifyConfig.propertyType}
-                    onChange={(e) => setApifyConfig(prev => ({ ...prev, propertyType: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="apartment">Apartamento</option>
-                    <option value="house">Casa</option>
-                    <option value="condo">Condomínio</option>
-                    <option value="land">Terreno</option>
-                  </select>
+                    onChange={(value) => setApifyConfig(prev => ({ ...prev, propertyType: value }))}
+                    buttonClassName="focus:border-blue-500/50"
+                    options={[
+                      { value: "all", label: "Todos" },
+                      { value: "apartment", label: "Apartamento" },
+                      { value: "house", label: "Casa" },
+                      { value: "condo", label: "Condomínio" },
+                      { value: "land", label: "Terreno" },
+                    ]}
+                  />
                 </div>
 
                 <div>

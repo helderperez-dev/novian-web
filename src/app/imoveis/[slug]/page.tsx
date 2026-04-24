@@ -1,5 +1,6 @@
 import { getProperties } from "@/lib/store";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import Image from "next/image";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -7,7 +8,10 @@ import remarkGfm from "remark-gfm";
 import LeadForm from "./LeadForm";
 import PropertyGalleryViewer from "@/components/PropertyGalleryViewer";
 
+const RICH_TEXT_HTML_PATTERN = /<\/?[a-z][\s\S]*>/i;
+
 export default async function PropertyLandingPage({ params }: { params: Promise<{ slug: string }> }) {
+  await connection();
   const resolvedParams = await params;
   const properties = await getProperties();
   const property = properties.find(p => p.slug === resolvedParams.slug);
@@ -18,6 +22,7 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
 
   const { landingPage } = property;
   const primaryColor = landingPage.primaryColor || '#DEC0A6'; // Default novian accent
+  const hasRichDescription = RICH_TEXT_HTML_PATTERN.test(property.description);
 
   return (
     <div className="min-h-screen bg-[#0d1514] text-[#E5E7EB] font-sans selection:bg-opacity-30" style={{ '--color-primary': primaryColor } as React.CSSProperties}>
@@ -98,11 +103,18 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
           <div className="space-y-12">
             <div className="space-y-6">
               <h2 className="text-3xl font-light font-serif">Sobre o Imóvel</h2>
-              <div className="text-gray-400 leading-relaxed text-lg prose prose-invert prose-p:text-gray-400 prose-headings:font-serif prose-headings:font-light prose-a:text-[#DEC0A6] max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {property.description.replace(/\\n/g, '\n')}
-                </ReactMarkdown>
-              </div>
+              {hasRichDescription ? (
+                <div
+                  className="text-gray-400 leading-relaxed text-lg prose prose-invert prose-p:text-gray-400 prose-headings:font-serif prose-headings:font-light prose-a:text-[#DEC0A6] max-w-none"
+                  dangerouslySetInnerHTML={{ __html: property.description }}
+                />
+              ) : (
+                <div className="text-gray-400 leading-relaxed text-lg prose prose-invert prose-p:text-gray-400 prose-headings:font-serif prose-headings:font-light prose-a:text-[#DEC0A6] max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {property.description.replace(/\\n/g, '\n')}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
             
             {property.address && (
