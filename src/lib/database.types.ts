@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       app_users: {
         Row: {
+          avatar_url: string | null
           created_at: string
           email: string
           full_name: string | null
@@ -28,6 +29,7 @@ export type Database = {
           user_type: Database["public"]["Enums"]["app_user_type"]
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           email: string
           full_name?: string | null
@@ -40,6 +42,7 @@ export type Database = {
           user_type: Database["public"]["Enums"]["app_user_type"]
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           email?: string
           full_name?: string | null

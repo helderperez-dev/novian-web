@@ -1,6 +1,17 @@
 import Link from "next/link";
+import Image from "next/image";
 import { requireClientUser } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+function getUserInitials(fullName: string | null, email: string) {
+  const base = fullName?.trim() || email.trim();
+  const parts = base.split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "NV";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
 
 export default async function ClientPage() {
   const { appUser } = await requireClientUser();
@@ -16,7 +27,23 @@ export default async function ClientPage() {
     <div className="min-h-screen bg-[#081210] px-6 py-10 text-novian-text">
       <div className="mx-auto max-w-6xl">
         <div className="mb-10 flex items-start justify-between gap-4">
-          <div>
+          <div className="flex items-start gap-4">
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/20">
+              {appUser.avatar_url ? (
+                <Image
+                  src={appUser.avatar_url}
+                  alt={appUser.full_name || appUser.email}
+                  fill
+                  sizes="56px"
+                  className="object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-emerald-500/12 text-sm font-semibold text-emerald-100">
+                  {getUserInitials(appUser.full_name, appUser.email)}
+                </div>
+              )}
+            </div>
+            <div>
             <div className="mb-3 inline-flex rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-300">
               Portal do Cliente
             </div>
@@ -24,13 +51,22 @@ export default async function ClientPage() {
             <p className="mt-3 max-w-2xl text-sm leading-6 text-novian-text/60">
               Aqui voce pode acompanhar o andamento dos seus processos e acessar os documentos compartilhados com voce.
             </p>
+            </div>
           </div>
-          <Link
-            href="/logout"
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-white/10"
-          >
-            Sair
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/client/account"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-white/10"
+            >
+              Meu perfil
+            </Link>
+            <Link
+              href="/logout"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-white/10"
+            >
+              Sair
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-6">

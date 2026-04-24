@@ -78,6 +78,18 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }, []);
 
   useEffect(() => {
+    const handleProfileUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<ManagedAppUser>).detail;
+      if (detail) {
+        setCurrentAppUser(detail);
+      }
+    };
+
+    window.addEventListener("novian:profile-updated", handleProfileUpdated);
+    return () => window.removeEventListener("novian:profile-updated", handleProfileUpdated);
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!userMenuRef.current) return;
       if (!userMenuRef.current.contains(event.target as Node)) {
@@ -167,7 +179,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             icon={<Settings size={20} />} 
             label="Configurações" 
             href="/admin/settings"
-            active={pathname.startsWith("/admin/settings")} 
+            active={pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/account")} 
             collapsed={!isSidebarOpen} 
           />
           
@@ -178,13 +190,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-novian-text/40">
                   Conta
                 </div>
-                <Link href="/admin/settings">
+                <Link href="/admin/account">
                   <div 
                     className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-novian-text/80 transition-colors hover:bg-white/5 hover:text-white"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
                     <Settings size={16} />
-                    Configurações da conta
+                    Meu perfil
                   </div>
                 </Link>
                 <div className="my-1 h-px w-full bg-white/5" />
@@ -205,8 +217,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               } ${!isSidebarOpen ? 'justify-center' : ''}`}
             >
               <div className={`flex h-8 w-8 shrink-0 items-center ${!isSidebarOpen ? 'justify-center' : 'justify-start'} transition-transform duration-200 ${isUserMenuOpen ? 'scale-105' : 'group-hover:scale-105'}`}>
-                <div className="flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-current text-[9px] font-bold uppercase">
-                  {getUserInitials(currentAppUser)}
+                <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10">
+                  {currentAppUser?.avatar_url ? (
+                    <Image
+                      src={currentAppUser.avatar_url}
+                      alt={currentAppUser.full_name || currentAppUser.email}
+                      fill
+                      sizes="32px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-emerald-500/12 text-[9px] font-bold uppercase text-emerald-100">
+                      {getUserInitials(currentAppUser)}
+                    </div>
+                  )}
                 </div>
               </div>
               {isSidebarOpen && (
@@ -232,6 +256,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                pathname === "/admin/captacao" ? "Captação" :
                pathname === "/admin/properties" ? "Imóveis" :
                pathname === "/admin/documents" ? "Documentos" :
+               pathname === "/admin/account" ? "Minha Conta" :
                pathname === "/admin/settings" ? "Configurações" :
                pathname === "/admin/dashboard" ? "Dashboard" :
                "Dashboard"}
