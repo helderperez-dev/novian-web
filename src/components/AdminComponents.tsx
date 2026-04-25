@@ -4146,8 +4146,27 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
   }, [agentId]);
 
   const handleConnect = async () => {
-    setStatus("connecting");
-    await fetch(`/api/whatsapp/${agentId}`, { method: "POST" });
+    try {
+      setStatus("connecting");
+      const res = await fetch(`/api/whatsapp/${agentId}`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setStatus("disconnected");
+        throw new Error(data?.error || `Failed to connect WhatsApp for ${agentId}`);
+      }
+
+      const session = data?.session;
+      if (session?.state) {
+        setStatus(session.state);
+      }
+      if (session?.qrDataUri) {
+        setQrCode(session.qrDataUri);
+      }
+    } catch (error) {
+      setStatus("disconnected");
+      console.error(error);
+    }
   };
 
   const handleDisconnect = async () => {

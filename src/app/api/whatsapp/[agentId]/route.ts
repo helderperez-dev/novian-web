@@ -44,16 +44,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ agentId:
 export async function POST(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
     const { agentId } = await params;
     if (provider === 'evolution') {
-        const baseUrl = (process.env.WHATSAPP_WEBHOOK_BASE_URL || new URL(req.url).origin).replace(/\/+$/, '');
-        const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
-        const search = new URLSearchParams();
-        search.set('agentId', agentId);
-        if (webhookSecret) {
-            search.set('secret', webhookSecret);
+        try {
+            const baseUrl = (process.env.WHATSAPP_WEBHOOK_BASE_URL || new URL(req.url).origin).replace(/\/+$/, '');
+            const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+            const search = new URLSearchParams();
+            search.set('agentId', agentId);
+            if (webhookSecret) {
+                search.set('secret', webhookSecret);
+            }
+            const webhookUrl = `${baseUrl}/api/whatsapp/evolution/webhook?${search.toString()}`;
+            const session = await connectEvolutionInstance({ agentId, webhookUrl });
+            return NextResponse.json({ success: true, provider, session, message: `Evolution connection requested for ${agentId}` });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to connect with Evolution API';
+            return NextResponse.json({ success: false, provider, error: message }, { status: 502 });
         }
-        const webhookUrl = `${baseUrl}/api/whatsapp/evolution/webhook?${search.toString()}`;
-        const session = await connectEvolutionInstance({ agentId, webhookUrl });
-        return NextResponse.json({ success: true, provider, session, message: `Evolution connection requested for ${agentId}` });
     }
 
     await requestWhatsAppConnection(agentId);
