@@ -22,6 +22,14 @@ function getNested(obj: JsonRecord | null, key: string) {
   return parseMaybeJson(value);
 }
 
+function getString(obj: JsonRecord | null, key: string) {
+  if (!obj) {
+    return null;
+  }
+  const value = obj[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function toSessionState(connection: string) {
   const normalized = connection.trim().toLowerCase();
   if (normalized.includes("open") || normalized.includes("connected")) {
@@ -36,12 +44,47 @@ function toSessionState(connection: string) {
   return "disconnected" as const;
 }
 
+function normalizeInstanceName(instanceName: string) {
+  return instanceName.trim().split(/[/?#]/, 1)[0] || instanceName.trim();
+}
+
 function resolveAgentIdFromInstance(instanceName: string) {
   const prefix = "novian-";
-  if (!instanceName.startsWith(prefix)) {
+  const normalizedInstanceName = normalizeInstanceName(instanceName);
+  if (!normalizedInstanceName.startsWith(prefix)) {
     return null;
   }
-  return instanceName.slice(prefix.length);
+  return normalizedInstanceName.slice(prefix.length);
+}
+
+function extractIncomingText(message: JsonRecord | null) {
+  if (!message) {
+    return null;
+  }
+
+  const extendedTextMessage = getNested(message, "extendedTextMessage");
+  const imageMessage = getNested(message, "imageMessage");
+  const videoMessage = getNested(message, "videoMessage");
+  const documentMessage = getNested(message, "documentMessage");
+  const buttonsResponseMessage = getNested(message, "buttonsResponseMessage");
+  const listResponseMessage = getNested(message, "listResponseMessage");
+  const templateButtonReplyMessage = getNested(message, "templateButtonReplyMessage");
+  const interactiveResponseMessage = getNested(message, "interactiveResponseMessage");
+  const nativeFlowResponseMessage = getNested(message, "nativeFlowResponseMessage");
+
+  return (
+    getString(message, "conversation") ||
+    getString(extendedTextMessage, "text") ||
+    getString(imageMessage, "caption") ||
+    getString(videoMessage, "caption") ||
+    getString(documentMessage, "caption") ||
+    getString(buttonsResponseMessage, "selectedDisplayText") ||
+    getString(listResponseMessage, "title") ||
+    getString(listResponseMessage, "description") ||
+    getString(templateButtonReplyMessage, "selectedDisplayText") ||
+    getString(interactiveResponseMessage, "body") ||
+    getString(nativeFlowResponseMessage, "paramsJson")
+  );
 }
 
 export async function POST(req: Request) {
@@ -60,8 +103,9 @@ export async function POST(req: Request) {
   const data = parseMaybeJson(payload.data) || payload;
   const key = getNested(data, "key");
   const message = getNested(data, "message");
-  const extendedTextMessage = getNested(message, "extendedTextMessage");
-  const sourceInstance = instance || (typeof data.instance === "string" ? data.instance : "");
+  const sourceInstance = normalizeInstanceName(
+    instance || (typeof data.instance === "string" ? data.instance : ""),
+  );
   const agentId = queryAgentId || resolveAgentIdFromInstance(sourceInstance);
 
   if (!agentId) {
@@ -109,10 +153,11 @@ export async function POST(req: Request) {
     const remoteJid =
       (key && typeof key.remoteJid === "string" && key.remoteJid) ||
       (typeof data.remoteJid === "string" ? data.remoteJid : "");
-    const pushName = typeof data.pushName === "string" ? data.pushName : null;
-    const textMessage =
-      (message && typeof message.conversation === "string" ? message.conversation : null) ||
-      (extendedTextMessage && typeof extendedTextMessage.text === "string" ? extendedTextMessage.text : null);
+    const pushName =
+      (typeof data.pushName === "string" && data.pushName) ||
+      (typeof data.pushname === "string" && data.pushname) ||
+      null;
+    const textMessage = extractIncomingText(message);
 
     if (!remoteJid || !textMessage) {
       return NextResponse.json({ ok: true, ignored: true });

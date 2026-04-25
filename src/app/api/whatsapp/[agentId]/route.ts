@@ -1,25 +1,25 @@
 import { NextResponse } from "next/server";
 import { connectEvolutionInstance, disconnectEvolutionInstance, getEvolutionSessionStatus } from "@/lib/whatsapp/evolution";
+import { refreshLeadWhatsAppProfile } from "@/lib/whatsapp/incoming";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
-  const status = await getEvolutionSessionStatus(agentId);
   const url = new URL(req.url);
   const jid = url.searchParams.get("jid");
 
-  if (!jid) {
-    return NextResponse.json(status);
+  if (jid) {
+    const refreshed = await refreshLeadWhatsAppProfile({ agentId, jidOrPhone: jid });
+    return NextResponse.json({
+      success: true,
+      provider: "evolution",
+      refreshed,
+    });
   }
 
-  return NextResponse.json(
-    {
-      ...status,
-      message: "Contact metadata refresh is not available in Evolution-only mode.",
-    },
-    { status: 202 },
-  );
+  const status = await getEvolutionSessionStatus(agentId);
+  return NextResponse.json(status);
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ agentId: string }> }) {

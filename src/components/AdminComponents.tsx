@@ -153,6 +153,24 @@ type LeadDetailItem = {
 };
 
 type LeadContextTab = "overview" | "notes";
+type LiveWhatsAppProfilePayload = {
+  jid?: string | null;
+  phone?: string | null;
+  displayName?: string | null;
+  pushName?: string | null;
+  profilePictureUrl?: string | null;
+  about?: string | null;
+  businessDescription?: string | null;
+  businessCategory?: string | null;
+  businessEmail?: string | null;
+  businessWebsite?: string | null;
+  businessAddress?: string | null;
+};
+type LiveThreadWhatsAppProfile = {
+  threadId: string;
+  phone: string | null;
+  profile: LiveWhatsAppProfilePayload | null;
+};
 
 const getLeadPhoneValue = (thread: Pick<Thread, "phone" | "id">) => {
   const phone = thread.phone?.trim();
@@ -229,6 +247,77 @@ const getLeadCustomEntries = (customData?: Thread["customData"]) => {
   return Object.entries(customData).filter(
     ([key]) => !key.startsWith("whatsapp_") && key !== LEAD_NOTES_KEY,
   );
+};
+
+const mergeThreadCustomDataWithLiveProfile = (
+  customData: Thread["customData"] | undefined,
+  liveProfile: LiveThreadWhatsAppProfile | null,
+) => {
+  const merged: Record<string, unknown> = { ...(customData || {}) };
+  const profile = liveProfile?.profile;
+
+  if (!profile) {
+    return merged;
+  }
+
+  if (typeof profile.jid === "string" && profile.jid) {
+    merged.whatsapp_jid = profile.jid;
+  }
+  if (typeof profile.phone === "string" && profile.phone) {
+    merged.whatsapp_phone = profile.phone;
+  }
+  if (typeof profile.displayName === "string" && profile.displayName) {
+    merged.whatsapp_profile_name = profile.displayName;
+  }
+  if (typeof profile.pushName === "string" && profile.pushName) {
+    merged.whatsapp_push_name = profile.pushName;
+  }
+  if (typeof profile.profilePictureUrl === "string" && profile.profilePictureUrl) {
+    merged.whatsapp_profile_picture_url = profile.profilePictureUrl;
+  }
+  if (typeof profile.about === "string" && profile.about) {
+    merged.whatsapp_about = profile.about;
+  }
+  if (typeof profile.businessDescription === "string" && profile.businessDescription) {
+    merged.whatsapp_business_description = profile.businessDescription;
+  }
+  if (typeof profile.businessCategory === "string" && profile.businessCategory) {
+    merged.whatsapp_business_category = profile.businessCategory;
+  }
+  if (typeof profile.businessEmail === "string" && profile.businessEmail) {
+    merged.whatsapp_business_email = profile.businessEmail;
+  }
+  if (typeof profile.businessWebsite === "string" && profile.businessWebsite) {
+    merged.whatsapp_business_website = profile.businessWebsite;
+  }
+  if (typeof profile.businessAddress === "string" && profile.businessAddress) {
+    merged.whatsapp_business_address = profile.businessAddress;
+  }
+
+  return merged;
+};
+
+const getThreadDisplayTitle = (thread: Thread, liveProfile: LiveThreadWhatsAppProfile | null) => {
+  const profile = liveProfile?.profile;
+
+  if (typeof profile?.displayName === "string" && profile.displayName.trim()) {
+    return profile.displayName.trim();
+  }
+
+  if (typeof profile?.pushName === "string" && profile.pushName.trim()) {
+    return profile.pushName.trim();
+  }
+
+  return thread.title;
+};
+
+const getThreadDisplayPhone = (thread: Thread, liveProfile: LiveThreadWhatsAppProfile | null) => {
+  const livePhone =
+    (typeof liveProfile?.profile?.phone === "string" && liveProfile.profile.phone.trim()) ||
+    (typeof liveProfile?.phone === "string" && liveProfile.phone.trim()) ||
+    "";
+
+  return livePhone || getLeadPhoneValue(thread);
 };
 
 const formatNoteTimestamp = (value: string) =>
@@ -4346,9 +4435,6 @@ function ChatInput({ onSendMessage }: { onSendMessage: (msg: string) => void }) 
           <ArrowRight size={18} />
         </button>
       </div>
-      <p className="text-xs text-novian-text/40 mt-3 text-center">
-        Você é o CEO. Os agentes seguirão suas instruções de forma autônoma.
-      </p>
     </div>
   );
 }
@@ -4361,6 +4447,9 @@ export function WarRoomLayout() {
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<AgentConfig[]>([]);
+  const [activeThreadLiveProfile, setActiveThreadLiveProfile] = useState<LiveThreadWhatsAppProfile | null>(null);
+  const [isRefreshingActiveThreadProfile, setIsRefreshingActiveThreadProfile] = useState(false);
+  const activeThreadProfileRequestRef = useRef(0);
 
   const fetchWarRoomData = async () => {
     try {
@@ -4451,9 +4540,161 @@ export function WarRoomLayout() {
       ? activeThread.customData.agent_id
       : activeThread?.agentIds?.[0];
   const activeAgent = activeThreadAgentId ? agents.find((agent) => agent.id === activeThreadAgentId) || null : null;
-  const activeThreadPhone = activeThread ? getLeadPhoneValue(activeThread) : "";
-  const activeThreadMetadataDetails = activeThread ? getLeadMetadataDetails(activeThread.customData) : [];
+  const activeThreadProfileForView =
+    activeThreadLiveProfile && activeThread && activeThreadLiveProfile.threadId === activeThread.id
+      ? activeThreadLiveProfile
+      : null;
+  const activeThreadCustomData = activeThread
+    ? mergeThreadCustomDataWithLiveProfile(activeThread.customData, activeThreadProfileForView)
+    : undefined;
+  const activeThreadTitle = activeThread ? getThreadDisplayTitle(activeThread, activeThreadProfileForView) : "";
+  const activeThreadPhone = activeThread ? getThreadDisplayPhone(activeThread, activeThreadProfileForView) : "";
+  const activeThreadMetadataDetails = activeThread ? getLeadMetadataDetails(activeThreadCustomData) : [];
+  const activeClientAvatarUrl =
+    typeof activeThreadCustomData?.whatsapp_profile_picture_url === "string"
+      ? activeThreadCustomData.whatsapp_profile_picture_url
+      : undefined;
   const headerAgents = activeThread && activeAgent ? [activeAgent] : agents.slice(0, 2);
+  const activeThreadProfileAgentId =
+    activeThread &&
+    typeof activeThread.customData?.agent_id === "string" &&
+    activeThread.customData.agent_id
+      ? activeThread.customData.agent_id
+      : activeThread?.agentIds?.[0] || "mariana-sdr";
+  const activeThreadProfileJid =
+    activeThread &&
+    typeof activeThread.customData?.whatsapp_jid === "string" &&
+    activeThread.customData.whatsapp_jid
+      ? activeThread.customData.whatsapp_jid
+      : activeThreadId;
+
+  const fetchActiveThreadWhatsAppProfile = async (
+    threadOverride: Thread | null = activeThread,
+    options?: { syncLists?: boolean },
+  ) => {
+    if (!threadOverride || threadOverride.id === "general" || threadOverride.id === "continuous") {
+      setActiveThreadLiveProfile(null);
+      return null;
+    }
+
+    const agentId =
+      typeof threadOverride.customData?.agent_id === "string" && threadOverride.customData.agent_id
+        ? threadOverride.customData.agent_id
+        : threadOverride.agentIds?.[0] || "mariana-sdr";
+    const jid =
+      typeof threadOverride.customData?.whatsapp_jid === "string" && threadOverride.customData.whatsapp_jid
+        ? threadOverride.customData.whatsapp_jid
+        : threadOverride.id;
+
+    if (!jid) {
+      setActiveThreadLiveProfile(null);
+      return null;
+    }
+
+    const requestId = ++activeThreadProfileRequestRef.current;
+    setIsRefreshingActiveThreadProfile(true);
+
+    try {
+      const response = await fetch(
+        `/api/whatsapp/${encodeURIComponent(agentId)}?jid=${encodeURIComponent(jid)}`,
+        { cache: "no-store" },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to load WhatsApp profile (${response.status})`);
+      }
+
+      const data = await response.json();
+      const refreshed = data?.refreshed as LiveThreadWhatsAppProfile | undefined;
+      const nextProfile =
+        refreshed && typeof refreshed === "object"
+          ? {
+              threadId: threadOverride.id,
+              phone: typeof refreshed.phone === "string" ? refreshed.phone : null,
+              profile: refreshed.profile && typeof refreshed.profile === "object" ? refreshed.profile : null,
+            }
+          : null;
+
+      if (activeThreadProfileRequestRef.current === requestId) {
+        setActiveThreadLiveProfile(nextProfile);
+      }
+
+      if (options?.syncLists) {
+        await fetchWarRoomData();
+        await fetchAgents();
+      }
+
+      return nextProfile;
+    } catch (error) {
+      if (activeThreadProfileRequestRef.current === requestId) {
+        setActiveThreadLiveProfile(null);
+      }
+      console.error("Failed to load live WhatsApp profile", error);
+      return null;
+    } finally {
+      if (activeThreadProfileRequestRef.current === requestId) {
+        setIsRefreshingActiveThreadProfile(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!activeThreadId || activeThreadId === "general" || activeThreadId === "continuous" || !activeThreadProfileJid) {
+      setActiveThreadLiveProfile(null);
+      setIsRefreshingActiveThreadProfile(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const requestId = ++activeThreadProfileRequestRef.current;
+    const agentId = activeThreadProfileAgentId;
+    const jid = activeThreadProfileJid;
+
+    setIsRefreshingActiveThreadProfile(true);
+
+    const loadLiveProfile = async () => {
+      try {
+        const response = await fetch(
+          `/api/whatsapp/${encodeURIComponent(agentId)}?jid=${encodeURIComponent(jid)}`,
+          { cache: "no-store" },
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to load WhatsApp profile (${response.status})`);
+        }
+
+        const data = await response.json();
+        const refreshed = data?.refreshed as LiveThreadWhatsAppProfile | undefined;
+        const nextProfile =
+          refreshed && typeof refreshed === "object"
+            ? {
+                threadId: activeThreadId,
+                phone: typeof refreshed.phone === "string" ? refreshed.phone : null,
+                profile: refreshed.profile && typeof refreshed.profile === "object" ? refreshed.profile : null,
+              }
+            : null;
+
+        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
+          setActiveThreadLiveProfile(nextProfile);
+        }
+      } catch (error) {
+        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
+          setActiveThreadLiveProfile(null);
+        }
+        console.error("Failed to auto-load live WhatsApp profile", error);
+      } finally {
+        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
+          setIsRefreshingActiveThreadProfile(false);
+        }
+      }
+    };
+
+    void loadLiveProfile();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeThreadId, activeThreadProfileAgentId, activeThreadProfileJid]);
 
   return (
     <>
@@ -4507,7 +4748,7 @@ export function WarRoomLayout() {
             {/* Thread Header */}
             <div className="h-16 border-b border-novian-muted/50 flex items-center px-6 gap-4 shrink-0 bg-novian-surface/30">
               <h2 className="text-lg font-medium text-novian-accent">
-                {activeThreadId === "general" ? "#general-command" : activeThread?.title || "Chat"}
+                {activeThreadId === "general" ? "#general-command" : activeThreadTitle || "Chat"}
               </h2>
               <div className="flex -space-x-2">
                 {headerAgents.length > 0 ? (
@@ -4537,7 +4778,6 @@ export function WarRoomLayout() {
               <div className="space-y-6">
                 {messages.map((msg) => {
                   const isNew = !seenMessageIds.has(msg.id) && msg.role !== 'Client' && msg.role !== 'CEO' && !msg.isSystem;
-                  const clientAvatarUrl = typeof activeThread?.customData?.whatsapp_profile_picture_url === 'string' ? activeThread.customData.whatsapp_profile_picture_url : undefined;
                   
                   return msg.isSystem ? (
                     <div key={msg.id} className="flex items-center justify-center my-4">
@@ -4558,7 +4798,7 @@ export function WarRoomLayout() {
                       shouldType={isNew}
                       avatarUrl={
                         msg.role === 'Client'
-                          ? clientAvatarUrl
+                          ? activeClientAvatarUrl
                           : msg.role === 'CEO'
                             ? undefined
                             : activeAgent?.whatsappProfilePictureUrl
@@ -4597,25 +4837,11 @@ export function WarRoomLayout() {
             <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Contexto do Lead</h3>
             {activeThread && (
               <button
-                onClick={async () => {
-                  const btn = document.getElementById('refresh-wa-btn-warroom');
-                  if (btn) btn.innerHTML = '↻...';
-                  try {
-                    const agentId = activeThread.customData?.agent_id || 'mariana-sdr';
-                    const jid = activeThread.customData?.whatsapp_jid || activeThread.id;
-                    await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
-                    await fetchWarRoomData();
-                    await fetchAgents();
-                  } catch (e) {
-                    console.error('Failed to refresh WA profile', e);
-                  } finally {
-                    if (btn) btn.innerHTML = '↻ Atualizar';
-                  }
-                }}
-                id="refresh-wa-btn-warroom"
+                onClick={() => void fetchActiveThreadWhatsAppProfile(activeThread, { syncLists: true })}
+                disabled={isRefreshingActiveThreadProfile}
                 className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
               >
-                ↻ Atualizar
+                {isRefreshingActiveThreadProfile ? "↻ Atualizando..." : "↻ Atualizar"}
               </button>
             )}
          </div>
@@ -4623,22 +4849,25 @@ export function WarRoomLayout() {
             {activeThread ? (
               <div className="space-y-6">
                 <div className="flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
-                  {typeof activeThread.customData?.whatsapp_profile_picture_url === "string" ? (
+                  {typeof activeThreadCustomData?.whatsapp_profile_picture_url === "string" ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
-                        src={String(activeThread.customData.whatsapp_profile_picture_url)} 
+                        src={String(activeThreadCustomData.whatsapp_profile_picture_url)} 
                         alt="WhatsApp Profile" 
                         className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
                       />
                     </>
                   ) : (
                     <div className="w-16 h-16 rounded-full border-2 border-novian-muted bg-novian-primary/60 flex items-center justify-center text-lg font-semibold text-novian-text">
-                      {(activeThread.title || activeThreadPhone).slice(0, 2).toUpperCase()}
+                      {(activeThreadTitle || activeThreadPhone).slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-novian-text truncate">{activeThread.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-novian-text truncate">{activeThreadTitle}</p>
+                      {isRefreshingActiveThreadProfile && <LoaderCircle size={14} className="animate-spin text-novian-accent shrink-0" />}
+                    </div>
                     <p className="text-xs text-novian-text/60 font-mono break-all">{activeThreadPhone || "Nao informado"}</p>
                   </div>
                 </div>
@@ -4701,37 +4930,37 @@ export function WarRoomLayout() {
                         </div>
                       </div>
                     )}
-                    {(typeof activeThread.customData?.whatsapp_about === "string" ||
-                      typeof activeThread.customData?.whatsapp_business_description === "string") && (
+                    {(typeof activeThreadCustomData?.whatsapp_about === "string" ||
+                      typeof activeThreadCustomData?.whatsapp_business_description === "string") && (
                       <div className="pt-4 border-t border-novian-muted/30">
                         <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
                         <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
-                          {typeof activeThread.customData?.whatsapp_about === "string" && (
+                          {typeof activeThreadCustomData?.whatsapp_about === "string" && (
                             <div>
                               <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
-                              <p className="text-sm italic text-novian-text/90">&quot;{String(activeThread.customData.whatsapp_about)}&quot;</p>
+                              <p className="text-sm italic text-novian-text/90">&quot;{String(activeThreadCustomData.whatsapp_about)}&quot;</p>
                             </div>
                           )}
-                          {typeof activeThread.customData?.whatsapp_business_description === "string" && (
+                          {typeof activeThreadCustomData?.whatsapp_business_description === "string" && (
                             <div className="pt-2 border-t border-novian-muted/20">
                               <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
-                              <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_description)}</p>
+                              <p className="text-sm text-novian-text/80">{String(activeThreadCustomData.whatsapp_business_description)}</p>
                             </div>
                           )}
-                          {typeof activeThread.customData?.whatsapp_business_category === "string" && (
+                          {typeof activeThreadCustomData?.whatsapp_business_category === "string" && (
                             <div className="pt-2 border-t border-novian-muted/20">
                               <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Categoria</p>
-                              <p className="text-sm text-novian-text/80">{String(activeThread.customData.whatsapp_business_category)}</p>
+                              <p className="text-sm text-novian-text/80">{String(activeThreadCustomData.whatsapp_business_category)}</p>
                             </div>
                           )}
                         </div>
                       </div>
                     )}
-                    {getLeadCustomEntries(activeThread.customData).length > 0 && (
+                    {getLeadCustomEntries(activeThreadCustomData).length > 0 && (
                       <div className="pt-4 border-t border-novian-muted/30">
                         <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
                         <div className="space-y-3">
-                          {getLeadCustomEntries(activeThread.customData).map(([key, value]) => (
+                          {getLeadCustomEntries(activeThreadCustomData).map(([key, value]) => (
                             <div key={key}>
                               <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
                               <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>

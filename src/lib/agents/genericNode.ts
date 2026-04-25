@@ -34,8 +34,13 @@ function buildLeadContextPrompt(state: AgentState) {
     state.leadInfo.name ? `Nome: ${state.leadInfo.name}` : null,
     state.leadInfo.phone ? `Telefone: ${state.leadInfo.phone}` : null,
     state.leadInfo.status ? `Status: ${state.leadInfo.status}` : null,
+    state.leadInfo.source ? `Origem: ${state.leadInfo.source}` : null,
+    state.leadInfo.assignedAgentId ? `Agente responsavel: ${state.leadInfo.assignedAgentId}` : null,
     state.leadInfo.preferences && Object.keys(state.leadInfo.preferences).length > 0
       ? `Dados do lead: ${JSON.stringify(state.leadInfo.preferences)}`
+      : null,
+    state.leadInfo.whatsappProfile && Object.keys(state.leadInfo.whatsappProfile).length > 0
+      ? `Perfil do WhatsApp: ${JSON.stringify(state.leadInfo.whatsappProfile)}`
       : null,
     state.leadInfo.notes && state.leadInfo.notes.length > 0
       ? `Notas compartilhadas com a IA:\n- ${state.leadInfo.notes.join("\n- ")}`
@@ -194,8 +199,21 @@ Output ONLY the message you want to send to the lead via WhatsApp.`;
       ] as BaseMessage[]);
   }
 
+  const finalMessage = response.content.toString().trim();
+
+  if (finalMessage) {
+    await addMessage({
+      threadId: state.threadId,
+      agent: agentLabel,
+      role: agentConfig.role,
+      content: finalMessage,
+    });
+  }
+
   return {
-    messages: [new AIMessage({ content: response.content, name: agentConfig.name.split(" ")[0] })],
+    messages: finalMessage
+      ? [new AIMessage({ content: finalMessage, name: agentConfig.name.split(" ")[0] })]
+      : [],
     sender: agentId,
     nextAgent: "end",
   };

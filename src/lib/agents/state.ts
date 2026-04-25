@@ -13,6 +13,9 @@ export interface AgentState {
     preferences?: Record<string, unknown>;
     status?: string;
     notes?: string[];
+    source?: string;
+    assignedAgentId?: string;
+    whatsappProfile?: Record<string, unknown>;
   };
   nextAgent?: string;
 }

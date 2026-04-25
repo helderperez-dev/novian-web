@@ -232,10 +232,15 @@ export async function getLeadInfoForThread(threadId: string) {
     return {};
   }
 
-  const preferences =
+  const customData =
     lead.custom_data && typeof lead.custom_data === "object" && !Array.isArray(lead.custom_data)
+      ? (lead.custom_data as Record<string, unknown>)
+      : null;
+
+  const preferences =
+    customData
       ? Object.fromEntries(
-          Object.entries(lead.custom_data as Record<string, unknown>).filter(
+          Object.entries(customData).filter(
             ([key]) => !key.startsWith("whatsapp_") && key !== "lead_notes",
           ),
         )
@@ -246,6 +251,18 @@ export async function getLeadInfoForThread(threadId: string) {
     "ai",
   );
 
+  const whatsappProfile = customData
+    ? Object.fromEntries(
+        Object.entries(customData).filter(
+          ([key]) =>
+            key.startsWith("whatsapp_") &&
+            key !== "whatsapp_jid" &&
+            key !== "whatsapp_thread_id" &&
+            key !== "whatsapp_last_message_preview",
+        ),
+      )
+    : undefined;
+
   return {
     id: lead.id,
     name: lead.name || undefined,
@@ -253,6 +270,9 @@ export async function getLeadInfoForThread(threadId: string) {
     status: lead.status || undefined,
     preferences,
     notes: sharedNotes.map((note) => note.content),
+    source: getSourceValue(lead.custom_data) || undefined,
+    assignedAgentId: customData && typeof customData.agent_id === "string" ? customData.agent_id : undefined,
+    whatsappProfile: whatsappProfile && Object.keys(whatsappProfile).length > 0 ? whatsappProfile : undefined,
   };
 }
 

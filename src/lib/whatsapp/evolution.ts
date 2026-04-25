@@ -3,6 +3,7 @@ import { updateAgentWhatsAppProfile } from "@/lib/agents/configStore";
 
 type JsonRecord = Record<string, unknown>;
 type RequestAttempt = { method: string; path: string; body?: unknown };
+type EvolutionPresenceState = "composing" | "recording" | "available" | "unavailable";
 
 const apiUrl = process.env.EVOLUTION_API_URL || "";
 const apiKey = process.env.EVOLUTION_API_KEY || "";
@@ -448,7 +449,215 @@ function extractDigitsFromJid(jidOrPhone: string) {
   return jidPart.replace(/\D/g, "");
 }
 
-export async function sendEvolutionText(agentId: string, jidOrPhone: string, text: string) {
+function findStringDeep(payload: unknown, keys: string[]): string | null {
+  if (!payload) {
+    return null;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = findStringDeep(item, keys);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  if (typeof payload !== "object") {
+    return null;
+  }
+
+  const data = payload as JsonRecord;
+
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  for (const value of Object.values(data)) {
+    const nested = findStringDeep(value, keys);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function findWebsiteDeep(payload: unknown): string | null {
+  if (!payload) {
+    return null;
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = findWebsiteDeep(item);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed.startsWith("http") ? trimmed : null;
+  }
+
+  if (typeof payload !== "object") {
+    return null;
+  }
+
+  const data = payload as JsonRecord;
+  const directWebsite = data.website;
+  if (typeof directWebsite === "string" && directWebsite.trim()) {
+    return directWebsite.trim();
+  }
+
+  for (const value of Object.values(data)) {
+    const nested = findWebsiteDeep(value);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+async function safeRequestByAttempts<T = unknown>(attempts: RequestAttempt[]): Promise<T | null> {
+  try {
+    return await requestByAttempts<T>(attempts);
+  } catch {
+    return null;
+  }
+}
+
+export interface EvolutionContactProfile {
+  phone?: string;
+  jid?: string;
+  displayName?: string;
+  pushName?: string;
+  profilePictureUrl?: string;
+  about?: string;
+  businessDescription?: string;
+  businessCategory?: string;
+  businessEmail?: string;
+  businessWebsite?: string;
+  businessAddress?: string;
+}
+
+function extractEvolutionContactProfile(payload: unknown, fallbackPhone: string): EvolutionContactProfile {
+  const jid = findStringDeep(payload, ["wuid", "jid", "remoteJid"]);
+  const phone = extractDigitsFromJid(jid || fallbackPhone) || fallbackPhone;
+  const displayName =
+    findStringDeep(payload, ["profileName", "name", "notify", "fullName", "shortName"]) || undefined;
+  const pushName = findStringDeep(payload, ["pushName"]) || undefined;
+
+  return {
+    phone: phone || undefined,
+    jid: jid || (phone ? `${phone}@s.whatsapp.net` : undefined),
+    displayName,
+    pushName,
+    profilePictureUrl:
+      findStringDeep(payload, ["profilePictureUrl", "profilePicUrl", "pictureUrl", "picture"]) || undefined,
+    about: findStringDeep(payload, ["about", "status"]) || undefined,
+    businessDescription:
+      findStringDeep(payload, ["businessDescription", "description", "business_profile_description"]) || undefined,
+    businessCategory:
+      findStringDeep(payload, ["category", "businessCategory", "business_profile_category"]) || undefined,
+    businessEmail:
+      findStringDeep(payload, ["email", "businessEmail", "business_profile_email"]) || undefined,
+    businessWebsite: findWebsiteDeep(payload) || undefined,
+    businessAddress:
+      findStringDeep(payload, ["address", "businessAddress", "business_profile_address"]) || undefined,
+  };
+}
+
+function mergeEvolutionContactProfiles(
+  ...profiles: Array<EvolutionContactProfile | null | undefined>
+): EvolutionContactProfile | null {
+  const merged = profiles.reduce<EvolutionContactProfile>(
+    (acc, profile) => ({
+      phone: acc.phone || profile?.phone,
+      jid: acc.jid || profile?.jid,
+      displayName: acc.displayName || profile?.displayName,
+      pushName: acc.pushName || profile?.pushName,
+      profilePictureUrl: acc.profilePictureUrl || profile?.profilePictureUrl,
+      about: acc.about || profile?.about,
+      businessDescription: acc.businessDescription || profile?.businessDescription,
+      businessCategory: acc.businessCategory || profile?.businessCategory,
+      businessEmail: acc.businessEmail || profile?.businessEmail,
+      businessWebsite: acc.businessWebsite || profile?.businessWebsite,
+      businessAddress: acc.businessAddress || profile?.businessAddress,
+    }),
+    {},
+  );
+
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
+export async function fetchEvolutionContactProfile(agentId: string, jidOrPhone: string) {
+  const instanceName = getEvolutionInstanceName(agentId);
+  const number = extractDigitsFromJid(jidOrPhone);
+  if (!number) {
+    throw new Error("Invalid WhatsApp contact number.");
+  }
+
+  const [profilePicturePayload, profilePayload, businessProfilePayload] = await Promise.all([
+    safeRequestByAttempts<JsonRecord>([
+      {
+        method: "POST",
+        path: `/chat/fetchProfilePictureUrl/${instanceName}`,
+        body: { number },
+      },
+      {
+        method: "POST",
+        path: `/chat/fetchProfilePictureUrl/${encodeURIComponent(instanceName)}`,
+        body: { number },
+      },
+    ]),
+    safeRequestByAttempts<JsonRecord>([
+      {
+        method: "POST",
+        path: `/chat/fetchProfile/${instanceName}`,
+        body: { number },
+      },
+      {
+        method: "POST",
+        path: `/chat/fetchProfile/${encodeURIComponent(instanceName)}`,
+        body: { number },
+      },
+    ]),
+    safeRequestByAttempts<JsonRecord>([
+      {
+        method: "POST",
+        path: `/chat/fetchBusinessProfile/${instanceName}`,
+        body: { number },
+      },
+      {
+        method: "POST",
+        path: `/chat/fetchBusinessProfile/${encodeURIComponent(instanceName)}`,
+        body: { number },
+      },
+    ]),
+  ]);
+
+  return mergeEvolutionContactProfiles(
+    extractEvolutionContactProfile(profilePicturePayload, number),
+    extractEvolutionContactProfile(profilePayload, number),
+    extractEvolutionContactProfile(businessProfilePayload, number),
+  );
+}
+
+export async function sendEvolutionPresence(
+  agentId: string,
+  jidOrPhone: string,
+  presence: EvolutionPresenceState,
+  delayMs = 2000,
+) {
   const instanceName = getEvolutionInstanceName(agentId);
   const number = extractDigitsFromJid(jidOrPhone);
   if (!number) {
@@ -458,23 +667,105 @@ export async function sendEvolutionText(agentId: string, jidOrPhone: string, tex
   await requestByAttempts([
     {
       method: "POST",
+      path: `/chat/sendPresence/${instanceName}`,
+      body: { number, options: { presence, delay: delayMs } },
+    },
+    {
+      method: "POST",
+      path: `/chat/sendPresence/${encodeURIComponent(instanceName)}`,
+      body: { number, options: { presence, delay: delayMs } },
+    },
+    {
+      method: "POST",
+      path: `/chat/sendPresence/${instanceName}`,
+      body: { number, presence, delay: delayMs },
+    },
+    {
+      method: "POST",
+      path: `/chat/sendPresence/${encodeURIComponent(instanceName)}`,
+      body: { number, presence, delay: delayMs },
+    },
+    {
+      method: "POST",
+      path: "/chat/sendPresence",
+      body: { instanceName, number, options: { presence, delay: delayMs } },
+    },
+    {
+      method: "POST",
+      path: "/chat/sendPresence",
+      body: { instance: instanceName, number, options: { presence, delay: delayMs } },
+    },
+  ]);
+}
+
+export async function sendEvolutionText(
+  agentId: string,
+  jidOrPhone: string,
+  text: string,
+  options?: {
+    delayMs?: number;
+    linkPreview?: boolean;
+  },
+) {
+  const instanceName = getEvolutionInstanceName(agentId);
+  const number = extractDigitsFromJid(jidOrPhone);
+  if (!number) {
+    throw new Error("Invalid WhatsApp destination number.");
+  }
+
+  const delay = options?.delayMs;
+  const linkPreview = options?.linkPreview ?? true;
+  const baseBody = {
+    number,
+    text,
+    ...(typeof delay === "number" ? { delay } : {}),
+    ...(typeof linkPreview === "boolean" ? { linkPreview } : {}),
+  };
+
+  await requestByAttempts([
+    {
+      method: "POST",
       path: `/message/sendText/${instanceName}`,
-      body: { number, text },
+      body: baseBody,
     },
     {
       method: "POST",
       path: `/message/sendText/${encodeURIComponent(instanceName)}`,
-      body: { number, text },
+      body: baseBody,
     },
     {
       method: "POST",
       path: "/message/sendText",
-      body: { instanceName, number, text },
+      body: { instanceName, ...baseBody },
     },
     {
       method: "POST",
       path: "/message/sendText",
-      body: { instance: instanceName, number, text },
+      body: { instance: instanceName, ...baseBody },
+    },
+    {
+      method: "POST",
+      path: `/message/sendText/${instanceName}`,
+      body: {
+        ...baseBody,
+        options: {
+          ...(typeof delay === "number" ? { delay } : {}),
+          presence: "composing",
+          ...(typeof linkPreview === "boolean" ? { linkPreview } : {}),
+        },
+      },
+    },
+    {
+      method: "POST",
+      path: `/message/sendText/${encodeURIComponent(instanceName)}`,
+      body: {
+        ...baseBody,
+        options: {
+          ...(typeof delay === "number" ? { delay } : {}),
+          presence: "composing",
+          ...(typeof linkPreview === "boolean" ? { linkPreview } : {}),
+        },
+      },
     },
   ]);
 }
