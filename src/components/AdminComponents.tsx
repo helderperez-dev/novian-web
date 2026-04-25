@@ -4121,7 +4121,6 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
   const agentName = agent.name;
   const agentRole = agent.role;
 
-  // Poll status every 3 seconds
   useEffect(() => {
     let isMounted = true;
     const fetchStatus = async () => {
@@ -4136,14 +4135,31 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
         console.error(e);
       }
     };
-    
+
     fetchStatus();
-    const interval = setInterval(fetchStatus, 3000);
     return () => {
       isMounted = false;
-      clearInterval(interval);
     };
   }, [agentId]);
+
+  useEffect(() => {
+    if (status === "disconnected") {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/whatsapp/${agentId}?t=${Date.now()}`, { cache: "no-store" });
+        const data = await res.json();
+        setStatus(data.state);
+        setQrCode(data.qrDataUri || null);
+      } catch (error) {
+        console.error(error);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [agentId, status]);
 
   const handleConnect = async () => {
     try {

@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@whiskeysockets/baileys', 'pino', 'jimp', 'sharp'],
+  serverExternalPackages: ["sharp"],
   images: {
     remotePatterns: [
       {

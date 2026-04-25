@@ -1,4 +1,4 @@
-import { getWhatsAppInstanceRuntime, updateWhatsAppRuntime } from "@/lib/whatsapp/runtimeStore";
+import { getStoredWhatsAppInstanceRuntime, updateWhatsAppRuntime } from "@/lib/whatsapp/runtimeStore";
 import { updateAgentWhatsAppProfile } from "@/lib/agents/configStore";
 
 type JsonRecord = Record<string, unknown>;
@@ -330,12 +330,9 @@ export async function connectEvolutionInstance(params: {
   const state = qrDataUri ? "qr_ready" : extractConnectionState(payload);
 
   await updateWhatsAppRuntime(params.agentId, {
-    desiredState: "connected",
     state: state === "connected" ? "connected" : qrDataUri ? "qr_ready" : "connecting",
     qrDataUri: qrDataUri || null,
     lastError: null,
-    workerId: "evolution",
-    heartbeatAt: nowIso,
     connectedAt: state === "connected" ? nowIso : null,
   });
 
@@ -348,7 +345,19 @@ export async function connectEvolutionInstance(params: {
 
 export async function getEvolutionSessionStatus(agentId: string): Promise<EvolutionSessionStatus> {
   const instanceName = getEvolutionInstanceName(agentId);
-  const runtime = await getWhatsAppInstanceRuntime(agentId);
+  const runtime = await getStoredWhatsAppInstanceRuntime(agentId);
+  const runtimeAgeMs = runtime.updatedAt ? Date.now() - new Date(runtime.updatedAt).getTime() : Number.POSITIVE_INFINITY;
+  const hasFreshPendingSession = runtime.state === "connecting" && runtimeAgeMs < 2 * 60 * 1000;
+  const shouldQueryRemote = !!runtime.qrDataUri || !!runtime.connectedAt || hasFreshPendingSession;
+
+  if (!shouldQueryRemote) {
+    return {
+      instanceName,
+      state: "disconnected",
+      qrDataUri: undefined,
+      lastError: runtime.lastError,
+    };
+  }
 
   try {
     let payload: unknown;
@@ -388,8 +397,6 @@ export async function getEvolutionSessionStatus(agentId: string): Promise<Evolut
       state: stateFromPayload,
       qrDataUri,
       lastError: null,
-      workerId: "evolution",
-      heartbeatAt: nowIso,
       connectedAt: stateFromPayload === "connected" ? nowIso : null,
     });
 
@@ -411,7 +418,6 @@ export async function getEvolutionSessionStatus(agentId: string): Promise<Evolut
 
 export async function disconnectEvolutionInstance(agentId: string) {
   const instanceName = getEvolutionInstanceName(agentId);
-  const nowIso = new Date().toISOString();
 
   try {
     await requestByAttempts([
@@ -430,12 +436,9 @@ export async function disconnectEvolutionInstance(agentId: string) {
   }
 
   await updateWhatsAppRuntime(agentId, {
-    desiredState: "disconnected",
     state: "disconnected",
     qrDataUri: null,
     lastError: null,
-    workerId: null,
-    heartbeatAt: nowIso,
     connectedAt: null,
   });
 }

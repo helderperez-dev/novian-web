@@ -1,4 +1,3 @@
-import { jidNormalizedUser, isPnUser } from "@whiskeysockets/baileys";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
@@ -28,13 +27,35 @@ function isChannelThread(threadId: string) {
   return threadId === "general" || threadId === "continuous";
 }
 
+function normalizeWhatsAppJid(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (!trimmed.includes("@")) {
+    const digits = trimmed.replace(/\D/g, "");
+    return digits ? `${digits}@s.whatsapp.net` : trimmed;
+  }
+
+  const [userPart, serverPart] = trimmed.split("@");
+  const [phonePart, devicePart] = userPart.split(":");
+  const digits = phonePart.replace(/\D/g, "");
+  const normalizedUser = digits ? (devicePart ? `${digits}:${devicePart}` : digits) : userPart;
+  return `${normalizedUser}@${serverPart.toLowerCase()}`;
+}
+
+function isPhoneNumberJid(value: string) {
+  return /@(?:s\.whatsapp\.net|c\.us)$/i.test(value);
+}
+
 function extractPhoneFromThreadId(threadId: string) {
   if (isChannelThread(threadId)) {
     return null;
   }
 
-  const normalized = jidNormalizedUser(threadId) || threadId;
-  if (!isPnUser(normalized)) {
+  const normalized = normalizeWhatsAppJid(threadId) || threadId;
+  if (!isPhoneNumberJid(normalized)) {
     return null;
   }
 
@@ -53,7 +74,7 @@ export function normalizeChatThreadId(threadIdOrJid: string) {
     return digits ? `${digits}@s.whatsapp.net` : trimmed;
   }
 
-  return jidNormalizedUser(trimmed) || trimmed;
+  return normalizeWhatsAppJid(trimmed) || trimmed;
 }
 
 function channelDefaults(threadId: string) {

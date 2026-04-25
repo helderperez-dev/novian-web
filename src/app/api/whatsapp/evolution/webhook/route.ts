@@ -73,12 +73,9 @@ export async function POST(req: Request) {
     const qrDataUri = qr ? (qr.startsWith("data:image") ? qr : `data:image/png;base64,${qr}`) : null;
 
     await updateWhatsAppRuntime(agentId, {
-      desiredState: "connected",
       state: qrDataUri ? "qr_ready" : "connecting",
       qrDataUri,
       lastError: null,
-      workerId: "evolution",
-      heartbeatAt: new Date().toISOString(),
       connectedAt: null,
     });
 
@@ -90,12 +87,9 @@ export async function POST(req: Request) {
     const state = toSessionState(connectionState || "disconnected");
 
     await updateWhatsAppRuntime(agentId, {
-      desiredState: state === "disconnected" ? "disconnected" : "connected",
       state,
       qrDataUri: state === "connected" ? null : undefined,
       lastError: null,
-      workerId: state === "disconnected" ? null : "evolution",
-      heartbeatAt: new Date().toISOString(),
       connectedAt: state === "connected" ? new Date().toISOString() : null,
     });
 
@@ -146,11 +140,7 @@ export async function POST(req: Request) {
 
   const maybeAgentId = resolveAgentIdFromInstance(sourceInstance);
   if (maybeAgentId) {
-    // Keep runtime heartbeat fresh for unhandled Evolution events.
-    await updateWhatsAppRuntime(maybeAgentId, {
-      workerId: "evolution",
-      heartbeatAt: new Date().toISOString(),
-    });
+    await updateWhatsAppRuntime(maybeAgentId, {});
   }
 
   return NextResponse.json({ ok: true, ignored: true });
