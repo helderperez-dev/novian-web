@@ -20,7 +20,7 @@ async function requireAuthenticatedAppUser() {
 export async function GET() {
   const currentUser = await requireAuthenticatedAppUser();
   if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   }
 
   return NextResponse.json({ user: currentUser.appUser });
@@ -29,7 +29,7 @@ export async function GET() {
 export async function PATCH(req: Request) {
   const currentUser = await requireAuthenticatedAppUser();
   if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   }
 
   try {
@@ -41,7 +41,7 @@ export async function PATCH(req: Request) {
         : null;
 
     if (!fullName) {
-      return NextResponse.json({ error: "Full name is required" }, { status: 400 });
+      return NextResponse.json({ error: "Informe o nome completo" }, { status: 400 });
     }
 
     const supabase = createAdminSupabaseClient();
@@ -58,7 +58,7 @@ export async function PATCH(req: Request) {
 
     if (error) {
       console.error(error);
-      return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+      return NextResponse.json({ error: "Nao foi possivel atualizar o perfil" }, { status: 500 });
     }
 
     const metadata = {
@@ -78,10 +78,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({
       success: true,
       user: data,
-      warning: authError ? "Profile updated, but auth metadata sync failed." : null,
+      warning: authError ? "Perfil atualizado, mas a sincronizacao dos metadados falhou." : null,
     });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 });
   }
 }

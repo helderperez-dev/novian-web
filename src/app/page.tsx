@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, MapPin, Bed, Car, Maximize } from "lucide-react";
+import PropertyListingTracker from "./PropertyListingTracker";
 
 export default async function PropertiesListingPage() {
   await connection();
@@ -103,10 +104,15 @@ export default async function PropertiesListingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16">
             {properties.map((property) => (
-              <Link 
-                href={`/imoveis/${property.slug}`} 
+              <PropertyListingTracker
                 key={property.id}
-                className="group block"
+                property={{
+                  id: property.id,
+                  slug: property.slug,
+                  title: property.title,
+                  price: property.price,
+                  address: property.address,
+                }}
               >
                 <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-white/5 mb-6 relative">
                   <img 
@@ -163,7 +169,7 @@ export default async function PropertiesListingPage() {
                     </span>
                   </div>
                 </div>
-              </Link>
+              </PropertyListingTracker>
             ))}
           </div>
         </div>

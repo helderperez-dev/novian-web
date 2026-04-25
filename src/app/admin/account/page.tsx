@@ -1,9 +1,5 @@
-import AccountProfileForm from "@/components/AccountProfileForm";
+import { redirect } from "next/navigation";
 
 export default function AdminAccountPage() {
-  return (
-    <div className="space-y-6">
-      <AccountProfileForm />
-    </div>
-  );
+  redirect("/admin/settings?tab=profile");
 }

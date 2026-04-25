@@ -6,6 +6,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import LeadForm from "./LeadForm";
+import PropertyEngagementTracker from "./PropertyEngagementTracker";
 import PropertyGalleryViewer from "@/components/PropertyGalleryViewer";
 
 const RICH_TEXT_HTML_PATTERN = /<\/?[a-z][\s\S]*>/i;
@@ -33,9 +34,20 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
           <Link href="/">
             <Image src="/logo.png" alt="Novian" width={120} height={24} className="h-5 w-auto object-contain hover:opacity-80 transition-opacity" />
           </Link>
-          <a href="#contato" className="text-sm font-semibold px-6 py-2.5 rounded-full transition-colors" style={{ backgroundColor: primaryColor, color: '#0d1514' }}>
-            Falar com Especialista
-          </a>
+          <PropertyEngagementTracker
+            property={{
+              id: property.id,
+              slug: property.slug,
+              title: property.title,
+              price: property.price,
+              address: property.address,
+            }}
+            primaryColor={primaryColor}
+            callToActionText={landingPage.callToActionText}
+            showLeadMagnet={landingPage.showLeadMagnet}
+            leadMagnetTitle={landingPage.leadMagnetTitle}
+            variant="nav"
+          />
         </div>
       </nav>
 
@@ -66,16 +78,21 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
               {landingPage.heroSubtitle}
             </p>
 
-            <div className="pt-4 flex flex-col sm:flex-row gap-4">
-              <a href="#contato" className="inline-flex items-center justify-center px-8 py-4 rounded-full text-sm font-bold transition-transform hover:scale-105" style={{ backgroundColor: primaryColor, color: '#0d1514' }}>
-                {landingPage.callToActionText}
-              </a>
-              {landingPage.showLeadMagnet && (
-                <a href="#contato" className="inline-flex items-center justify-center px-8 py-4 rounded-full text-sm font-bold border border-white/20 backdrop-blur-sm hover:bg-white/5 transition-colors text-white">
-                  {landingPage.leadMagnetTitle || "Baixar Apresentação"}
-                </a>
-              )}
-            </div>
+            <PropertyEngagementTracker
+              property={{
+                id: property.id,
+                slug: property.slug,
+                title: property.title,
+                price: property.price,
+                address: property.address,
+              }}
+              primaryColor={primaryColor}
+              callToActionText={landingPage.callToActionText}
+              showLeadMagnet={landingPage.showLeadMagnet}
+              leadMagnetTitle={landingPage.leadMagnetTitle}
+              variant="hero"
+              trackPageView
+            />
           </div>
         </div>
       </section>
@@ -166,10 +183,15 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
             </div>
 
             <LeadForm 
+              propertyId={property.id}
+              propertySlug={property.slug}
               primaryColor={primaryColor} 
               showLeadMagnet={landingPage.showLeadMagnet} 
+              leadMagnetTitle={landingPage.leadMagnetTitle}
               callToActionText={landingPage.callToActionText} 
               propertyTitle={property.title}
+              propertyPrice={property.price}
+              propertyAddress={property.address}
             />
           </div>
         </div>

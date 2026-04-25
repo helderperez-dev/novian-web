@@ -190,7 +190,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-novian-text/40">
                   Conta
                 </div>
-                <Link href="/admin/account">
+                <Link href="/admin/settings?tab=profile">
                   <div 
                     className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-novian-text/80 transition-colors hover:bg-white/5 hover:text-white"
                     onClick={() => setIsUserMenuOpen(false)}

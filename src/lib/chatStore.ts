@@ -3,6 +3,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
 import { getLeadNotesByVisibility } from "@/lib/leadNotes";
+import { recordLeadAnalyticsEvent } from "@/lib/leadAnalytics";
 import { ensurePersonForLead, syncPersonFromLead, unlinkPersonFromLead } from "@/lib/people";
 import type { ChatMessage, Thread } from "@/lib/store";
 
@@ -412,6 +413,16 @@ export async function createLead(data: Partial<Thread> & { phone: string; title?
 
   if (error) {
     throw error;
+  }
+
+  try {
+    await recordLeadAnalyticsEvent({
+      leadId: lead.id,
+      personId: lead.person_id,
+      customData: lead.custom_data,
+    });
+  } catch (analyticsError) {
+    console.error("Failed to persist lead analytics event:", analyticsError);
   }
 
   await syncPersonFromLead(lead);

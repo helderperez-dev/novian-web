@@ -10,7 +10,7 @@ export default function ClientAccountPage() {
             href="/client"
             className="inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-white/10"
           >
-            Back to portal
+            Voltar ao portal
           </Link>
         </div>
 

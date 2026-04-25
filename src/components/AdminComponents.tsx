@@ -16,6 +16,7 @@ import ImageGalleryUploader from "@/components/ImageGalleryUploader";
 import FunnelAutomationSettings from "@/components/FunnelAutomationSettings";
 import PopupSelect from "@/components/PopupSelect";
 import { CaptacaoLayout } from "@/components/CaptacaoLayout";
+import AccountProfileForm from "@/components/AccountProfileForm";
 import type { Database } from "@/lib/database.types";
 import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, ResponsiveContainer } from "recharts";
 
@@ -3244,7 +3245,8 @@ export function PropertiesLayout() {
 }
 
 export function SettingsLayout() {
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"agents" | "copy" | "fields" | "funnels" | "users">("agents");
+  const searchParams = useSearchParams();
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"agents" | "copy" | "fields" | "funnels" | "users" | "profile">("agents");
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [newAgent, setNewAgent] = useState({ id: "", name: "", role: "", systemPrompt: "" });
@@ -3437,10 +3439,24 @@ export function SettingsLayout() {
   }, []);
 
   useEffect(() => {
+    const tab = searchParams.get("tab");
+    const allowedTabs = new Set(["agents", "fields", "copy", "funnels", "users", "profile"]);
+    if (tab && allowedTabs.has(tab)) {
+      setActiveSettingsTab(tab as "agents" | "copy" | "fields" | "funnels" | "users" | "profile");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (isAdmin) {
       fetchManagedUsers();
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin && activeSettingsTab === "users") {
+      setActiveSettingsTab("agents");
+    }
+  }, [isAdmin, activeSettingsTab]);
 
   const handleAddAgent = async () => {
     if (!newAgent.name || !newAgent.role) return;
@@ -3513,6 +3529,12 @@ export function SettingsLayout() {
         >
           Funis
         </button>
+        <button
+          onClick={() => setActiveSettingsTab("profile")}
+          className={`text-sm font-medium transition-colors ${activeSettingsTab === 'profile' ? 'text-novian-accent border-b-2 border-novian-accent h-full' : 'text-novian-text/50 hover:text-novian-text'}`}
+        >
+          Perfil
+        </button>
         {isAdmin && (
           <button
             onClick={() => setActiveSettingsTab("users")}
@@ -3524,7 +3546,7 @@ export function SettingsLayout() {
       </div>
 
       <div className="p-8 flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className={`mx-auto space-y-8 ${activeSettingsTab === "profile" ? "max-w-6xl" : "max-w-4xl"}`}>
           {activeSettingsTab === "agents" && (
             <>
               <div className="flex items-center justify-between">
@@ -4067,6 +4089,18 @@ export function SettingsLayout() {
                   Nenhum usuário cadastrado ainda.
                 </div>
               )}
+            </div>
+          )}
+
+          {activeSettingsTab === "profile" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-novian-text mb-2">Perfil</h2>
+                <p className="text-sm text-novian-text/60">
+                  Atualize seus dados de conta, foto e informacoes exibidas na plataforma.
+                </p>
+              </div>
+              <AccountProfileForm />
             </div>
           )}
         </div>

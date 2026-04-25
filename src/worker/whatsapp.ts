@@ -3,6 +3,7 @@ import { connectAgentWhatsApp, disconnectAgentWhatsApp, listLocalSessionStatuses
 import { claimWhatsAppRuntime, listWhatsAppInstanceRuntimes, updateWhatsAppRuntime } from "../lib/whatsapp/runtimeStore";
 import { completeWhatsAppTask, failWhatsAppTask, listPendingWhatsAppTasks, markWhatsAppTaskProcessing } from "../lib/whatsapp/taskStore";
 import type { Json } from "../lib/database.types";
+import { isEvolutionProvider } from "../lib/whatsapp/provider";
 
 const workerId = process.env.WHATSAPP_WORKER_ID || `worker-${randomUUID()}`;
 const pollMs = Number(process.env.WHATSAPP_WORKER_POLL_MS || 5000);
@@ -10,6 +11,10 @@ const pollMs = Number(process.env.WHATSAPP_WORKER_POLL_MS || 5000);
 let isSyncing = false;
 
 async function syncDesiredState() {
+  if (isEvolutionProvider()) {
+    return;
+  }
+
   if (isSyncing) {
     return;
   }
@@ -60,6 +65,10 @@ async function syncDesiredState() {
 }
 
 async function processTasks() {
+  if (isEvolutionProvider()) {
+    return;
+  }
+
   try {
     const tasks = await listPendingWhatsAppTasks();
     const localSessions = new Map(
@@ -107,7 +116,8 @@ async function processTasks() {
   }
 }
 
-console.log(`[WhatsAppWorker:${workerId}] starting with poll interval ${pollMs}ms`);
+const providerMode = isEvolutionProvider() ? "evolution (idle mode)" : "worker";
+console.log(`[WhatsAppWorker:${workerId}] starting with poll interval ${pollMs}ms in ${providerMode}`);
 
 async function main() {
   await syncDesiredState();

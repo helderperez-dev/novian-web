@@ -2,19 +2,26 @@ import { NextResponse } from 'next/server';
 import { getSessionStatus, connectAgentWhatsApp, disconnectAgentWhatsApp, refreshWhatsAppContactMetadata } from '@/lib/whatsapp/manager';
 import { requestWhatsAppConnection, requestWhatsAppDisconnect } from '@/lib/whatsapp/runtimeStore';
 import { enqueueWhatsAppTask } from '@/lib/whatsapp/taskStore';
+import { getWhatsAppProvider } from '@/lib/whatsapp/provider';
+import { connectEvolutionInstance, disconnectEvolutionInstance, getEvolutionSessionStatus } from '@/lib/whatsapp/evolution';
 
 export const dynamic = 'force-dynamic';
 const allowInProcessRuntime = process.env.WHATSAPP_ALLOW_IN_PROCESS === 'true';
+const provider = getWhatsAppProvider();
 
 // GET: Check the current status of the agent's WhatsApp instance
 export async function GET(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
     const { agentId } = await params;
-    const status = await getSessionStatus(agentId);
+    const status = provider === 'evolution' ? await getEvolutionSessionStatus(agentId) : await getSessionStatus(agentId);
     const url = new URL(req.url);
     const jid = url.searchParams.get('jid');
 
     if (!jid) {
         return NextResponse.json(status);
+    }
+
+    if (provider === 'evolution') {
+        return NextResponse.json({ ...status, message: 'Contact metadata refresh is not available for Evolution mode yet.' }, { status: 202 });
     }
 
     try {
@@ -34,8 +41,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ agentId:
 }
 
 // POST: Start a new connection (returns the QR code in subsequent GET requests)
-export async function POST(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ agentId: string }> }) {
     const { agentId } = await params;
+    if (provider === 'evolution') {
+        const baseUrl = (process.env.WHATSAPP_WEBHOOK_BASE_URL || new URL(req.url).origin).replace(/\/+$/, '');
+        const webhookSecret = process.env.EVOLUTION_WEBHOOK_SECRET;
+        const search = new URLSearchParams();
+        search.set('agentId', agentId);
+        if (webhookSecret) {
+            search.set('secret', webhookSecret);
+        }
+        const webhookUrl = `${baseUrl}/api/whatsapp/evolution/webhook?${search.toString()}`;
+        const session = await connectEvolutionInstance({ agentId, webhookUrl });
+        return NextResponse.json({ success: true, provider, session, message: `Evolution connection requested for ${agentId}` });
+    }
+
     await requestWhatsAppConnection(agentId);
 
     if (allowInProcessRuntime) {
@@ -49,6 +69,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ agentI
 // DELETE: Logout and close connection
 export async function DELETE(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
     const { agentId } = await params;
+    if (provider === 'evolution') {
+        await disconnectEvolutionInstance(agentId);
+        return NextResponse.json({ success: true, provider, message: `Disconnected ${agentId}` });
+    }
+
     await requestWhatsAppDisconnect(agentId, true);
 
     if (allowInProcessRuntime) {

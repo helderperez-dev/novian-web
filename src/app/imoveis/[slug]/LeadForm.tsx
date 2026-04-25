@@ -1,18 +1,37 @@
 "use client";
 
 import { useState } from "react";
+import { usePostHog } from "posthog-js/react";
+import { getBrowserContextProps, getPropertyAnalyticsProps } from "@/lib/posthog";
 
 interface LeadFormProps {
   primaryColor: string;
   showLeadMagnet?: boolean;
+  leadMagnetTitle?: string;
   callToActionText: string;
+  propertyId: string;
+  propertySlug: string;
   propertyTitle: string;
+  propertyPrice: number;
+  propertyAddress: string;
 }
 
-export default function LeadForm({ primaryColor, showLeadMagnet, callToActionText, propertyTitle }: LeadFormProps) {
+export default function LeadForm({
+  primaryColor,
+  showLeadMagnet,
+  leadMagnetTitle,
+  callToActionText,
+  propertyId,
+  propertySlug,
+  propertyTitle,
+  propertyPrice,
+  propertyAddress,
+}: LeadFormProps) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [hasTrackedStart, setHasTrackedStart] = useState(false);
+  const posthog = usePostHog();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -25,7 +44,31 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
     setLoading(true);
     setError("");
 
+    const propertyEventProps = getPropertyAnalyticsProps({
+      id: propertyId,
+      slug: propertySlug,
+      title: propertyTitle,
+      price: propertyPrice,
+      address: propertyAddress,
+      showLeadMagnet,
+    });
+
+    const sharedEventProps = {
+      ...propertyEventProps,
+      call_to_action_text: callToActionText,
+      lead_magnet_title: leadMagnetTitle || null,
+      form_name: "property_lead_form",
+      ...getBrowserContextProps(),
+    };
+
     try {
+      posthog?.capture("external_property_contact_requested", {
+        ...sharedEventProps,
+        contact_channel: "lead_form",
+        submitted_email: formData.email,
+        submitted_phone: formData.phone,
+      });
+
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -36,6 +79,18 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
             email: formData.email,
             source: "Landing Page Imóvel",
             property: propertyTitle,
+            propertyId,
+            propertySlug,
+            propertyPrice,
+            propertyAddress,
+            leadMagnetTitle: leadMagnetTitle || null,
+            showLeadMagnet: Boolean(showLeadMagnet),
+            analytics: {
+              posthogDistinctId: posthog?.get_distinct_id() || null,
+              eventName: "external_property_contact_requested",
+              capturedAt: new Date().toISOString(),
+              ...getBrowserContextProps(),
+            },
           }
         }),
       });
@@ -44,7 +99,20 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
         throw new Error("Erro ao enviar dados. Tente novamente.");
       }
 
+      posthog?.identify(formData.email || formData.phone, {
+        email: formData.email,
+        name: formData.name,
+        phone: formData.phone,
+        last_property_id: propertyId,
+        last_property_slug: propertySlug,
+        last_property_title: propertyTitle,
+      });
+
       setSuccess(true);
+      posthog?.capture("external_property_lead_created", {
+        ...sharedEventProps,
+        contact_channel: "lead_form",
+      });
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -54,6 +122,28 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFieldFocus = () => {
+    if (hasTrackedStart) {
+      return;
+    }
+
+    setHasTrackedStart(true);
+    posthog?.capture("external_property_lead_form_started", {
+      ...getPropertyAnalyticsProps({
+        id: propertyId,
+        slug: propertySlug,
+        title: propertyTitle,
+        price: propertyPrice,
+        address: propertyAddress,
+        showLeadMagnet,
+      }),
+      call_to_action_text: callToActionText,
+      lead_magnet_title: leadMagnetTitle || null,
+      form_name: "property_lead_form",
+      ...getBrowserContextProps(),
+    });
   };
 
   if (success) {
@@ -88,6 +178,7 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onFocus={handleFieldFocus}
             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
             style={{ borderColor: formData.name ? primaryColor : undefined, outlineColor: primaryColor }} 
             placeholder="Seu nome" 
@@ -100,6 +191,7 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
             required
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            onFocus={handleFieldFocus}
             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
             style={{ borderColor: formData.phone ? primaryColor : undefined, outlineColor: primaryColor }} 
             placeholder="(00) 00000-0000" 
@@ -113,6 +205,7 @@ export default function LeadForm({ primaryColor, showLeadMagnet, callToActionTex
           required
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          onFocus={handleFieldFocus}
           className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
           style={{ borderColor: formData.email ? primaryColor : undefined, outlineColor: primaryColor }} 
           placeholder="seu@email.com" 

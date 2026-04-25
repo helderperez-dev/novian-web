@@ -559,6 +559,99 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_analytics_events: {
+        Row: {
+          created_at: string
+          current_url: string | null
+          event_category: string
+          event_channel: string | null
+          event_name: string
+          event_source: string
+          id: string
+          lead_id: string
+          pathname: string | null
+          payload: Json
+          person_id: string | null
+          posthog_distinct_id: string | null
+          property_city: string | null
+          property_id: string | null
+          property_price: number | null
+          property_slug: string | null
+          property_title: string | null
+          referrer: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_url?: string | null
+          event_category?: string
+          event_channel?: string | null
+          event_name: string
+          event_source?: string
+          id?: string
+          lead_id: string
+          pathname?: string | null
+          payload?: Json
+          person_id?: string | null
+          posthog_distinct_id?: string | null
+          property_city?: string | null
+          property_id?: string | null
+          property_price?: number | null
+          property_slug?: string | null
+          property_title?: string | null
+          referrer?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_url?: string | null
+          event_category?: string
+          event_channel?: string | null
+          event_name?: string
+          event_source?: string
+          id?: string
+          lead_id?: string
+          pathname?: string | null
+          payload?: Json
+          person_id?: string | null
+          posthog_distinct_id?: string | null
+          property_city?: string | null
+          property_id?: string | null
+          property_price?: number | null
+          property_slug?: string | null
+          property_title?: string | null
+          referrer?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_analytics_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_analytics_events_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           created_at: string
