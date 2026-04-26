@@ -109,10 +109,11 @@ export async function GET() {
     ] = await Promise.all([
       getProperties(),
       supabase
-        .from("leads")
-        .select("id, status, funnel_id")
-        .neq("status", "Oportunidades (Web)")
-        .order("created_at", { ascending: false }),
+        .from("people")
+        .select("id, crm_status, crm_funnel_id")
+        .not("crm_status", "is", null)
+        .neq("crm_status", "Oportunidades (Web)")
+        .order("updated_at", { ascending: false }),
       supabase
         .from("funnels")
         .select("id, name, type, stages:funnel_stages(id, title, color, order)")
@@ -156,7 +157,7 @@ export async function GET() {
 
     const crmFunnelIds = new Set((crmFunnelsResponse.data || []).map((funnel) => funnel.id));
     const crmLeads = (crmLeadsResponse.data || []).filter((lead) =>
-      lead.funnel_id ? crmFunnelIds.has(lead.funnel_id) : true,
+      lead.crm_funnel_id ? crmFunnelIds.has(lead.crm_funnel_id) : true,
     );
     const captacaoFunnelIds = new Set((captacaoFunnelsResponse.data || []).map((funnel) => funnel.id));
     const captacaoLeads = (captacaoLeadsResponse.data || []).filter((lead) =>
@@ -235,7 +236,7 @@ export async function GET() {
         clientDocuments: (clientDocumentsResponse.data || []).length,
         totalMessages: messagesResponse.count || 0,
       },
-      crmStatusBreakdown: toFunnelBreakdown(crmFunnelSteps, crmLeads.map((lead) => lead.status || "Unassigned")),
+      crmStatusBreakdown: toFunnelBreakdown(crmFunnelSteps, crmLeads.map((lead) => lead.crm_status || "Unassigned")),
       captacaoStatusBreakdown: toFunnelBreakdown(captacaoFunnelSteps, captacaoLeads.map((lead) => lead.status || "Unassigned")),
       propertyStatusBreakdown: toBreakdown(properties.map((property) => property.status)),
       clientProcessBreakdown: toBreakdown((clientProcessesResponse.data || []).map((process) => process.status || "Pending")),

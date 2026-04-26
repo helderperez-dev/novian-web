@@ -59,19 +59,7 @@ function normalizeTagList(value: unknown) {
   );
 }
 
-type LeadSummary = {
-  id: string;
-  person_id: string | null;
-  status: string | null;
-  funnel_id: string | null;
-  score: number | null;
-  preview: string | null;
-  unread: boolean | null;
-  updated_at: string;
-  created_at: string;
-};
-
-type PersonListItem = ReturnType<typeof mergePeopleWithLeads>[number];
+type PersonListItem = ReturnType<typeof mapPeopleForResponse>[number];
 
 function buildDuplicateGroups(people: PersonListItem[]) {
   const grouped = new Map<string, { key: string; label: string; reason: "phone" | "email"; people: PersonListItem[] }>();
@@ -121,24 +109,20 @@ function buildDuplicateGroups(people: PersonListItem[]) {
     .sort((a, b) => b.people.length - a.people.length);
 }
 
-function mergePeopleWithLeads(
-  people: Database["public"]["Tables"]["people"]["Row"][],
-  leads: LeadSummary[],
-) {
-  const leadsByPerson = new Map<string, LeadSummary[]>();
-
-  for (const lead of leads) {
-    if (!lead.person_id) continue;
-    const items = leadsByPerson.get(lead.person_id) || [];
-    items.push(lead);
-    leadsByPerson.set(lead.person_id, items);
-  }
-
+function mapPeopleForResponse(people: Database["public"]["Tables"]["people"]["Row"][]) {
   return people.map((person) => {
-    const linkedLeads = (leadsByPerson.get(person.id) || []).sort((a, b) =>
-      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-    );
-    const primaryLead = linkedLeads[0] || null;
+    const leadSummary =
+      person.crm_status || person.crm_funnel_id || (person.crm_score ?? 0) > 0 || person.crm_unread
+        ? {
+            id: person.id,
+            status: person.crm_status,
+            funnelId: person.crm_funnel_id,
+            score: person.crm_score,
+            preview: person.last_interaction_preview,
+            unread: person.crm_unread,
+            updatedAt: person.updated_at,
+          }
+        : null;
 
     return {
       id: person.id,
@@ -150,21 +134,11 @@ function mergePeopleWithLeads(
       origin: person.origin || "manual",
       stagePoints: person.stage_points || 0,
       metadata: person.metadata || {},
-      lastInteractionPreview: person.last_interaction_preview || primaryLead?.preview || "",
+      lastInteractionPreview: person.last_interaction_preview || "",
       createdAt: person.created_at,
       updatedAt: person.updated_at,
-      lead: primaryLead
-        ? {
-            id: primaryLead.id,
-            status: primaryLead.status,
-            funnelId: primaryLead.funnel_id,
-            score: primaryLead.score,
-            preview: primaryLead.preview,
-            unread: primaryLead.unread,
-            updatedAt: primaryLead.updated_at,
-          }
-        : null,
-      leadCount: linkedLeads.length,
+      lead: leadSummary,
+      leadCount: leadSummary ? 1 : 0,
     };
   });
 }
@@ -176,21 +150,17 @@ export async function GET() {
   }
 
   const supabase = createAdminSupabaseClient();
-  const [{ data: people, error: peopleError }, { data: leads, error: leadsError }] = await Promise.all([
-    supabase.from("people").select("*").order("updated_at", { ascending: false }),
-    supabase
-      .from("leads")
-      .select("id, person_id, status, funnel_id, score, preview, unread, updated_at, created_at")
-      .not("person_id", "is", null)
-      .order("updated_at", { ascending: false }),
-  ]);
+  const { data: people, error: peopleError } = await supabase
+    .from("people")
+    .select("*")
+    .order("updated_at", { ascending: false });
 
-  if (peopleError || leadsError) {
-    console.error(peopleError || leadsError);
+  if (peopleError) {
+    console.error(peopleError);
     return NextResponse.json({ error: "Failed to load people" }, { status: 500 });
   }
 
-  const items = mergePeopleWithLeads(people || [], (leads || []) as LeadSummary[]);
+  const items = mapPeopleForResponse(people || []);
   const tags = Array.from(new Set(items.flatMap((item) => item.tags))).sort();
   const duplicateGroups = buildDuplicateGroups(items);
 

@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import Image from "next/image";
 
 export type PopupSelectOption = {
   value: string;
   label: string;
   description?: string;
+  avatarUrl?: string;
 };
 
 type PopupSelectProps = {
@@ -87,8 +89,19 @@ export default function PopupSelect({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className={selectedOption ? "text-novian-text" : "text-novian-text/45"}>
-          {selectedOption?.label || placeholder}
+        <span className={`flex min-w-0 items-center ${selectedOption?.avatarUrl ? "gap-3" : ""}`}>
+          {selectedOption?.avatarUrl ? (
+            <Image
+              src={selectedOption.avatarUrl}
+              alt={selectedOption.label}
+              width={30}
+              height={30}
+              className="h-7 w-7 shrink-0 rounded-full object-cover"
+            />
+          ) : null}
+          <span className={`truncate ${selectedOption ? "text-novian-text" : "text-novian-text/45"}`}>
+            {selectedOption?.label || placeholder}
+          </span>
         </span>
         <ChevronDown
           size={16}
@@ -117,13 +130,24 @@ export default function PopupSelect({
                 role="option"
                 aria-selected={isSelected}
               >
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{option.label}</span>
-                  {option.description ? (
-                    <span className="mt-0.5 block text-xs leading-relaxed text-novian-text/45">
-                      {option.description}
-                    </span>
+                <span className={`flex min-w-0 items-start ${option.avatarUrl ? "gap-3" : ""}`}>
+                  {option.avatarUrl ? (
+                    <Image
+                      src={option.avatarUrl}
+                      alt={option.label}
+                      width={34}
+                      height={34}
+                      className="mt-0.5 h-8 w-8 shrink-0 rounded-full object-cover"
+                    />
                   ) : null}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{option.label}</span>
+                    {option.description ? (
+                      <span className="mt-0.5 block text-xs leading-relaxed text-novian-text/45">
+                        {option.description}
+                      </span>
+                    ) : null}
+                  </span>
                 </span>
                 {isSelected ? <Check size={15} className="mt-0.5 shrink-0 text-novian-accent" /> : null}
               </button>

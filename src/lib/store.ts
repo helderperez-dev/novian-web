@@ -37,6 +37,7 @@ export interface Funnel {
 export interface Thread {
     id: string;
     leadId?: string;
+    agentId?: string;
     title: string;
     preview: string;
     time: string;
@@ -597,9 +598,9 @@ export async function createPropertyField(field: Omit<CustomField, "id">) {
 }
 
 export async function deleteLead(threadId: string) {
-    const { error } = await supabase.from('leads').delete().eq('id', threadId);
+    const { error } = await supabase.from('people').delete().eq('id', threadId);
     if (error) {
-        console.error('Error deleting lead from Supabase:', error);
+        console.error('Error deleting lead person from Supabase:', error);
         throw error;
     }
 

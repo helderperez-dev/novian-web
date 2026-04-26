@@ -196,8 +196,8 @@ export type Database = {
           custom_data: Json
           funnel_id: string | null
           last_message_at: string
-          lead_id: string | null
           phone: string | null
+          person_id: string | null
           preview: string | null
           score: number | null
           status: string | null
@@ -213,8 +213,8 @@ export type Database = {
           custom_data?: Json
           funnel_id?: string | null
           last_message_at?: string
-          lead_id?: string | null
           phone?: string | null
+          person_id?: string | null
           preview?: string | null
           score?: number | null
           status?: string | null
@@ -230,8 +230,8 @@ export type Database = {
           custom_data?: Json
           funnel_id?: string | null
           last_message_at?: string
-          lead_id?: string | null
           phone?: string | null
+          person_id?: string | null
           preview?: string | null
           score?: number | null
           status?: string | null
@@ -250,10 +250,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "chat_threads_lead_id_fkey"
-            columns: ["lead_id"]
+            foreignKeyName: "chat_threads_person_id_fkey"
+            columns: ["person_id"]
             isOneToOne: false
-            referencedRelation: "leads"
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
         ]
@@ -559,159 +559,6 @@ export type Database = {
         }
         Relationships: []
       }
-      lead_analytics_events: {
-        Row: {
-          created_at: string
-          current_url: string | null
-          event_category: string
-          event_channel: string | null
-          event_name: string
-          event_source: string
-          id: string
-          lead_id: string
-          pathname: string | null
-          payload: Json
-          person_id: string | null
-          posthog_distinct_id: string | null
-          property_city: string | null
-          property_id: string | null
-          property_price: number | null
-          property_slug: string | null
-          property_title: string | null
-          referrer: string | null
-          utm_campaign: string | null
-          utm_content: string | null
-          utm_medium: string | null
-          utm_source: string | null
-          utm_term: string | null
-        }
-        Insert: {
-          created_at?: string
-          current_url?: string | null
-          event_category?: string
-          event_channel?: string | null
-          event_name: string
-          event_source?: string
-          id?: string
-          lead_id: string
-          pathname?: string | null
-          payload?: Json
-          person_id?: string | null
-          posthog_distinct_id?: string | null
-          property_city?: string | null
-          property_id?: string | null
-          property_price?: number | null
-          property_slug?: string | null
-          property_title?: string | null
-          referrer?: string | null
-          utm_campaign?: string | null
-          utm_content?: string | null
-          utm_medium?: string | null
-          utm_source?: string | null
-          utm_term?: string | null
-        }
-        Update: {
-          created_at?: string
-          current_url?: string | null
-          event_category?: string
-          event_channel?: string | null
-          event_name?: string
-          event_source?: string
-          id?: string
-          lead_id?: string
-          pathname?: string | null
-          payload?: Json
-          person_id?: string | null
-          posthog_distinct_id?: string | null
-          property_city?: string | null
-          property_id?: string | null
-          property_price?: number | null
-          property_slug?: string | null
-          property_title?: string | null
-          referrer?: string | null
-          utm_campaign?: string | null
-          utm_content?: string | null
-          utm_medium?: string | null
-          utm_source?: string | null
-          utm_term?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lead_analytics_events_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_analytics_events_person_id_fkey"
-            columns: ["person_id"]
-            isOneToOne: false
-            referencedRelation: "people"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      leads: {
-        Row: {
-          created_at: string
-          custom_data: Json | null
-          funnel_id: string | null
-          id: string
-          name: string
-          phone: string
-          person_id: string | null
-          preview: string | null
-          score: number | null
-          status: string | null
-          unread: boolean | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          custom_data?: Json | null
-          funnel_id?: string | null
-          id?: string
-          name: string
-          phone: string
-          person_id?: string | null
-          preview?: string | null
-          score?: number | null
-          status?: string | null
-          unread?: boolean | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          custom_data?: Json | null
-          funnel_id?: string | null
-          id?: string
-          name?: string
-          phone?: string
-          person_id?: string | null
-          preview?: string | null
-          score?: number | null
-          status?: string | null
-          unread?: boolean | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "leads_funnel_id_fkey"
-            columns: ["funnel_id"]
-            isOneToOne: false
-            referencedRelation: "funnels"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "leads_person_id_fkey"
-            columns: ["person_id"]
-            isOneToOne: false
-            referencedRelation: "people"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       messages: {
         Row: {
           agent_id: string | null
@@ -719,7 +566,7 @@ export type Database = {
           created_at: string
           id: string
           is_system: boolean | null
-          lead_id: string
+          person_id: string | null
           role: string
         }
         Insert: {
@@ -728,7 +575,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_system?: boolean | null
-          lead_id: string
+          person_id?: string | null
           role: string
         }
         Update: {
@@ -737,7 +584,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_system?: boolean | null
-          lead_id?: string
+          person_id?: string | null
           role?: string
         }
         Relationships: [
@@ -749,10 +596,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "messages_lead_id_fkey"
-            columns: ["lead_id"]
+            foreignKeyName: "messages_person_id_fkey"
+            columns: ["person_id"]
             isOneToOne: false
-            referencedRelation: "leads"
+            referencedRelation: "people"
             referencedColumns: ["id"]
           },
         ]
@@ -810,6 +657,10 @@ export type Database = {
       }
       people: {
         Row: {
+          crm_funnel_id: string | null
+          crm_score: number
+          crm_status: string | null
+          crm_unread: boolean
           created_at: string
           email: string | null
           full_name: string
@@ -824,6 +675,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          crm_funnel_id?: string | null
+          crm_score?: number
+          crm_status?: string | null
+          crm_unread?: boolean
           created_at?: string
           email?: string | null
           full_name: string
@@ -838,6 +693,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          crm_funnel_id?: string | null
+          crm_score?: number
+          crm_status?: string | null
+          crm_unread?: boolean
           created_at?: string
           email?: string | null
           full_name?: string
@@ -851,37 +710,15 @@ export type Database = {
           tags?: string[]
           updated_at?: string
         }
-        Relationships: []
-      }
-      whatsapp_instances: {
-        Row: {
-          agent_id: string
-          connected_at: string | null
-          created_at: string
-          last_error: string | null
-          qr_data_uri: string | null
-          state: string
-          updated_at: string
-        }
-        Insert: {
-          agent_id: string
-          connected_at?: string | null
-          created_at?: string
-          last_error?: string | null
-          qr_data_uri?: string | null
-          state?: string
-          updated_at?: string
-        }
-        Update: {
-          agent_id?: string
-          connected_at?: string | null
-          created_at?: string
-          last_error?: string | null
-          qr_data_uri?: string | null
-          state?: string
-          updated_at?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "people_crm_funnel_id_fkey"
+            columns: ["crm_funnel_id"]
+            isOneToOne: false
+            referencedRelation: "funnels"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

@@ -186,10 +186,14 @@ export const searchLeadsTool = new DynamicStructuredTool({
     func: async ({ query }) => {
         try {
             const leadsSupabase = createAdminSupabaseClient();
-            let dbQuery = leadsSupabase.from("leads").select("id, name, status, phone, custom_data").order("created_at", { ascending: false });
+            let dbQuery = leadsSupabase
+                .from("people")
+                .select("id, full_name, primary_phone, crm_status, metadata")
+                .not("crm_status", "is", null)
+                .order("updated_at", { ascending: false });
 
             if (query) {
-                dbQuery = dbQuery.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
+                dbQuery = dbQuery.or(`full_name.ilike.%${query}%,primary_phone.ilike.%${query}%`);
             }
 
             const { data, error } = await dbQuery.limit(5);
@@ -204,12 +208,12 @@ export const searchLeadsTool = new DynamicStructuredTool({
 
             return JSON.stringify(data.map((lead) => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const customData = lead.custom_data as Record<string, any>;
+                const customData = lead.metadata as Record<string, any>;
                 return {
                     id: lead.id,
-                    name: lead.name,
-                    phone: lead.phone,
-                    status: lead.status,
+                    name: lead.full_name,
+                    phone: lead.primary_phone,
+                    status: lead.crm_status,
                     price: customData?.price,
                     city: customData?.city,
                     bedrooms: customData?.bedrooms

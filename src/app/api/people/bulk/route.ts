@@ -29,53 +29,38 @@ function uniqueStrings(values: string[]) {
 
 async function syncStageForPeople(personIds: string[], leadStatus: string, leadFunnelId?: string) {
   const supabase = createAdminSupabaseClient();
-  const { data: leads, error } = await supabase
-    .from("leads")
-    .select("id, person_id")
-    .in("person_id", personIds);
+  const { data: people, error } = await supabase
+    .from("people")
+    .select("*")
+    .in("id", personIds);
 
   if (error) {
     throw error;
   }
 
-  const linkedPersonIds = new Set((leads || []).map((lead) => lead.person_id).filter(Boolean));
-  for (const lead of leads || []) {
-    await updateLead(lead.id, {
-      status: leadStatus,
-      funnelId: leadFunnelId,
-    });
-  }
-
-  const peopleWithoutLead = personIds.filter((personId) => !linkedPersonIds.has(personId));
-  if (peopleWithoutLead.length === 0) {
-    return;
-  }
-
-  const { data: people, error: peopleError } = await supabase
-    .from("people")
-    .select("*")
-    .in("id", peopleWithoutLead);
-
-  if (peopleError) {
-    throw peopleError;
-  }
-
   for (const person of people || []) {
-    if (!person.primary_phone) continue;
-    await createLead({
-      personId: person.id,
-      phone: person.primary_phone,
-      title: person.full_name,
+    if (person.primary_phone) {
+      await createLead({
+        personId: person.id,
+        phone: person.primary_phone,
+        title: person.full_name,
+        status: leadStatus,
+        funnelId: leadFunnelId,
+        score: person.crm_score ?? person.stage_points,
+        customData: {
+          ...(person.metadata && typeof person.metadata === "object" && !Array.isArray(person.metadata)
+            ? person.metadata
+            : {}),
+          email: person.email,
+          source: person.origin,
+        },
+      });
+      continue;
+    }
+
+    await updateLead(person.id, {
       status: leadStatus,
       funnelId: leadFunnelId,
-      score: person.stage_points,
-      customData: {
-        ...(person.metadata && typeof person.metadata === "object" && !Array.isArray(person.metadata)
-          ? person.metadata
-          : {}),
-        email: person.email,
-        source: person.origin,
-      },
     });
   }
 }

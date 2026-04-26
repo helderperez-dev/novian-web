@@ -8,7 +8,7 @@ Novian is a premium, multi-tenant, multi-language Real Estate Agency platform de
 *   **AI Orchestration:** LangGraph.js running natively in Supabase Edge Functions.
 *   **LLM Routing:** OpenRouter (access to GPT-4o, Claude 3.5 Sonnet, etc.).
 *   **Frontend:** Next.js (React), TailwindCSS, custom UI components.
-*   **Messaging:** Baileys (Node.js WhatsApp Web API library) for direct, cost-free WhatsApp integration.
+*   **Messaging:** `n8n` workflows writing WhatsApp events directly into Supabase, plus Brevo for email automation.
 *   **Marketing:** Brevo (Email/Marketing Automation).
 *   **Data Acquisition:** Firecrawl (Scraping properties from OLX, Zap, etc.).
 *   **Multi-tenant:** Row-Level Security (RLS) via Supabase.
@@ -58,7 +58,7 @@ The AI architecture mirrors a real corporate structure. Management agents coordi
 
 **1. **Mariana Silva (AI SDR)**
 *   **Role:** First contact, conversation initiation, initial engagement.
-*   **System Function:** Sends the first WhatsApp message via Baileys when a lead is captured. Aims to get a response and establish a friendly connection.
+*   **System Function:** Starts the first WhatsApp outreach when a lead is captured, using message events persisted by `n8n` in Supabase.
 
 **2. Lucas Andrade (AI Client Qualification Specialist)**
 *   **Role:** Lead qualification, understanding profile/budget/needs, filtering opportunities.
@@ -78,7 +78,7 @@ The AI architecture mirrors a real corporate structure. Management agents coordi
 1.  **Multi-tenant CRM:** Manage Leads, Clients, and Funnels with dynamic custom fields.
 2.  **Centralized AI War Room (The Hub):** A real-time chat interface where humans and AI agents coexist. Agents communicate with each other autonomously, start threads, assign tasks, and make decisions 24/7 without requiring human triggers. Humans can drop in to monitor, give high-level commands, or answer questions when agents escalate a complex decision.
 3.  **Property Management & Scraping:** Internal listings database + Firecrawl integration to auto-import from external sites.
-4.  **Communication Hub:** Centralized WhatsApp (Evolution API) and Email (Brevo) inbox.
+4.  **Communication Hub:** Centralized WhatsApp and Email (Brevo) inbox backed by database events.
 5.  **Internal Landing Page Builder:** Generate lead-capture pages dynamically.
 6.  **Financial & Reporting Module:** Custom dashboards for real-time visibility and contract management (PDF generation).
 7.  **AI Image Enhancer:** Automated upscaling/enhancement of property photos upon upload.

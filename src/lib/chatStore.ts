@@ -2,11 +2,10 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
 import { getLeadNotesByVisibility } from "@/lib/leadNotes";
-import { recordLeadAnalyticsEvent } from "@/lib/leadAnalytics";
-import { ensurePersonForLead, syncPersonFromLead, unlinkPersonFromLead } from "@/lib/people";
+import { ensurePersonForLead, getPersonByPhone, getPersonCrm, getPersonMetadata, isChatEligiblePerson, isOpportunityStatus, updatePersonLeadState, deleteLeadPerson } from "./people";
 import type { ChatMessage, Thread } from "@/lib/store";
 
-type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
+type PersonRow = Database["public"]["Tables"]["people"]["Row"];
 type ChatThreadRow = Database["public"]["Tables"]["chat_threads"]["Row"];
 type ChatMessageRow = Database["public"]["Tables"]["chat_messages"]["Row"];
 
@@ -93,43 +92,6 @@ function channelDefaults(threadId: string) {
   };
 }
 
-function isOpportunityStatus(status: string | null | undefined) {
-  return (status || "").trim().toLowerCase() === "oportunidades (web)";
-}
-
-function getSourceValue(customData: LeadRow["custom_data"] | ChatThreadRow["custom_data"] | null | undefined) {
-  if (!customData || typeof customData !== "object" || Array.isArray(customData)) {
-    return null;
-  }
-
-  const source = (customData as Record<string, unknown>).source;
-  return typeof source === "string" ? source : null;
-}
-
-function getWhatsAppJidValue(customData: LeadRow["custom_data"] | ChatThreadRow["custom_data"] | null | undefined) {
-  if (!customData || typeof customData !== "object" || Array.isArray(customData)) {
-    return null;
-  }
-
-  const jid = (customData as Record<string, unknown>).whatsapp_jid;
-  return typeof jid === "string" ? jid : null;
-}
-
-function isChatEligibleLead(lead: Pick<LeadRow, "status" | "custom_data"> | null | undefined) {
-  if (!lead) {
-    return false;
-  }
-
-  if (isOpportunityStatus(lead.status)) {
-    return false;
-  }
-
-  const source = getSourceValue(lead.custom_data);
-  const whatsappJid = getWhatsAppJidValue(lead.custom_data);
-
-  return source === "WhatsApp" || !!whatsappJid;
-}
-
 function isChatVisibleThread(row: ChatThreadRow) {
   if (row.thread_kind === "channel") {
     return true;
@@ -139,10 +101,14 @@ function isChatVisibleThread(row: ChatThreadRow) {
     return false;
   }
 
-  const source = getSourceValue(row.custom_data);
-  const whatsappJid = getWhatsAppJidValue(row.custom_data);
+  const customData =
+    row.custom_data && typeof row.custom_data === "object" && !Array.isArray(row.custom_data)
+      ? (row.custom_data as Record<string, unknown>)
+      : {};
+  const source = typeof customData.source === "string" ? customData.source : null;
+  const whatsappJid = typeof customData.whatsapp_jid === "string" ? customData.whatsapp_jid : null;
 
-  return source === "WhatsApp" || !!whatsappJid;
+  return source === "WhatsApp" || Boolean(whatsappJid);
 }
 
 function mapThread(row: ChatThreadRow): Thread {
@@ -150,7 +116,8 @@ function mapThread(row: ChatThreadRow): Thread {
 
   return {
     id: row.thread_id,
-    leadId: row.lead_id || undefined,
+    leadId: row.person_id || undefined,
+    agentId: getThreadAgentId(row) || undefined,
     title: row.title,
     preview: row.preview || "",
     time: formatClock(row.last_message_at),
@@ -174,6 +141,33 @@ function mapMessage(row: ChatMessageRow): ChatMessage {
     time: formatClock(row.created_at),
     isSystem: row.is_system,
   };
+}
+
+function normalizeAgentAssignmentId(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.split("/")[0] || null;
+}
+
+function getThreadAgentId(row: ChatThreadRow): string | null {
+  const customData =
+    row.custom_data && typeof row.custom_data === "object" && !Array.isArray(row.custom_data)
+      ? (row.custom_data as Record<string, unknown>)
+      : {};
+  const customAgentId = normalizeAgentAssignmentId(typeof customData.agent_id === "string" ? customData.agent_id : null);
+  if (customAgentId) {
+    return customAgentId;
+  }
+
+  const firstAgentId = Array.isArray(row.agent_ids) ? row.agent_ids.find((value) => typeof value === "string" && value.trim()) : null;
+  return normalizeAgentAssignmentId(firstAgentId);
 }
 
 async function getDefaultLeadFunnel() {
@@ -202,7 +196,7 @@ async function getDefaultLeadFunnel() {
   };
 }
 
-async function getLeadByThreadId(threadId: string) {
+async function getPersonByThreadId(threadId: string) {
   if (isChannelThread(threadId)) {
     return null;
   }
@@ -212,67 +206,46 @@ async function getLeadByThreadId(threadId: string) {
     return null;
   }
 
-  const supabase = createAdminSupabaseClient();
-  const { data, error } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("phone", phone)
-    .maybeSingle();
-
-  if (error) {
-    throw error;
-  }
-
-  return isChatEligibleLead(data) ? data : null;
+  const person = await getPersonByPhone(phone);
+  return isChatEligiblePerson(person) ? person : null;
 }
 
 export async function getLeadInfoForThread(threadId: string) {
-  const lead = await getLeadByThreadId(threadId);
-  if (!lead) {
+  const person = await getPersonByThreadId(threadId);
+  if (!person) {
     return {};
   }
 
-  const customData =
-    lead.custom_data && typeof lead.custom_data === "object" && !Array.isArray(lead.custom_data)
-      ? (lead.custom_data as Record<string, unknown>)
-      : null;
-
-  const preferences =
-    customData
-      ? Object.fromEntries(
-          Object.entries(customData).filter(
-            ([key]) => !key.startsWith("whatsapp_") && key !== "lead_notes",
-          ),
-        )
-      : undefined;
+  const customData = getPersonMetadata(person);
+  const preferences = Object.fromEntries(
+    Object.entries(customData).filter(([key]) => !key.startsWith("whatsapp_") && key !== "lead_notes"),
+  );
 
   const sharedNotes = getLeadNotesByVisibility(
-    lead.custom_data as Record<string, unknown> | null | undefined,
+    person.metadata as Record<string, unknown> | null | undefined,
     "ai",
   );
 
-  const whatsappProfile = customData
-    ? Object.fromEntries(
-        Object.entries(customData).filter(
-          ([key]) =>
-            key.startsWith("whatsapp_") &&
-            key !== "whatsapp_jid" &&
-            key !== "whatsapp_thread_id" &&
-            key !== "whatsapp_last_message_preview",
-        ),
-      )
-    : undefined;
+  const whatsappProfile = Object.fromEntries(
+    Object.entries(customData).filter(
+      ([key]) =>
+        key.startsWith("whatsapp_") &&
+        key !== "whatsapp_jid" &&
+        key !== "whatsapp_thread_id" &&
+        key !== "whatsapp_last_message_preview",
+    ),
+  );
 
   return {
-    id: lead.id,
-    name: lead.name || undefined,
-    phone: lead.phone || undefined,
-    status: lead.status || undefined,
+    id: person.id,
+    name: person.full_name || undefined,
+    phone: person.primary_phone || undefined,
+    status: person.crm_status || undefined,
     preferences,
     notes: sharedNotes.map((note) => note.content),
-    source: getSourceValue(lead.custom_data) || undefined,
-    assignedAgentId: customData && typeof customData.agent_id === "string" ? customData.agent_id : undefined,
-    whatsappProfile: whatsappProfile && Object.keys(whatsappProfile).length > 0 ? whatsappProfile : undefined,
+    source: typeof customData.source === "string" ? customData.source : undefined,
+    assignedAgentId: typeof customData.agent_id === "string" ? customData.agent_id : undefined,
+    whatsappProfile: Object.keys(whatsappProfile).length > 0 ? whatsappProfile : undefined,
   };
 }
 
@@ -293,27 +266,29 @@ async function ensureThreadRecord(threadId: string, seed?: Partial<Thread>) {
     return existing;
   }
 
-  const lead = await getLeadByThreadId(normalizedThreadId);
+  const person = await getPersonByThreadId(normalizedThreadId);
+  const crm = getPersonCrm(person);
   const defaults = isChannelThread(normalizedThreadId) ? channelDefaults(normalizedThreadId) : null;
-  const phone = seed?.phone || lead?.phone || extractPhoneFromThreadId(normalizedThreadId);
+  const phone = seed?.phone || person?.primary_phone || extractPhoneFromThreadId(normalizedThreadId);
 
   const insertPayload: Database["public"]["Tables"]["chat_threads"]["Insert"] = {
     thread_id: normalizedThreadId,
     title:
       seed?.title ||
-      (lead?.name && lead.name !== "Lead" ? lead.name : undefined) ||
+      (person?.full_name ? person.full_name : undefined) ||
       defaults?.title ||
       `Lead: ${phone || threadId}`,
-    preview: seed?.preview || lead?.preview || defaults?.preview || "",
+    preview: seed?.preview || person?.last_interaction_preview || defaults?.preview || "",
     phone,
-    unread: seed?.unread ?? lead?.unread ?? false,
+    unread: seed?.unread ?? crm?.unread ?? false,
     agent_ids: seed?.agentIds || [],
-    status: seed?.status || lead?.status || defaults?.status || null,
-    score: seed?.score ?? lead?.score ?? 0,
-    funnel_id: seed?.funnelId || lead?.funnel_id || null,
-    custom_data: (seed?.customData || lead?.custom_data || {}) as Database["public"]["Tables"]["chat_threads"]["Insert"]["custom_data"],
+    status: seed?.status || crm?.status || defaults?.status || null,
+    score: seed?.score ?? crm?.score ?? 0,
+    funnel_id: seed?.funnelId || crm?.funnelId || null,
+    custom_data:
+      (seed?.customData || getPersonMetadata(person || null) || {}) as Database["public"]["Tables"]["chat_threads"]["Insert"]["custom_data"],
     thread_kind: isChannelThread(normalizedThreadId) ? "channel" : "lead",
-    lead_id: lead?.id || null,
+    person_id: person?.id || null,
   };
 
   const { data: created, error: createError } = await supabase
@@ -329,11 +304,15 @@ async function ensureThreadRecord(threadId: string, seed?: Partial<Thread>) {
   return created;
 }
 
-export async function syncLeadThreadFromLead(lead: LeadRow) {
+export async function syncLeadThreadFromLead(person: PersonRow) {
   const supabase = createAdminSupabaseClient();
-  const threadId = `${lead.phone}@s.whatsapp.net`;
+  const threadId = person.primary_phone ? `${person.primary_phone}@s.whatsapp.net` : null;
 
-  if (!isChatEligibleLead(lead)) {
+  if (!threadId) {
+    return;
+  }
+
+  if (!isChatEligiblePerson(person)) {
     const { error: deleteError } = await supabase.from("chat_threads").delete().eq("thread_id", threadId);
     if (deleteError) {
       throw deleteError;
@@ -341,28 +320,32 @@ export async function syncLeadThreadFromLead(lead: LeadRow) {
     return;
   }
 
-  const { error } = await supabase.from("chat_threads").upsert({
-    thread_id: threadId,
-    title: lead.name && lead.name !== "Lead" ? lead.name : `Lead: ${lead.phone}`,
-    preview: lead.preview || "Sem mensagens",
-    phone: lead.phone,
-    unread: lead.unread ?? false,
-    status: lead.status,
-    score: lead.score ?? 0,
-    funnel_id: lead.funnel_id,
-    custom_data: (lead.custom_data || {}) as Database["public"]["Tables"]["chat_threads"]["Insert"]["custom_data"],
-    thread_kind: "lead",
-    lead_id: lead.id,
-    last_message_at: lead.updated_at || lead.created_at,
-    updated_at: lead.updated_at || lead.created_at,
-  }, { onConflict: "thread_id" });
+  const crm = getPersonCrm(person);
+  const { error } = await supabase.from("chat_threads").upsert(
+    {
+      thread_id: threadId,
+      title: person.full_name || `Lead: ${person.primary_phone}`,
+      preview: person.last_interaction_preview || "Sem mensagens",
+      phone: person.primary_phone,
+      unread: crm?.unread ?? false,
+      status: crm?.status ?? null,
+      score: crm?.score ?? 0,
+      funnel_id: crm?.funnelId ?? null,
+      custom_data: (getPersonMetadata(person) || {}) as Database["public"]["Tables"]["chat_threads"]["Insert"]["custom_data"],
+      thread_kind: "lead",
+      person_id: person.id,
+      last_message_at: person.updated_at || person.created_at,
+      updated_at: person.updated_at || person.created_at,
+    },
+    { onConflict: "thread_id" },
+  );
 
   if (error) {
     throw error;
   }
 }
 
-export async function getChatThreads() {
+export async function getChatThreads(agentId?: string | null) {
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase
     .from("chat_threads")
@@ -373,7 +356,18 @@ export async function getChatThreads() {
     throw error;
   }
 
-  return (data || []).filter(isChatVisibleThread).map(mapThread);
+  const normalizedAgentId = normalizeAgentAssignmentId(agentId) || "";
+
+  return (data || [])
+    .filter(isChatVisibleThread)
+    .filter((row) => {
+      if (!normalizedAgentId) {
+        return true;
+      }
+
+      return getThreadAgentId(row) === normalizedAgentId;
+    })
+    .map(mapThread);
 }
 
 export async function getThreadMessages(threadId: string) {
@@ -408,67 +402,28 @@ export async function getRecentMessages(limit = 50) {
 }
 
 export async function createLead(data: Partial<Thread> & { phone: string; title?: string; personId?: string | null }) {
-  const supabase = createAdminSupabaseClient();
   const defaultLeadFunnel = await getDefaultLeadFunnel();
-  const funnelId =
-    data.funnelId === "default" || !data.funnelId
-      ? defaultLeadFunnel.id
-      : data.funnelId;
+  const funnelId = data.funnelId === "default" || !data.funnelId ? defaultLeadFunnel.id : data.funnelId;
   const normalizedStatus =
-    !data.status || data.status === "novo"
-      ? defaultLeadFunnel.firstStageTitle || "Novo Lead"
-      : data.status;
+    !data.status || data.status === "novo" ? defaultLeadFunnel.firstStageTitle || "Novo Lead" : data.status;
   const metadata =
-    data.customData && typeof data.customData === "object" && !Array.isArray(data.customData)
-      ? data.customData
-      : {};
+    data.customData && typeof data.customData === "object" && !Array.isArray(data.customData) ? data.customData : {};
+
   const person = await ensurePersonForLead({
+    personId: data.personId,
     name: data.title,
     phone: data.phone,
-    personId: data.personId,
     email: typeof metadata.email === "string" ? metadata.email : null,
     status: normalizedStatus,
     funnelId,
     score: data.score,
+    unread: false,
     preview: "Lead criado manualmente",
-    customData: metadata as Database["public"]["Tables"]["leads"]["Insert"]["custom_data"],
+    customData: metadata,
   });
 
-  const insertPayload: Database["public"]["Tables"]["leads"]["Insert"] = {
-    phone: data.phone,
-    name: data.title || `Lead: ${data.phone}`,
-    person_id: person.id,
-    preview: "Lead criado manualmente",
-    status: normalizedStatus,
-    unread: false,
-    funnel_id: funnelId,
-    score: data.score || 0,
-    custom_data: metadata as Database["public"]["Tables"]["leads"]["Insert"]["custom_data"],
-  };
-
-  const { data: lead, error } = await supabase
-    .from("leads")
-    .insert(insertPayload)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  try {
-    await recordLeadAnalyticsEvent({
-      leadId: lead.id,
-      personId: lead.person_id,
-      customData: lead.custom_data,
-    });
-  } catch (analyticsError) {
-    console.error("Failed to persist lead analytics event:", analyticsError);
-  }
-
-  await syncPersonFromLead(lead);
-  await syncLeadThreadFromLead(lead);
-  return mapThread(await ensureThreadRecord(`${lead.phone}@s.whatsapp.net`));
+  await syncLeadThreadFromLead(person);
+  return mapThread(await ensureThreadRecord(`${person.primary_phone}@s.whatsapp.net`));
 }
 
 export async function updateLeadStatus(leadId: string, status: string) {
@@ -476,70 +431,55 @@ export async function updateLeadStatus(leadId: string, status: string) {
 }
 
 export async function updateLead(leadId: string, data: Partial<Thread>) {
+  const currentPerson = await getPersonByPhone(leadId.includes("@") ? leadId : leadId);
   const supabase = createAdminSupabaseClient();
-  const { data: currentLead, error: currentLeadError } = await supabase
-    .from("leads")
-    .select("*")
-    .eq("id", leadId)
-    .single();
+  const person =
+    currentPerson ||
+    (await supabase.from("people").select("*").eq("id", leadId).maybeSingle().then(({ data: item, error }) => {
+      if (error) throw error;
+      return item;
+    }));
 
-  if (currentLeadError) {
-    throw currentLeadError;
+  if (!person) {
+    throw new Error("Person not found");
   }
 
-  const updatePayload: Database["public"]["Tables"]["leads"]["Update"] = {};
+  const updatedPerson = await updatePersonLeadState(person.id, {
+    title: data.title,
+    phone: data.phone,
+    email: undefined,
+    status: data.status,
+    funnelId: data.funnelId === "default" ? null : data.funnelId,
+    score: data.score,
+    unread: data.unread,
+    preview: data.preview,
+    customData: data.customData,
+  });
 
-  if (data.title !== undefined) updatePayload.name = data.title;
-  if (data.phone !== undefined) updatePayload.phone = data.phone;
-  if (data.preview !== undefined) updatePayload.preview = data.preview;
-  if (data.status !== undefined) updatePayload.status = data.status;
-  if (data.unread !== undefined) updatePayload.unread = data.unread;
-  if (data.score !== undefined) updatePayload.score = data.score;
-  if (data.funnelId !== undefined && data.funnelId !== "default") updatePayload.funnel_id = data.funnelId;
-  if (data.customData !== undefined) {
-    updatePayload.custom_data = data.customData as Database["public"]["Tables"]["leads"]["Update"]["custom_data"];
+  if (person.primary_phone && person.primary_phone !== updatedPerson.primary_phone) {
+    await supabase.from("chat_threads").delete().eq("thread_id", `${person.primary_phone}@s.whatsapp.net`);
   }
 
-  const { data: updatedLead, error } = await supabase
-    .from("leads")
-    .update(updatePayload)
-    .eq("id", leadId)
-    .select("*")
-    .single();
-
-  if (error) {
-    throw error;
-  }
-
-  if (currentLead.phone !== updatedLead.phone && currentLead.phone) {
-    await supabase.from("chat_threads").delete().eq("thread_id", `${currentLead.phone}@s.whatsapp.net`);
-  }
-
-  await syncPersonFromLead(updatedLead);
-  await syncLeadThreadFromLead(updatedLead);
-  return updatedLead;
+  await syncLeadThreadFromLead(updatedPerson);
+  return updatedPerson;
 }
 
 export async function deleteLead(leadId: string) {
   const supabase = createAdminSupabaseClient();
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id, phone, person_id")
-    .eq("id", leadId)
-    .maybeSingle();
-
-  const { error } = await supabase.from("leads").delete().eq("id", leadId);
+  const { data: person, error } = await supabase.from("people").select("*").eq("id", leadId).maybeSingle();
   if (error) {
     throw error;
   }
 
-  if (lead?.phone) {
-    await supabase.from("chat_threads").delete().eq("thread_id", `${lead.phone}@s.whatsapp.net`);
+  if (!person) {
+    return;
   }
 
-  if (lead) {
-    await unlinkPersonFromLead(lead);
+  if (person.primary_phone) {
+    await supabase.from("chat_threads").delete().eq("thread_id", `${person.primary_phone}@s.whatsapp.net`);
   }
+
+  await deleteLeadPerson(person.id);
 }
 
 export async function addMessage(msg: Omit<ChatMessage, "id" | "time">) {
@@ -547,9 +487,10 @@ export async function addMessage(msg: Omit<ChatMessage, "id" | "time">) {
   const nowIso = new Date().toISOString();
   const normalizedThreadId = normalizeChatThreadId(msg.threadId);
   const thread = await ensureThreadRecord(normalizedThreadId);
-  const nextAgentIds = !thread.agent_ids.includes(msg.agent) && !msg.isSystem && msg.role !== "Client"
-    ? [...thread.agent_ids, msg.agent]
-    : thread.agent_ids;
+  const nextAgentIds =
+    !thread.agent_ids.includes(msg.agent) && !msg.isSystem && msg.role !== "Client"
+      ? [...thread.agent_ids, msg.agent]
+      : thread.agent_ids;
   const titleShouldUpdate =
     msg.role === "Client" &&
     msg.agent !== "Lead" &&
@@ -590,37 +531,13 @@ export async function addMessage(msg: Omit<ChatMessage, "id" | "time">) {
     throw threadError;
   }
 
-  if (thread.lead_id) {
-    const leadUpdate: Database["public"]["Tables"]["leads"]["Update"] = {
+  if (thread.person_id) {
+    const refreshedPerson = await updatePersonLeadState(thread.person_id, {
+      title: titleShouldUpdate ? msg.agent : undefined,
       preview: msg.content,
-      unread: msg.role === "Client" ? true : false,
-      updated_at: nowIso,
-    };
-
-    if (titleShouldUpdate) {
-      leadUpdate.name = msg.agent;
-    }
-
-    const { error: leadError } = await supabase
-      .from("leads")
-      .update(leadUpdate)
-      .eq("id", thread.lead_id);
-
-    if (leadError) {
-      throw leadError;
-    }
-
-    const { data: refreshedLead, error: refreshedLeadError } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("id", thread.lead_id)
-      .single();
-
-    if (refreshedLeadError) {
-      throw refreshedLeadError;
-    }
-
-    await syncPersonFromLead(refreshedLead);
+      unread: msg.role === "Client",
+    });
+    await syncLeadThreadFromLead(refreshedPerson);
   }
 
   return mapMessage(insertedMessage);
@@ -631,7 +548,7 @@ export async function markThreadRead(threadId: string) {
   const supabase = createAdminSupabaseClient();
   const { data: thread, error } = await supabase
     .from("chat_threads")
-    .select("lead_id")
+    .select("person_id")
     .eq("thread_id", normalizedThreadId)
     .maybeSingle();
 
@@ -641,8 +558,9 @@ export async function markThreadRead(threadId: string) {
 
   await supabase.from("chat_threads").update({ unread: false }).eq("thread_id", normalizedThreadId);
 
-  if (thread?.lead_id) {
-    await supabase.from("leads").update({ unread: false }).eq("id", thread.lead_id);
+  if (thread?.person_id) {
+    const refreshedPerson = await updatePersonLeadState(thread.person_id, { unread: false });
+    await syncLeadThreadFromLead(refreshedPerson);
   }
 }
 

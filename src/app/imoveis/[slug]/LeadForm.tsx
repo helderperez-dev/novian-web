@@ -69,13 +69,17 @@ export default function LeadForm({
         submitted_phone: formData.phone,
       });
 
-      const res = await fetch("/api/leads", {
+      const res = await fetch("/api/people", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: formData.phone,
-          name: formData.name,
-          customData: {
+          fullName: formData.name,
+          primaryPhone: formData.phone,
+          email: formData.email,
+          roles: ["lead"],
+          origin: "Landing Page Imovel",
+          createLead: true,
+          metadata: {
             email: formData.email,
             source: "Landing Page Imóvel",
             property: propertyTitle,
@@ -91,7 +95,7 @@ export default function LeadForm({
               capturedAt: new Date().toISOString(),
               ...getBrowserContextProps(),
             },
-          }
+          },
         }),
       });
 

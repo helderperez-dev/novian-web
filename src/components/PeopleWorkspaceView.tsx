@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Check,
@@ -457,6 +458,14 @@ function PersonDrawer({
   }, [open, person, customFields, funnels, mode]);
 
   const selectedFunnel = funnels.find((item) => item.id === leadFunnelId) || funnels[0] || null;
+  const avatarUrl = person ? getPersonAvatarUrl(person) : undefined;
+  const avatarLabel = (fullName || person?.fullName || "Pessoa")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("")
+    .slice(0, 2) || "P";
 
   useEffect(() => {
     if (!selectedFunnel) return;
@@ -523,16 +532,42 @@ function PersonDrawer({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-novian-muted/50 bg-novian-primary/30 px-6 py-5">
-          <div className="text-xs uppercase tracking-[0.18em] text-novian-text/45">
-            {person ? "Editar Contato" : mode === "crm" ? "Novo Contato CRM" : "Novo Contato"}
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-novian-text">
-            {person ? person.fullName : mode === "crm" ? "Adicionar contato ao relacionamento comercial" : "Cadastrar contato"}
+          <div className="flex items-start gap-4">
+            {person ? (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[24px] border border-novian-muted/40 bg-novian-primary/40 text-xl font-semibold text-novian-accent">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarUrl}
+                    alt={fullName || person.fullName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  avatarLabel
+                )}
+              </div>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="text-xs uppercase tracking-[0.18em] text-novian-text/45">
+                {person ? "Editar Contato" : mode === "crm" ? "Novo Contato CRM" : "Novo Contato"}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-novian-text">
+                {person ? person.fullName : mode === "crm" ? "Adicionar contato ao relacionamento comercial" : "Cadastrar contato"}
+              </div>
+              {person ? (
+                <>
+                  <div className="mt-2 truncate text-sm text-novian-text/55">
+                    {primaryPhone || person.primaryPhone || email || person.email || "Sem contato principal"}
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
 
         <form id="person-drawer-form" onSubmit={submit} className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mb-6 flex flex-wrap gap-2 border-b border-novian-muted/35 pb-4">
+          <div className="mb-6 border-b border-novian-muted/35">
+            <div className="flex items-center gap-6 overflow-x-auto">
             {[
               { value: "profile" as const, label: "Perfil" },
               { value: "crm" as const, label: "CRM" },
@@ -545,16 +580,17 @@ function PersonDrawer({
                   type="button"
                   disabled={tab.disabled}
                   onClick={() => setActiveTab(tab.value)}
-                  className={`rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition ${
+                  className={`relative border-b-2 px-1 py-3 text-sm font-medium uppercase tracking-[0.14em] whitespace-nowrap transition-colors ${
                     active
-                      ? "bg-novian-accent text-novian-primary"
-                      : "border border-novian-muted/40 bg-novian-primary/25 text-novian-text/60 hover:text-novian-text"
+                      ? "border-novian-accent text-novian-text"
+                      : "border-transparent text-novian-text/50 hover:text-novian-text/80"
                   } disabled:cursor-not-allowed disabled:opacity-45`}
                 >
                   {tab.label}
                 </button>
               );
             })}
+            </div>
           </div>
           <div className="space-y-6">
             {activeTab === "profile" ? (
@@ -788,6 +824,9 @@ function PersonDrawer({
 }
 
 export default function PeopleWorkspaceView({ mode = "people" }: { mode?: WorkspaceMode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [people, setPeople] = useState<PersonItem[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
@@ -888,6 +927,25 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const personId = searchParams.get("personId");
+    if (!personId || loading) {
+      return;
+    }
+
+    const matchedPerson = people.find((person) => person.id === personId) || null;
+    if (matchedPerson) {
+      setSelectedPerson(matchedPerson);
+      setDrawerOpen(true);
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("personId");
+    const nextQuery = nextParams.toString();
+
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [loading, pathname, people, router, searchParams]);
 
   const bulkLeadFunnel = funnels.find((funnel) => funnel.id === bulkLeadFunnelId) || funnels[0] || null;
   const activeFunnel = funnels.find((funnel) => funnel.id === activeFunnelId) || funnels[0] || null;

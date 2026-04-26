@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, Users, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, QrCode, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type } from "lucide-react";
+import { ArrowRight, MessageSquare, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
@@ -153,25 +153,6 @@ type LeadDetailItem = {
 };
 
 type LeadContextTab = "overview" | "notes";
-type LiveWhatsAppProfilePayload = {
-  jid?: string | null;
-  phone?: string | null;
-  displayName?: string | null;
-  pushName?: string | null;
-  profilePictureUrl?: string | null;
-  about?: string | null;
-  businessDescription?: string | null;
-  businessCategory?: string | null;
-  businessEmail?: string | null;
-  businessWebsite?: string | null;
-  businessAddress?: string | null;
-};
-type LiveThreadWhatsAppProfile = {
-  threadId: string;
-  phone: string | null;
-  profile: LiveWhatsAppProfilePayload | null;
-};
-
 const getLeadPhoneValue = (thread: Pick<Thread, "phone" | "id">) => {
   const phone = thread.phone?.trim();
   if (phone) {
@@ -247,77 +228,6 @@ const getLeadCustomEntries = (customData?: Thread["customData"]) => {
   return Object.entries(customData).filter(
     ([key]) => !key.startsWith("whatsapp_") && key !== LEAD_NOTES_KEY,
   );
-};
-
-const mergeThreadCustomDataWithLiveProfile = (
-  customData: Thread["customData"] | undefined,
-  liveProfile: LiveThreadWhatsAppProfile | null,
-) => {
-  const merged: Record<string, unknown> = { ...(customData || {}) };
-  const profile = liveProfile?.profile;
-
-  if (!profile) {
-    return merged;
-  }
-
-  if (typeof profile.jid === "string" && profile.jid) {
-    merged.whatsapp_jid = profile.jid;
-  }
-  if (typeof profile.phone === "string" && profile.phone) {
-    merged.whatsapp_phone = profile.phone;
-  }
-  if (typeof profile.displayName === "string" && profile.displayName) {
-    merged.whatsapp_profile_name = profile.displayName;
-  }
-  if (typeof profile.pushName === "string" && profile.pushName) {
-    merged.whatsapp_push_name = profile.pushName;
-  }
-  if (typeof profile.profilePictureUrl === "string" && profile.profilePictureUrl) {
-    merged.whatsapp_profile_picture_url = profile.profilePictureUrl;
-  }
-  if (typeof profile.about === "string" && profile.about) {
-    merged.whatsapp_about = profile.about;
-  }
-  if (typeof profile.businessDescription === "string" && profile.businessDescription) {
-    merged.whatsapp_business_description = profile.businessDescription;
-  }
-  if (typeof profile.businessCategory === "string" && profile.businessCategory) {
-    merged.whatsapp_business_category = profile.businessCategory;
-  }
-  if (typeof profile.businessEmail === "string" && profile.businessEmail) {
-    merged.whatsapp_business_email = profile.businessEmail;
-  }
-  if (typeof profile.businessWebsite === "string" && profile.businessWebsite) {
-    merged.whatsapp_business_website = profile.businessWebsite;
-  }
-  if (typeof profile.businessAddress === "string" && profile.businessAddress) {
-    merged.whatsapp_business_address = profile.businessAddress;
-  }
-
-  return merged;
-};
-
-const getThreadDisplayTitle = (thread: Thread, liveProfile: LiveThreadWhatsAppProfile | null) => {
-  const profile = liveProfile?.profile;
-
-  if (typeof profile?.displayName === "string" && profile.displayName.trim()) {
-    return profile.displayName.trim();
-  }
-
-  if (typeof profile?.pushName === "string" && profile.pushName.trim()) {
-    return profile.pushName.trim();
-  }
-
-  return thread.title;
-};
-
-const getThreadDisplayPhone = (thread: Thread, liveProfile: LiveThreadWhatsAppProfile | null) => {
-  const livePhone =
-    (typeof liveProfile?.profile?.phone === "string" && liveProfile.profile.phone.trim()) ||
-    (typeof liveProfile?.phone === "string" && liveProfile.phone.trim()) ||
-    "";
-
-  return livePhone || getLeadPhoneValue(thread);
 };
 
 const formatNoteTimestamp = (value: string) =>
@@ -409,11 +319,11 @@ function LeadNotesPanel({
   };
 
   const persistNotes = async (nextNotes: LeadNote[]) => {
-    await fetch(`/api/leads/${encodeURIComponent(leadId ?? "")}`, {
+    await fetch(`/api/people/${encodeURIComponent(leadId ?? "")}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        customData: upsertLeadNotes(customData as Record<string, unknown> | null | undefined, nextNotes),
+        metadata: upsertLeadNotes(customData as Record<string, unknown> | null | undefined, nextNotes),
       }),
     });
   };
@@ -1051,24 +961,26 @@ export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: 
 
       if (initialData) {
         // Edit mode
-        await fetch(`/api/leads/${encodeURIComponent(initialData.id)}`, {
+        await fetch(`/api/people/${encodeURIComponent(initialData.id)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: formData.name,
-            phone: formData.phone,
-            customData,
+            fullName: formData.name,
+            primaryPhone: formData.phone,
+            metadata: customData,
           }),
         });
       } else {
         // Create mode
-        await fetch("/api/leads", {
+        await fetch("/api/people", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: formData.name,
-            phone: formData.phone,
-            customData,
+            fullName: formData.name,
+            primaryPhone: formData.phone,
+            roles: ["lead"],
+            createLead: true,
+            metadata: customData,
           }),
         });
       }
@@ -1398,9 +1310,38 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
 
   const fetchLeads = async () => {
     try {
-      const res = await fetch("/api/leads", { cache: 'no-store' });
+      const res = await fetch("/api/people", { cache: 'no-store' });
       const data = await res.json();
-      const nextLeads = Array.isArray(data.leads) ? data.leads : [];
+      const nextLeads = Array.isArray(data.people)
+        ? data.people
+            .filter((person: Record<string, unknown>) => {
+              const lead = person.lead as Record<string, unknown> | null;
+              return Boolean(lead);
+            })
+            .map((person: Record<string, unknown>) => {
+              const lead = (person.lead || {}) as Record<string, unknown>;
+              return {
+                id: String(person.id),
+                leadId: String(person.id),
+                title: String(person.fullName || person.primaryPhone || "Lead"),
+                phone: String(person.primaryPhone || ""),
+                preview: String(lead.preview || person.lastInteractionPreview || "Sem mensagens"),
+                status: typeof lead.status === "string" ? lead.status : undefined,
+                unread: Boolean(lead.unread),
+                score: typeof lead.score === "number" ? lead.score : 0,
+                funnelId: typeof lead.funnelId === "string" ? lead.funnelId : undefined,
+                customData:
+                  person.metadata && typeof person.metadata === "object" && !Array.isArray(person.metadata)
+                    ? (person.metadata as Record<string, unknown>)
+                    : {},
+                time: new Date(String(person.updatedAt || new Date().toISOString())).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+                agentIds: [],
+              } satisfies Thread;
+            })
+        : [];
       setThreads(nextLeads);
       setSelectedLead((currentLead) => {
         if (!currentLead) {
@@ -1547,10 +1488,10 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
 
     // API Call to save new status
     try {
-      await fetch(`/api/leads/${encodeURIComponent(leadId)}`, {
+      await fetch(`/api/people/${encodeURIComponent(leadId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus })
+        body: JSON.stringify({ leadStatus: nextStatus })
       });
     } catch (err) {
       console.error("Failed to update lead status", err);
@@ -1561,7 +1502,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
   const handleDeleteLead = async (leadId: string) => {
     if (!confirm("Tem certeza que deseja excluir este lead?")) return;
     try {
-      await fetch(`/api/leads/${encodeURIComponent(leadId)}`, { method: 'DELETE' });
+      await fetch(`/api/people/${encodeURIComponent(leadId)}`, { method: 'DELETE' });
       setSelectedLead(null);
       setIsMenuOpen(false);
       fetchLeads();
@@ -1904,28 +1845,6 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                       <div className="space-y-4">
                         <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2 flex justify-between items-center">
                           Informações do Lead
-                          {typeof selectedLead.customData?.whatsapp_jid === "string" && (
-                            <button
-                              onClick={async () => {
-                                const btn = document.getElementById('refresh-wa-btn');
-                                if (btn) btn.innerHTML = '↻ Atualizando...';
-                                try {
-                                  const agentId = selectedLead.customData?.agent_id || 'mariana-sdr';
-                                  const jid = selectedLead.customData?.whatsapp_jid;
-                                  await fetch(`/api/whatsapp/${agentId}?jid=${jid}`);
-                                  await fetchLeads();
-                                } catch (e) {
-                                  console.error('Failed to refresh WA profile', e);
-                                } finally {
-                                  if (btn) btn.innerHTML = '↻ Atualizar WA';
-                                }
-                              }}
-                              id="refresh-wa-btn"
-                              className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
-                            >
-                              ↻ Atualizar WA
-                            </button>
-                          )}
                         </h3>
 
                         <div className="grid grid-cols-2 gap-4">
@@ -3640,8 +3559,8 @@ export function SettingsLayout() {
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-novian-text mb-2">Conexões de IA no WhatsApp</h2>
-                  <p className="text-sm text-novian-text/60">Atribua um número de WhatsApp dedicado a cada agente de IA escaneando seu código QR. Isso permite que eles operem de forma autônoma usando sua própria foto de perfil e número.</p>
+                  <h2 className="text-xl font-semibold text-novian-text mb-2">Agentes de IA</h2>
+                  <p className="text-sm text-novian-text/60">Gerencie as configuracoes de cada agente. As mensagens do WhatsApp agora entram direto no banco via `n8n`, sem controle de instancias nesta tela.</p>
                 </div>
                 <button 
                   onClick={() => setIsAdding(!isAdding)}
@@ -3694,7 +3613,7 @@ export function SettingsLayout() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {agents.map((agent) => (
-                  <WhatsAppInstanceCard 
+                  <AgentConfigCard 
                     key={agent.id}
                     agent={agent}
                     onUpdate={async (updatedAgent) => {
@@ -4198,87 +4117,14 @@ export function SettingsLayout() {
   )
 }
 
-function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdate: (agent: AgentConfig) => void }) {
-  const [status, setStatus] = useState<"disconnected" | "connecting" | "qr_ready" | "connected">("disconnected");
-  const [qrCode, setQrCode] = useState<string | null>(null);
+function AgentConfigCard({ agent, onUpdate }: { agent: AgentConfig, onUpdate: (agent: AgentConfig) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(agent.systemPrompt || "");
   const [knowledgeBase, setKnowledgeBase] = useState(agent.knowledgeBase || "");
   const [modules, setModules] = useState<string[]>(agent.modules || []);
 
-  const agentId = agent.id;
   const agentName = agent.name;
   const agentRole = agent.role;
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(`/api/whatsapp/${agentId}?t=${Date.now()}`, { cache: 'no-store' });
-        const data = await res.json();
-        if (isMounted) {
-          setStatus(data.state);
-          if (data.qrDataUri) setQrCode(data.qrDataUri);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-
-    fetchStatus();
-    return () => {
-      isMounted = false;
-    };
-  }, [agentId]);
-
-  useEffect(() => {
-    if (status === "disconnected") {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/whatsapp/${agentId}?t=${Date.now()}`, { cache: "no-store" });
-        const data = await res.json();
-        setStatus(data.state);
-        setQrCode(data.qrDataUri || null);
-      } catch (error) {
-        console.error(error);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [agentId, status]);
-
-  const handleConnect = async () => {
-    try {
-      setStatus("connecting");
-      const res = await fetch(`/api/whatsapp/${agentId}`, { method: "POST" });
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setStatus("disconnected");
-        throw new Error(data?.error || `Failed to connect WhatsApp for ${agentId}`);
-      }
-
-      const session = data?.session;
-      if (session?.state) {
-        setStatus(session.state);
-      }
-      if (session?.qrDataUri) {
-        setQrCode(session.qrDataUri);
-      }
-    } catch (error) {
-      setStatus("disconnected");
-      console.error(error);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setStatus("disconnected");
-    setQrCode(null);
-    await fetch(`/api/whatsapp/${agentId}`, { method: "DELETE" });
-  };
 
   return (
     <div className={`bg-novian-surface border border-novian-muted rounded-2xl p-6 flex flex-col ${isEditing ? '' : 'h-72'} relative overflow-hidden`}>
@@ -4294,12 +4140,8 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
           >
             {isEditing ? "Fechar" : "Configurar"}
           </button>
-          <div className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider ${
-            status === 'connected' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-            status === 'qr_ready' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse' :
-            'bg-novian-muted text-novian-text/50 border border-novian-muted/50'
-          }`}>
-            {status.replace('_', ' ')}
+          <div className="px-2 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider bg-novian-muted text-novian-text/50 border border-novian-muted/50">
+            n8n sync
           </div>
         </div>
       </div>
@@ -4361,51 +4203,22 @@ function WhatsAppInstanceCard({ agent, onUpdate }: { agent: AgentConfig, onUpdat
           </div>
         </div>
       ) : (
-        <>
-          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-novian-muted rounded-xl bg-novian-primary/30 p-4">
-            {status === 'disconnected' && (
-              <div className="text-center">
-                <QrCode className="w-12 h-12 mx-auto text-novian-text/20 mb-3" />
-                <button onClick={handleConnect} className="bg-novian-accent text-novian-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white transition-colors">
-                  Gerar QR Code
-                </button>
-              </div>
-            )}
-
-            {status === 'connecting' && (
-              <div className="text-center text-novian-text/60">
-                <LoaderCircle className="w-8 h-8 mx-auto mb-2 animate-spin text-novian-accent" />
-                <p className="text-sm">Inicializando Conexão...</p>
-              </div>
-            )}
-
-            {status === 'qr_ready' && qrCode && (
-              <div className="text-center flex flex-col items-center">
-                <div className="bg-white p-2 rounded-xl">
-                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                   <img src={qrCode} alt="WhatsApp QR Code" className="w-32 h-32" />
-                </div>
-                <p className="text-xs text-novian-text/60 mt-3 max-w-[200px]">Abra o WhatsApp no dispositivo de {agentName} e escaneie para vincular.</p>
-              </div>
-            )}
-
-            {status === 'connected' && (
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <MessageSquare className="text-green-400 w-8 h-8" />
-                </div>
-                <p className="text-sm text-green-400 font-medium">Sessão Ativa</p>
-                <p className="text-xs text-novian-text/50 mt-1">Ouvindo mensagens</p>
-              </div>
-            )}
+        <div className="flex-1 flex flex-col justify-between rounded-xl border border-novian-muted/40 bg-novian-primary/20 p-4">
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold tracking-wider text-novian-text/45 uppercase">Entrega de Mensagens</p>
+              <p className="mt-1 text-sm text-novian-text/80">
+                O `n8n` salva as mensagens no banco diretamente. Nao existe mais conexao por QR code ou gerenciamento de instancia nesta tela.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold tracking-wider text-novian-text/45 uppercase">Perfil exibido</p>
+              <p className="mt-1 text-sm text-novian-text/80">
+                Nome, telefone e foto do agente continuam vindo dos dados persistidos do CRM.
+              </p>
+            </div>
           </div>
-
-          {status === 'connected' && (
-             <button onClick={handleDisconnect} className="absolute bottom-4 right-4 text-[10px] text-red-400 hover:text-red-300 underline">
-               Forçar Desconexão
-             </button>
-          )}
-        </>
+        </div>
       )}
     </div>
   )
@@ -4442,42 +4255,102 @@ function ChatInput({ onSendMessage }: { onSendMessage: (msg: string) => void }) 
 export function WarRoomLayout() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>("general");
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [activeThreadTab, setActiveThreadTab] = useState<LeadContextTab>("overview");
+  const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(true);
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<AgentConfig[]>([]);
-  const [activeThreadLiveProfile, setActiveThreadLiveProfile] = useState<LiveThreadWhatsAppProfile | null>(null);
-  const [isRefreshingActiveThreadProfile, setIsRefreshingActiveThreadProfile] = useState(false);
-  const activeThreadProfileRequestRef = useRef(0);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const warRoomRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const threadBelongsToAgent = useCallback((record: { agent_ids?: unknown; custom_data?: unknown } | null | undefined, agentId: string) => {
+    if (!record || !agentId) {
+      return false;
+    }
 
-  const fetchWarRoomData = async () => {
+    if (Array.isArray(record.agent_ids) && record.agent_ids.includes(agentId)) {
+      return true;
+    }
+
+    if (record.custom_data && typeof record.custom_data === "object") {
+      const customData = record.custom_data as { agent_id?: unknown };
+      if (typeof customData.agent_id === "string" && customData.agent_id === agentId) {
+        return true;
+      }
+    }
+
+    return false;
+  }, []);
+
+  const fetchThreadMessages = useCallback(async (threadId: string, resetSeenMessages = false) => {
+    const threadRes = await fetch(`/api/warroom/${encodeURIComponent(threadId)}`, { cache: "no-store" });
+    const threadData = await threadRes.json();
+
+    setMessages((prev) => {
+      const newMsgs = Array.isArray(threadData.messages) ? threadData.messages as ChatMessage[] : [];
+      if (resetSeenMessages || prev.length === 0 || prev[0]?.threadId !== threadId) {
+        setSeenMessageIds(new Set(newMsgs.map((message) => message.id)));
+      }
+      return newMsgs;
+    });
+    setTypingAgent(threadData.typing);
+  }, []);
+
+  const fetchWarRoomData = useCallback(async () => {
     try {
-      const res = await fetch("/api/warroom", { cache: 'no-store' });
-      const data = await res.json();
-      setThreads(data.threads);
+      if (!activeAgentId) {
+        setThreads([]);
+        setMessages([]);
+        setTypingAgent(null);
+        return;
+      }
 
-      // If we have an active thread, fetch its specific messages
-      if (activeThreadId) {
-        const threadRes = await fetch(`/api/warroom/${encodeURIComponent(activeThreadId)}`, { cache: 'no-store' });
-        const threadData = await threadRes.json();
-        
-        setMessages(prev => {
-           const newMsgs = threadData.messages as ChatMessage[];
-           if (prev.length === 0 || prev[0]?.threadId !== activeThreadId) {
-              // Initial load for this thread, don't type these out
-              setSeenMessageIds(new Set(newMsgs.map(m => m.id)));
-           }
-           return newMsgs;
-        });
-        setTypingAgent(threadData.typing);
+      const res = await fetch(`/api/warroom?agentId=${encodeURIComponent(activeAgentId)}`, { cache: 'no-store' });
+      const data = await res.json();
+      const nextThreads = Array.isArray(data.threads) ? data.threads as Thread[] : [];
+      setThreads(nextThreads);
+
+      const nextActiveThreadId = nextThreads.some((thread) => thread.id === activeThreadId)
+        ? activeThreadId
+        : nextThreads[0]?.id || null;
+
+      if (nextActiveThreadId !== activeThreadId) {
+        setActiveThreadId(nextActiveThreadId);
+      }
+
+      if (nextActiveThreadId) {
+        await fetchThreadMessages(nextActiveThreadId, nextActiveThreadId !== activeThreadId);
+      } else {
+        setMessages([]);
+        setTypingAgent(null);
       }
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [activeAgentId, activeThreadId, fetchThreadMessages]);
 
-  const fetchAgents = async () => {
+  const scheduleWarRoomRefresh = useCallback((immediate = false) => {
+    if (warRoomRefreshTimeoutRef.current) {
+      clearTimeout(warRoomRefreshTimeoutRef.current);
+      warRoomRefreshTimeoutRef.current = null;
+    }
+
+    if (!activeAgentId) {
+      return;
+    }
+
+    if (immediate) {
+      void fetchWarRoomData();
+      return;
+    }
+
+    warRoomRefreshTimeoutRef.current = setTimeout(() => {
+      warRoomRefreshTimeoutRef.current = null;
+      void fetchWarRoomData();
+    }, 150);
+  }, [activeAgentId, fetchWarRoomData]);
+
+  const fetchAgents = useCallback(async () => {
     try {
       const res = await fetch("/api/agents", { cache: "no-store" });
       if (!res.ok) {
@@ -4485,30 +4358,97 @@ export function WarRoomLayout() {
       }
 
       const data = await res.json();
-      setAgents(Array.isArray(data.agents) ? data.agents : []);
+      const nextAgents = Array.isArray(data.agents) ? data.agents as AgentConfig[] : [];
+      setAgents(nextAgents);
+      setActiveAgentId((current) => {
+        if (current && nextAgents.some((agent) => agent.id === current)) {
+          return current;
+        }
+
+        return nextAgents[0]?.id || null;
+      });
     } catch (e) {
       console.error(e);
     }
-  };
-
-  useEffect(() => {
-    // Initial fetch inside effect to avoid synchronous setState warnings
-    let isMounted = true;
-    const initFetch = async () => {
-      await fetchWarRoomData();
-    };
-    initFetch();
-    
-    const interval = setInterval(fetchWarRoomData, 2000); // Poll every 2s
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [activeThreadId]);
+  }, []);
 
   useEffect(() => {
     fetchAgents();
-  }, []);
+  }, [fetchAgents]);
+
+  useEffect(() => {
+    if (!activeAgentId) {
+      return;
+    }
+
+    scheduleWarRoomRefresh(true);
+
+    const threadsChannel = supabase
+      .channel(`warroom-threads-${activeAgentId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_threads" },
+        (payload) => {
+          const newRecord = "new" in payload ? payload.new as { agent_ids?: unknown; custom_data?: unknown } : null;
+          const oldRecord = "old" in payload ? payload.old as { agent_ids?: unknown; custom_data?: unknown } : null;
+          if (threadBelongsToAgent(newRecord, activeAgentId) || threadBelongsToAgent(oldRecord, activeAgentId)) {
+            scheduleWarRoomRefresh();
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (warRoomRefreshTimeoutRef.current) {
+        clearTimeout(warRoomRefreshTimeoutRef.current);
+        warRoomRefreshTimeoutRef.current = null;
+      }
+      void supabase.removeChannel(threadsChannel);
+    };
+  }, [activeAgentId, scheduleWarRoomRefresh, threadBelongsToAgent]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      return;
+    }
+
+    const messageChannel = supabase
+      .channel(`warroom-messages-${activeThreadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${activeThreadId}`,
+        },
+        () => {
+          void fetchThreadMessages(activeThreadId);
+        },
+      )
+      .subscribe();
+
+    const threadChannel = supabase
+      .channel(`warroom-thread-${activeThreadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "chat_threads",
+          filter: `thread_id=eq.${activeThreadId}`,
+        },
+        () => {
+          scheduleWarRoomRefresh();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(messageChannel);
+      void supabase.removeChannel(threadChannel);
+    };
+  }, [activeThreadId, fetchThreadMessages, scheduleWarRoomRefresh]);
 
   useEffect(() => {
     setActiveThreadTab("overview");
@@ -4535,196 +4475,60 @@ export function WarRoomLayout() {
   };
 
   const activeThread = activeThreadId ? threads.find((thread) => thread.id === activeThreadId) || null : null;
-  const activeThreadAgentId =
-    typeof activeThread?.customData?.agent_id === "string"
-      ? activeThread.customData.agent_id
-      : activeThread?.agentIds?.[0];
+  const activeThreadAgentId = activeThread?.agentId || activeAgentId;
   const activeAgent = activeThreadAgentId ? agents.find((agent) => agent.id === activeThreadAgentId) || null : null;
-  const activeThreadProfileForView =
-    activeThreadLiveProfile && activeThread && activeThreadLiveProfile.threadId === activeThread.id
-      ? activeThreadLiveProfile
-      : null;
-  const activeThreadCustomData = activeThread
-    ? mergeThreadCustomDataWithLiveProfile(activeThread.customData, activeThreadProfileForView)
-    : undefined;
-  const activeThreadTitle = activeThread ? getThreadDisplayTitle(activeThread, activeThreadProfileForView) : "";
-  const activeThreadPhone = activeThread ? getThreadDisplayPhone(activeThread, activeThreadProfileForView) : "";
+  const activeThreadCustomData = activeThread?.customData;
+  const activeThreadTitle =
+    typeof activeThreadCustomData?.whatsapp_profile_name === "string" && activeThreadCustomData.whatsapp_profile_name.trim()
+      ? activeThreadCustomData.whatsapp_profile_name.trim()
+      : typeof activeThreadCustomData?.whatsapp_push_name === "string" && activeThreadCustomData.whatsapp_push_name.trim()
+        ? activeThreadCustomData.whatsapp_push_name.trim()
+        : activeThread?.title || "";
+  const activeThreadPhone = activeThread ? getLeadPhoneValue(activeThread) : "";
   const activeThreadMetadataDetails = activeThread ? getLeadMetadataDetails(activeThreadCustomData) : [];
+  const activeThreadCustomEntries = getLeadCustomEntries(activeThreadCustomData);
+  const activeThreadPersonHref = activeThread?.leadId
+    ? `/admin/people?personId=${encodeURIComponent(activeThread.leadId)}`
+    : null;
   const activeClientAvatarUrl =
     typeof activeThreadCustomData?.whatsapp_profile_picture_url === "string"
       ? activeThreadCustomData.whatsapp_profile_picture_url
       : undefined;
-  const headerAgents = activeThread && activeAgent ? [activeAgent] : agents.slice(0, 2);
-  const activeThreadProfileAgentId =
-    activeThread &&
-    typeof activeThread.customData?.agent_id === "string" &&
-    activeThread.customData.agent_id
-      ? activeThread.customData.agent_id
-      : activeThread?.agentIds?.[0] || "mariana-sdr";
-  const activeThreadProfileJid =
-    activeThread &&
-    typeof activeThread.customData?.whatsapp_jid === "string" &&
-    activeThread.customData.whatsapp_jid
-      ? activeThread.customData.whatsapp_jid
-      : activeThreadId;
-
-  const fetchActiveThreadWhatsAppProfile = async (
-    threadOverride: Thread | null = activeThread,
-    options?: { syncLists?: boolean },
-  ) => {
-    if (!threadOverride || threadOverride.id === "general" || threadOverride.id === "continuous") {
-      setActiveThreadLiveProfile(null);
-      return null;
-    }
-
-    const agentId =
-      typeof threadOverride.customData?.agent_id === "string" && threadOverride.customData.agent_id
-        ? threadOverride.customData.agent_id
-        : threadOverride.agentIds?.[0] || "mariana-sdr";
-    const jid =
-      typeof threadOverride.customData?.whatsapp_jid === "string" && threadOverride.customData.whatsapp_jid
-        ? threadOverride.customData.whatsapp_jid
-        : threadOverride.id;
-
-    if (!jid) {
-      setActiveThreadLiveProfile(null);
-      return null;
-    }
-
-    const requestId = ++activeThreadProfileRequestRef.current;
-    setIsRefreshingActiveThreadProfile(true);
-
-    try {
-      const response = await fetch(
-        `/api/whatsapp/${encodeURIComponent(agentId)}?jid=${encodeURIComponent(jid)}`,
-        { cache: "no-store" },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to load WhatsApp profile (${response.status})`);
-      }
-
-      const data = await response.json();
-      const refreshed = data?.refreshed as LiveThreadWhatsAppProfile | undefined;
-      const nextProfile =
-        refreshed && typeof refreshed === "object"
-          ? {
-              threadId: threadOverride.id,
-              phone: typeof refreshed.phone === "string" ? refreshed.phone : null,
-              profile: refreshed.profile && typeof refreshed.profile === "object" ? refreshed.profile : null,
-            }
-          : null;
-
-      if (activeThreadProfileRequestRef.current === requestId) {
-        setActiveThreadLiveProfile(nextProfile);
-      }
-
-      if (options?.syncLists) {
-        await fetchWarRoomData();
-        await fetchAgents();
-      }
-
-      return nextProfile;
-    } catch (error) {
-      if (activeThreadProfileRequestRef.current === requestId) {
-        setActiveThreadLiveProfile(null);
-      }
-      console.error("Failed to load live WhatsApp profile", error);
-      return null;
-    } finally {
-      if (activeThreadProfileRequestRef.current === requestId) {
-        setIsRefreshingActiveThreadProfile(false);
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (!activeThreadId || activeThreadId === "general" || activeThreadId === "continuous" || !activeThreadProfileJid) {
-      setActiveThreadLiveProfile(null);
-      setIsRefreshingActiveThreadProfile(false);
-      return;
-    }
-
-    let isCancelled = false;
-    const requestId = ++activeThreadProfileRequestRef.current;
-    const agentId = activeThreadProfileAgentId;
-    const jid = activeThreadProfileJid;
-
-    setIsRefreshingActiveThreadProfile(true);
-
-    const loadLiveProfile = async () => {
-      try {
-        const response = await fetch(
-          `/api/whatsapp/${encodeURIComponent(agentId)}?jid=${encodeURIComponent(jid)}`,
-          { cache: "no-store" },
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to load WhatsApp profile (${response.status})`);
-        }
-
-        const data = await response.json();
-        const refreshed = data?.refreshed as LiveThreadWhatsAppProfile | undefined;
-        const nextProfile =
-          refreshed && typeof refreshed === "object"
-            ? {
-                threadId: activeThreadId,
-                phone: typeof refreshed.phone === "string" ? refreshed.phone : null,
-                profile: refreshed.profile && typeof refreshed.profile === "object" ? refreshed.profile : null,
-              }
-            : null;
-
-        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
-          setActiveThreadLiveProfile(nextProfile);
-        }
-      } catch (error) {
-        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
-          setActiveThreadLiveProfile(null);
-        }
-        console.error("Failed to auto-load live WhatsApp profile", error);
-      } finally {
-        if (!isCancelled && activeThreadProfileRequestRef.current === requestId) {
-          setIsRefreshingActiveThreadProfile(false);
-        }
-      }
-    };
-
-    void loadLiveProfile();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [activeThreadId, activeThreadProfileAgentId, activeThreadProfileJid]);
+  const agentInboxOptions = agents.map((agent) => ({
+    value: agent.id,
+    label: agent.whatsappDisplayName || agent.name,
+    description: agent.role,
+    avatarUrl: agent.whatsappProfilePictureUrl,
+  }));
 
   return (
     <>
-      {/* Channels / Threads List */}
       <div className="w-72 lg:w-80 border-r border-novian-muted/50 bg-novian-surface/30 flex flex-col shrink-0">
-        <div className="h-16 px-4 border-b border-novian-muted/50 flex justify-between items-center shrink-0">
-          <h2 className="text-sm font-semibold tracking-wider text-novian-text/70 uppercase">Leads Ativos</h2>
+        <div className="border-b border-novian-muted/50 shrink-0">
+          <div className="px-4 py-4">
+            <PopupSelect
+              value={activeAgentId || ""}
+              onChange={(value) => {
+                setActiveAgentId(value || null);
+                setActiveThreadId(null);
+                setSeenMessageIds(new Set());
+                setMessages([]);
+                setTypingAgent(null);
+              }}
+              placeholder="Selecione um agente"
+              buttonClassName="w-full bg-novian-surface/70 border-novian-muted/50 py-2.5 text-sm text-novian-text hover:border-novian-accent/35"
+              menuClassName="max-h-72 overflow-y-auto"
+              options={agentInboxOptions}
+            />
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          <ThreadItem 
-            key="general"
-            title="#general-command" 
-            preview="Fale diretamente com sua equipe de IA." 
-            time="Agora" 
-            active={activeThreadId === "general"} 
-            onClick={() => setActiveThreadId("general")}
-          />
-          <ThreadItem 
-            key="continuous"
-            title="#continuous-ops" 
-            preview="Trabalho autônomo em segundo plano." 
-            time="24/7" 
-            active={activeThreadId === "continuous"} 
-            onClick={() => setActiveThreadId("continuous")}
-          />
-          
-          <div className="my-4"></div>
-
           {threads.length === 0 ? (
-             <div className="text-center text-xs text-novian-text/40 mt-4">Nenhum lead ativo ainda. Envie uma mensagem para o WhatsApp de um agente para começar.</div>
+             <div className="text-center text-xs text-novian-text/40 mt-4">
+               {activeAgent
+                 ? `Nenhuma conversa encontrada para ${activeAgent.name}. O n8n precisa salvar mensagens dessa caixa no banco.`
+                 : "Selecione um agente para visualizar as conversas."}
+             </div>
           ) : (
             threads.map((thread) => (
               <ThreadItem 
@@ -4732,6 +4536,11 @@ export function WarRoomLayout() {
                 title={thread.title} 
                 preview={thread.preview} 
                 time={thread.time} 
+                avatarUrl={
+                  typeof thread.customData?.whatsapp_profile_picture_url === "string"
+                    ? thread.customData.whatsapp_profile_picture_url
+                    : undefined
+                }
                 active={activeThreadId === thread.id} 
                 unread={thread.unread}
                 onClick={() => setActiveThreadId(thread.id)}
@@ -4745,35 +4554,37 @@ export function WarRoomLayout() {
       <div className="flex-1 flex flex-col bg-novian-primary relative min-w-0">
         {activeThreadId ? (
           <>
-            {/* Thread Header */}
-            <div className="h-16 border-b border-novian-muted/50 flex items-center px-6 gap-4 shrink-0 bg-novian-surface/30">
-              <h2 className="text-lg font-medium text-novian-accent">
-                {activeThreadId === "general" ? "#general-command" : activeThreadTitle || "Chat"}
-              </h2>
-              <div className="flex -space-x-2">
-                {headerAgents.length > 0 ? (
-                  headerAgents.map((agent) => {
-                    const agentName = agent.whatsappDisplayName || agent.name;
-                    return (
-                      <AgentAvatar
-                        key={agent.id}
-                        name={agentName}
-                        initials={agentName.substring(0, 2).toUpperCase()}
-                        avatarUrl={agent.whatsappProfilePictureUrl}
-                      />
-                    );
-                  })
+            <div className="h-16 border-b border-novian-muted/50 flex items-center justify-between px-6 gap-4 shrink-0 bg-novian-surface/30">
+              <div className="min-w-0">
+                {activeThreadPersonHref ? (
+                  <Link
+                    href={activeThreadPersonHref}
+                    className="block truncate text-lg font-medium text-novian-accent transition hover:text-white"
+                    title="Abrir pessoa em Pessoas"
+                  >
+                    {activeThreadTitle || "Chat"}
+                  </Link>
                 ) : (
-                  <>
-                    <AgentAvatar name="Mariana (SDR)" initials="MS" />
-                    <AgentAvatar name="Daniel (Dir)" initials="DR" />
-                  </>
+                  <h2 className="truncate text-lg font-medium text-novian-accent">
+                    {activeThreadTitle || "Chat"}
+                  </h2>
                 )}
+                <p className="truncate text-xs text-novian-text/50 font-mono">
+                  {activeThreadPhone || "Nao informado"}
+                </p>
               </div>
-              <span className="text-xs text-novian-text/50 ml-2">Agentes ativos</span>
+              <button
+                type="button"
+                onClick={() => setIsLeadDrawerOpen((current) => !current)}
+                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-full border border-novian-muted/40 bg-novian-primary/55 text-novian-text/75 transition hover:border-novian-accent/35 hover:text-novian-text"
+                aria-expanded={isLeadDrawerOpen}
+                aria-label={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
+                title={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
+              >
+                {isLeadDrawerOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+              </button>
             </div>
 
-            {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col-reverse min-w-0">
               <div className="space-y-6">
                 {messages.map((msg) => {
@@ -4826,149 +4637,166 @@ export function WarRoomLayout() {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-novian-text/30">
             <MessageSquare className="w-16 h-16 mb-4 opacity-50" />
-            <p>Selecione uma conversa para visualizar o Chat</p>
+            <p>{activeAgent ? `Nenhuma conversa em ${activeAgent.name}` : "Selecione um agente para visualizar o chat"}</p>
           </div>
         )}
       </div>
       
-      {/* Right Sidebar - Context/Details */}
-      <div className="hidden xl:flex w-72 2xl:w-80 border-l border-novian-muted/50 bg-novian-surface/30 flex-col shrink-0">
-         <div className="h-16 px-6 border-b border-novian-muted/50 flex items-center justify-between shrink-0">
-            <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Contexto do Lead</h3>
-            {activeThread && (
-              <button
-                onClick={() => void fetchActiveThreadWhatsAppProfile(activeThread, { syncLists: true })}
-                disabled={isRefreshingActiveThreadProfile}
-                className="text-[10px] bg-novian-muted/50 hover:bg-novian-muted text-novian-text/80 px-2 py-1 rounded transition-colors"
-              >
-                {isRefreshingActiveThreadProfile ? "↻ Atualizando..." : "↻ Atualizar"}
-              </button>
-            )}
-         </div>
-         <div className="p-6 flex-1 overflow-y-auto">
+      {/* Right Sidebar - People Drawer */}
+      {isLeadDrawerOpen && (
+        <div className="hidden xl:flex w-72 2xl:w-80 border-l border-novian-muted/50 bg-novian-surface/30 flex-col shrink-0">
+          <div className="h-16 px-6 border-b border-novian-muted/50 flex items-center shrink-0">
+            <div>
+              <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Pessoa</h3>
+              <p className="mt-1 text-[11px] text-novian-text/40">Perfil e dados do lead</p>
+            </div>
+          </div>
+          <div className="p-6 flex-1 overflow-y-auto">
             {activeThread ? (
               <div className="space-y-6">
-                <div className="flex items-center gap-4 bg-novian-muted/20 p-3 rounded-xl border border-novian-muted/30">
-                  {typeof activeThreadCustomData?.whatsapp_profile_picture_url === "string" ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={String(activeThreadCustomData.whatsapp_profile_picture_url)} 
-                        alt="WhatsApp Profile" 
-                        className="w-16 h-16 rounded-full object-cover border-2 border-novian-muted"
+                <div className="rounded-2xl border border-novian-muted/30 bg-novian-muted/15 p-4">
+                  <div className="flex items-center gap-4">
+                    {activeClientAvatarUrl ? (
+                      <Image
+                        src={activeClientAvatarUrl}
+                        alt={activeThreadTitle || "Pessoa"}
+                        width={64}
+                        height={64}
+                        className="h-16 w-16 rounded-full border-2 border-novian-muted object-cover"
                       />
-                    </>
-                  ) : (
-                    <div className="w-16 h-16 rounded-full border-2 border-novian-muted bg-novian-primary/60 flex items-center justify-center text-lg font-semibold text-novian-text">
-                      {(activeThreadTitle || activeThreadPhone).slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-novian-text truncate">{activeThreadTitle}</p>
-                      {isRefreshingActiveThreadProfile && <LoaderCircle size={14} className="animate-spin text-novian-accent shrink-0" />}
-                    </div>
-                    <p className="text-xs text-novian-text/60 font-mono break-all">{activeThreadPhone || "Nao informado"}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Telefone</p>
-                    <p className="font-mono text-sm text-novian-text/80 break-all">{activeThreadPhone || "Nao informado"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Atendido Por</p>
-                    <p className="text-sm text-novian-text/80">
-                      {activeAgent?.whatsappPhone || activeAgent?.whatsappDisplayName || activeAgent?.name || "Agente conectado"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Status (Funil)</p>
-                    <span className="inline-block mt-1 bg-novian-muted/30 text-novian-text px-2.5 py-1 rounded-md border border-novian-muted/50 text-xs font-medium">
-                      {activeThread.status || 'Novo Lead'}
-                    </span>
-                  </div>
-                  {activeThread.score !== undefined && (
-                    <div>
-                      <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-1">Score IA</p>
-                      <div className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-md border mt-1 ${
-                        activeThread.score > 30 ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' : 
-                        activeThread.score > 15 ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                        'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                      }`}>
-                        <Flame size={12} />
-                        {activeThread.score} pts
+                    ) : (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-novian-muted bg-novian-primary/60 text-lg font-semibold text-novian-text">
+                        {(activeThreadTitle || activeThreadPhone || "P").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      {activeThreadPersonHref ? (
+                        <Link
+                          href={activeThreadPersonHref}
+                          className="block truncate text-base font-semibold text-novian-text transition hover:text-novian-accent"
+                          title="Abrir pessoa em Pessoas"
+                        >
+                          {activeThreadTitle || "Lead"}
+                        </Link>
+                      ) : (
+                        <p className="truncate text-base font-semibold text-novian-text">
+                          {activeThreadTitle || "Lead"}
+                        </p>
+                      )}
+                      <p className="mt-1 break-all font-mono text-xs text-novian-text/55">
+                        {activeThreadPhone || "Nao informado"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="inline-flex items-center rounded-full border border-novian-muted/40 bg-novian-primary/45 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-novian-text/60">
+                          {String(activeThreadCustomData?.source || "WhatsApp")}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-novian-muted/40 bg-novian-primary/45 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-novian-text/60">
+                          {activeThread.status || "Novo Lead"}
+                        </span>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
+
                 <LeadContextTabs value={activeThreadTab} onChange={setActiveThreadTab} />
 
                 {activeThreadTab === "overview" && (
                   <>
+                    <div className="space-y-4">
+                      <h3 className="border-b border-novian-muted/30 pb-2 text-sm font-semibold tracking-wider text-novian-accent uppercase">
+                        Informacoes da Pessoa
+                      </h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <p className="mb-1 text-xs text-novian-text/50">Telefone / WhatsApp</p>
+                          <p className="break-all font-mono text-sm text-novian-text/90">{activeThreadPhone || "Nao informado"}</p>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-xs text-novian-text/50">Atendido por</p>
+                          <p className="text-sm text-novian-text/90">
+                            {activeAgent?.whatsappDisplayName || activeAgent?.name || "Agente conectado"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-xs text-novian-text/50">Canal</p>
+                          <p className="text-sm text-novian-text/90">{String(activeThreadCustomData?.source || "WhatsApp")}</p>
+                        </div>
+                        {activeThread.score !== undefined && (
+                          <div>
+                            <p className="mb-1 text-xs text-novian-text/50">Score de engajamento</p>
+                            <div className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-bold ${
+                              activeThread.score > 30 ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
+                              activeThread.score > 15 ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
+                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}>
+                              <Flame size={12} />
+                              {activeThread.score} pts
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <p className="mb-1 text-xs text-novian-text/50">Ultima interacao</p>
+                          <p className="text-sm text-novian-text/90">{activeThread.time}</p>
+                        </div>
+                      </div>
+                    </div>
+
                     {activeThreadMetadataDetails.length > 0 && (
-                      <div className="pt-4 border-t border-novian-muted/30">
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Detalhes do Contato</p>
-                        <div className="space-y-3">
+                      <div className="space-y-4">
+                        <h3 className="border-b border-novian-muted/30 pb-2 text-sm font-semibold tracking-wider text-novian-accent uppercase">
+                          Detalhes do Contato
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4">
                           {activeThreadMetadataDetails.map((detail) => (
                             <div key={detail.label}>
-                              <p className="text-[10px] uppercase text-novian-text/40">{detail.label}</p>
+                              <p className="mb-1 text-xs text-novian-text/50">{detail.label}</p>
                               {detail.href ? (
                                 <a
                                   href={detail.href}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-sm text-novian-accent hover:text-white transition-colors break-all"
+                                  className="break-all text-sm font-medium text-novian-accent transition-colors hover:text-white"
                                 >
                                   {detail.value}
                                 </a>
                               ) : (
-                                <p className="text-sm text-novian-text/80 break-all">{detail.value}</p>
+                                <p className="break-all text-sm font-medium text-novian-text/88">{detail.value}</p>
                               )}
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
-                    {(typeof activeThreadCustomData?.whatsapp_about === "string" ||
-                      typeof activeThreadCustomData?.whatsapp_business_description === "string") && (
-                      <div className="pt-4 border-t border-novian-muted/30">
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Perfil WhatsApp</p>
-                        <div className="bg-novian-muted/10 p-3 rounded-xl border border-novian-muted/30 space-y-3">
-                          {typeof activeThreadCustomData?.whatsapp_about === "string" && (
-                            <div>
-                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Recado</p>
-                              <p className="text-sm italic text-novian-text/90">&quot;{String(activeThreadCustomData.whatsapp_about)}&quot;</p>
-                            </div>
-                          )}
-                          {typeof activeThreadCustomData?.whatsapp_business_description === "string" && (
-                            <div className="pt-2 border-t border-novian-muted/20">
-                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Descrição</p>
-                              <p className="text-sm text-novian-text/80">{String(activeThreadCustomData.whatsapp_business_description)}</p>
-                            </div>
-                          )}
-                          {typeof activeThreadCustomData?.whatsapp_business_category === "string" && (
-                            <div className="pt-2 border-t border-novian-muted/20">
-                              <p className="text-[10px] uppercase text-novian-text/50 mb-1 font-semibold">Categoria</p>
-                              <p className="text-sm text-novian-text/80">{String(activeThreadCustomData.whatsapp_business_category)}</p>
-                            </div>
-                          )}
+
+                    {activeThreadCustomEntries.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="border-b border-novian-muted/30 pb-2 text-sm font-semibold tracking-wider text-novian-accent uppercase">
+                          Campos Personalizados
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4">
+                          {activeThreadCustomEntries.map(([key, value]) => {
+                            const fieldDef = customFieldsStore.find((field) => field.id === key);
+                            return (
+                              <div key={key}>
+                                <p className="mb-1 text-xs text-novian-text/50">{fieldDef ? fieldDef.name : key}</p>
+                                <p className="truncate text-sm font-medium text-novian-text/88" title={String(value)}>
+                                  {String(value)}
+                                </p>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
-                    {getLeadCustomEntries(activeThreadCustomData).length > 0 && (
-                      <div className="pt-4 border-t border-novian-muted/30">
-                        <p className="text-xs font-semibold tracking-wider text-novian-text/50 uppercase mb-3">Dados Adicionais</p>
-                        <div className="space-y-3">
-                          {getLeadCustomEntries(activeThreadCustomData).map(([key, value]) => (
-                            <div key={key}>
-                              <p className="text-[10px] uppercase text-novian-text/40">{key}</p>
-                              <p className="text-sm text-novian-text/80 truncate" title={String(value)}>{String(value)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+
+                    <div className="space-y-4">
+                      <h3 className="border-b border-novian-muted/30 pb-2 text-sm font-semibold tracking-wider text-novian-accent uppercase">
+                        Ultima Interacao
+                      </h3>
+                      <p className="rounded-xl border border-novian-muted/30 bg-novian-primary/30 p-4 text-sm italic text-novian-text/80">
+                        &quot;{activeThread.preview || "Sem mensagens recentes."}&quot;
+                      </p>
+                    </div>
                   </>
                 )}
 
@@ -4980,23 +4808,14 @@ export function WarRoomLayout() {
                   />
                 )}
               </div>
-            ) : activeThreadId === "general" || activeThreadId === "continuous" ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs text-novian-text/50">Status</p>
-                  <span className="inline-block mt-1 bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded-md border border-green-500/30">
-                    Sistema Operacional
-                  </span>
-                </div>
-                <p className="text-xs text-novian-text/60 leading-relaxed">
-                  Este é um canal interno do sistema para você dar comandos aos agentes ou monitorar tarefas em segundo plano.
-                </p>
-              </div>
             ) : (
-              <p className="text-xs text-novian-text/40">Nenhum lead selecionado</p>
+              <p className="text-xs text-novian-text/40">
+                {activeAgent ? `Nenhuma conversa selecionada para ${activeAgent.name}.` : "Nenhum agente selecionado."}
+              </p>
             )}
-         </div>
-      </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -5250,16 +5069,52 @@ function NavItem({ icon, label, active = false, collapsed = false, onClick }: { 
   )
 }
 
-function ThreadItem({ title, preview, time, active, unread, onClick }: { title: string; preview: string; time: string; active?: boolean; unread?: boolean, onClick?: () => void }) {
+function ThreadItem({
+  title,
+  preview,
+  time,
+  avatarUrl,
+  active,
+  unread,
+  onClick,
+}: {
+  title: string;
+  preview: string;
+  time: string;
+  avatarUrl?: string;
+  active?: boolean;
+  unread?: boolean,
+  onClick?: () => void
+}) {
+  const initials = title
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "?";
+
   return (
     <div onClick={onClick} className={`p-3 rounded-xl cursor-pointer transition-all ${
       active ? "bg-novian-surface/80 shadow-sm" : "bg-transparent hover:bg-novian-surface/40"
     }`}>
-      <div className="flex justify-between items-start mb-1">
-        <h4 className={`text-sm font-medium ${unread ? 'text-novian-accent' : 'text-novian-text'}`}>{title}</h4>
-        <span className="text-[10px] text-novian-text/40">{time}</span>
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 h-11 w-11 shrink-0 overflow-hidden rounded-full border border-novian-muted/50 bg-novian-primary/60 flex items-center justify-center text-xs font-semibold text-novian-text">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt={title} className="h-full w-full object-cover" />
+          ) : (
+            initials
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex justify-between items-start gap-3">
+            <h4 className={`truncate text-sm font-medium ${unread ? 'text-novian-accent' : 'text-novian-text'}`}>{title}</h4>
+            <span className="shrink-0 text-[10px] text-novian-text/40">{time}</span>
+          </div>
+          <p className="text-xs text-novian-text/60 line-clamp-2 leading-relaxed">{preview}</p>
+        </div>
       </div>
-      <p className="text-xs text-novian-text/60 line-clamp-2 leading-relaxed">{preview}</p>
     </div>
   )
 }

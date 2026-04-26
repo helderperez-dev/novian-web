@@ -110,14 +110,19 @@ export async function POST(req: Request) {
 
     const duplicateIds = duplicates.map((person) => person.id);
 
-    const { error: leadError } = await supabase
-      .from("leads")
-      .update({ person_id: primary.id })
-      .in("person_id", duplicateIds);
+    const [
+      { error: threadError },
+      { error: messageError },
+      { error: documentError },
+    ] = await Promise.all([
+      supabase.from("chat_threads").update({ person_id: primary.id }).in("person_id", duplicateIds),
+      supabase.from("messages").update({ person_id: primary.id }).in("person_id", duplicateIds),
+      supabase.from("documents").update({ person_id: primary.id }).in("person_id", duplicateIds),
+    ]);
 
-    if (leadError) {
-      console.error(leadError);
-      return NextResponse.json({ error: "Failed to relink CRM leads" }, { status: 500 });
+    if (threadError || messageError || documentError) {
+      console.error(threadError || messageError || documentError);
+      return NextResponse.json({ error: "Failed to relink person dependencies" }, { status: 500 });
     }
 
     const { error: deleteError } = await supabase

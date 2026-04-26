@@ -119,17 +119,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       person = updatedPerson;
     }
 
-    const { data: linkedLeads, error: linkedLeadsError } = await supabase
-      .from("leads")
-      .select("id")
-      .eq("person_id", person.id);
+    const shouldSyncLeadState =
+      Boolean(body.createLead) ||
+      body.leadStatus !== undefined ||
+      body.leadFunnelId !== undefined ||
+      body.leadScore !== undefined;
 
-    if (linkedLeadsError) {
-      console.error(linkedLeadsError);
-      return NextResponse.json({ error: "Failed to sync linked leads" }, { status: 500 });
-    }
-
-    if ((linkedLeads || []).length === 0 && Boolean(body.createLead) && person.primary_phone) {
+    if (Boolean(body.createLead) && person.primary_phone) {
       await createLead({
         personId: person.id,
         phone: person.primary_phone,
@@ -143,10 +139,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           source: person.origin,
         },
       });
-    }
-
-    for (const lead of linkedLeads || []) {
-      await updateLead(lead.id, {
+    } else if (shouldSyncLeadState) {
+      await updateLead(person.id, {
         title: person.full_name,
         phone: person.primary_phone || undefined,
         preview: person.last_interaction_preview || undefined,
@@ -177,28 +171,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const personId = decodeURIComponent(id);
-    const supabase = createAdminSupabaseClient();
-
-    const { data: linkedLeads, error: linkedLeadsError } = await supabase
-      .from("leads")
-      .select("id")
-      .eq("person_id", personId)
-      .order("updated_at", { ascending: false });
-
-    if (linkedLeadsError) {
-      console.error(linkedLeadsError);
-      return NextResponse.json({ error: "Failed to inspect linked leads" }, { status: 500 });
-    }
-
-    for (const lead of linkedLeads || []) {
-      await deleteLead(lead.id);
-    }
-
-    const { error } = await supabase.from("people").delete().eq("id", personId);
-    if (error) {
-      console.error(error);
-      return NextResponse.json({ error: "Failed to delete person" }, { status: 500 });
-    }
+    await deleteLead(personId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

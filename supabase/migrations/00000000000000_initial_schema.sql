@@ -85,7 +85,7 @@ CREATE TABLE external_messages (
     tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
     lead_id UUID REFERENCES leads(id) ON DELETE CASCADE,
     agent_id UUID REFERENCES users(id), -- Which AI or Human sent it
-    platform TEXT NOT NULL, -- 'whatsapp' (Evolution API) or 'email' (Brevo)
+    platform TEXT NOT NULL, -- 'whatsapp' or 'email' (Brevo)
     direction TEXT NOT NULL, -- 'inbound' or 'outbound'
     content TEXT NOT NULL,
     external_message_id TEXT, -- ID from WhatsApp or Brevo
