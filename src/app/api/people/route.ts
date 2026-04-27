@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import type { Database } from "@/lib/database.types";
 import { requireInternalApiUser } from "@/lib/api-auth";
 import { createLead } from "@/lib/chatStore";
+import {
+  listPersonPropertyLinksByPersonIds,
+  replacePersonPropertyLinks,
+  type PersonPropertyLinkInput,
+  type PersonPropertyLinkSummary,
+} from "@/lib/personProperties";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
 type PersonRole = Database["public"]["Enums"]["person_role"];
 type Json = Database["public"]["Tables"]["people"]["Row"]["metadata"];
+type PersonPropertyRelationshipType = Database["public"]["Tables"]["person_properties"]["Row"]["relationship_type"];
 
 function asJsonObject(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -57,6 +64,69 @@ function normalizeTagList(value: unknown) {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeRelationshipType(value: unknown) {
+  if (value === "interested" || value === "owner") {
+    return value as PersonPropertyRelationshipType;
+  }
+
+  return null;
+}
+
+function normalizeLinkedProperties(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as PersonPropertyLinkInput[];
+  }
+
+  const seen = new Set<string>();
+  const links: PersonPropertyLinkInput[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+
+    const propertyId = String((item as { propertyId?: unknown }).propertyId ?? "").trim();
+    const relationshipType = normalizeRelationshipType((item as { relationshipType?: unknown }).relationshipType);
+
+    if (!propertyId || !relationshipType) {
+      continue;
+    }
+
+    const dedupeKey = `${propertyId}:${relationshipType}`;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+
+    seen.add(dedupeKey);
+    links.push({
+      propertyId,
+      relationshipType,
+      source: String((item as { source?: unknown }).source ?? "manual").trim() || "manual",
+      notes:
+        typeof (item as { notes?: unknown }).notes === "string"
+          ? String((item as { notes?: unknown }).notes).trim() || null
+          : null,
+      metadata: asJsonObject((item as { metadata?: unknown }).metadata),
+    });
+  }
+
+  return links;
+}
+
+function mergeRolesWithLinkedProperties(roles: PersonRole[], linkedProperties: PersonPropertyLinkInput[]) {
+  const nextRoles = new Set<PersonRole>(roles);
+
+  if (linkedProperties.some((link) => link.relationshipType === "interested")) {
+    nextRoles.add("buyer");
+  }
+
+  if (linkedProperties.some((link) => link.relationshipType === "owner")) {
+    nextRoles.add("seller");
+  }
+
+  return Array.from(nextRoles);
 }
 
 type PersonListItem = ReturnType<typeof mapPeopleForResponse>[number];
@@ -109,7 +179,10 @@ function buildDuplicateGroups(people: PersonListItem[]) {
     .sort((a, b) => b.people.length - a.people.length);
 }
 
-function mapPeopleForResponse(people: Database["public"]["Tables"]["people"]["Row"][]) {
+function mapPeopleForResponse(
+  people: Database["public"]["Tables"]["people"]["Row"][],
+  linkedPropertiesByPersonId: Map<string, PersonPropertyLinkSummary[]>,
+) {
   return people.map((person) => {
     const leadSummary =
       person.crm_status || person.crm_funnel_id || (person.crm_score ?? 0) > 0 || person.crm_unread
@@ -139,6 +212,7 @@ function mapPeopleForResponse(people: Database["public"]["Tables"]["people"]["Ro
       updatedAt: person.updated_at,
       lead: leadSummary,
       leadCount: leadSummary ? 1 : 0,
+      linkedProperties: linkedPropertiesByPersonId.get(person.id) || [],
     };
   });
 }
@@ -160,7 +234,15 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to load people" }, { status: 500 });
   }
 
-  const items = mapPeopleForResponse(people || []);
+  let linkedPropertiesByPersonId = new Map<string, PersonPropertyLinkSummary[]>();
+  try {
+    linkedPropertiesByPersonId = await listPersonPropertyLinksByPersonIds((people || []).map((person) => person.id));
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "Failed to load linked properties" }, { status: 500 });
+  }
+
+  const items = mapPeopleForResponse(people || [], linkedPropertiesByPersonId);
   const tags = Array.from(new Set(items.flatMap((item) => item.tags))).sort();
   const duplicateGroups = buildDuplicateGroups(items);
 
@@ -189,7 +271,8 @@ export async function POST(req: Request) {
     const fullName = String(body.fullName ?? "").trim();
     const primaryPhone = normalizePhone(body.primaryPhone);
     const email = normalizeEmail(body.email);
-    const roles = normalizeRoleList(body.roles);
+    const linkedProperties = normalizeLinkedProperties(body.linkedProperties);
+    const roles = mergeRolesWithLinkedProperties(normalizeRoleList(body.roles), linkedProperties);
     const tags = normalizeTagList(body.tags);
     const origin = String(body.origin ?? "manual").trim() || "manual";
     const metadata = asJsonObject(body.metadata);
@@ -220,6 +303,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to create person" }, { status: 500 });
     }
 
+    let savedLinkedProperties: PersonPropertyLinkSummary[] = [];
+    try {
+      savedLinkedProperties = await replacePersonPropertyLinks(person.id, linkedProperties);
+    } catch (error) {
+      console.error(error);
+      return NextResponse.json({ error: "Failed to save linked properties" }, { status: 500 });
+    }
+
     if ((Boolean(body.createLead) || roles.includes("lead")) && primaryPhone) {
       await createLead({
         personId: person.id,
@@ -236,7 +327,12 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ success: true, person });
+    return NextResponse.json({
+      success: true,
+      person: {
+        ...mapPeopleForResponse([person], new Map([[person.id, savedLinkedProperties]]))[0],
+      },
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

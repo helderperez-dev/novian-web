@@ -2,6 +2,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
 import { getLeadNotesByVisibility } from "@/lib/leadNotes";
+import { listPersonPropertyLinksByPersonIds } from "./personProperties";
 import { ensurePersonForLead, getPersonByPhone, getPersonCrm, getPersonMetadata, isChatEligiblePerson, isOpportunityStatus, updatePersonLeadState, deleteLeadPerson } from "./people";
 import type { ChatMessage, Thread } from "@/lib/store";
 
@@ -236,16 +237,42 @@ export async function getLeadInfoForThread(threadId: string) {
     ),
   );
 
+  const linkedProperties =
+    (await listPersonPropertyLinksByPersonIds([person.id])).get(person.id)?.flatMap((link) => {
+      if (!link.property) {
+        return [];
+      }
+
+      return [
+        {
+          relationshipType: link.relationshipType,
+          notes: link.notes || undefined,
+          property: {
+            id: link.property.id,
+            title: link.property.title,
+            slug: link.property.slug || undefined,
+            address: link.property.address || undefined,
+            price: link.property.price,
+            status: link.property.status,
+          },
+        },
+      ];
+    }) || [];
+
   return {
     id: person.id,
     name: person.full_name || undefined,
     phone: person.primary_phone || undefined,
+    email: person.email || undefined,
+    roles: person.roles || undefined,
+    score: person.crm_score ?? undefined,
     status: person.crm_status || undefined,
     preferences,
     notes: sharedNotes.map((note) => note.content),
     source: typeof customData.source === "string" ? customData.source : undefined,
     assignedAgentId: typeof customData.agent_id === "string" ? customData.agent_id : undefined,
     whatsappProfile: Object.keys(whatsappProfile).length > 0 ? whatsappProfile : undefined,
+    linkedProperties: linkedProperties.length > 0 ? linkedProperties : undefined,
   };
 }
 

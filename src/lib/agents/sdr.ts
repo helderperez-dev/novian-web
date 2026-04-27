@@ -33,7 +33,12 @@ function buildLeadContextPrompt(state: AgentState) {
   const parts = [
     state.leadInfo.name ? `Nome: ${state.leadInfo.name}` : null,
     state.leadInfo.phone ? `Telefone: ${state.leadInfo.phone}` : null,
+    state.leadInfo.email ? `E-mail: ${state.leadInfo.email}` : null,
     state.leadInfo.status ? `Status: ${state.leadInfo.status}` : null,
+    typeof state.leadInfo.score === "number" ? `Score CRM: ${state.leadInfo.score}` : null,
+    state.leadInfo.roles && state.leadInfo.roles.length > 0
+      ? `Perfis: ${state.leadInfo.roles.join(", ")}`
+      : null,
     state.leadInfo.source ? `Origem: ${state.leadInfo.source}` : null,
     state.leadInfo.assignedAgentId ? `Agente responsavel: ${state.leadInfo.assignedAgentId}` : null,
     state.leadInfo.preferences && Object.keys(state.leadInfo.preferences).length > 0
@@ -44,6 +49,22 @@ function buildLeadContextPrompt(state: AgentState) {
       : null,
     state.leadInfo.notes && state.leadInfo.notes.length > 0
       ? `Notas compartilhadas com a IA:\n- ${state.leadInfo.notes.join("\n- ")}`
+      : null,
+    state.leadInfo.linkedProperties && state.leadInfo.linkedProperties.length > 0
+      ? `Imoveis vinculados:\n- ${state.leadInfo.linkedProperties
+          .map((link) => {
+            const propertyParts = [
+              link.property.title,
+              link.relationshipType === "owner" ? "proprietario" : "interessado",
+              link.property.status,
+              typeof link.property.price === "number" ? `preco final ${link.property.price}` : null,
+              link.property.address || null,
+              link.notes || null,
+            ].filter(Boolean);
+
+            return propertyParts.join(" | ");
+          })
+          .join("\n- ")}`
       : null,
   ].filter(Boolean);
 

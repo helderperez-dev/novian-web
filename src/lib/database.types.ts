@@ -720,6 +720,57 @@ export type Database = {
           },
         ]
       }
+      person_properties: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json
+          notes: string | null
+          person_id: string
+          property_id: string
+          relationship_type: "interested" | "owner"
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          person_id: string
+          property_id: string
+          relationship_type: "interested" | "owner"
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json
+          notes?: string | null
+          person_id?: string
+          property_id?: string
+          relationship_type?: "interested" | "owner"
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_properties_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_properties_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

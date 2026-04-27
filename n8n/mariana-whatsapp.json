@@ -1,0 +1,1213 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.inbound_sql }}",
+        "options": {}
+      },
+      "id": "93f2ff00-ad68-47eb-ba58-0d5b98b8775b",
+      "name": "Persistir entrada e garantir pessoa/thread",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        78192,
+        37424
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=MENSAGEM DO LEAD:\n{{ $('Normalizar WhatsApp').item.json.message }}\n\nCONTEXTO SEGURO DA PESSOA:\n{{ $json.matched_people_context }}\n\nRESUMO DO CATALOGO SEGURO DE IMOVEIS ATIVOS:\n{{ $json.active_properties_summary }}\n\nANO ATUAL EM SAO PAULO:\n{{ $now.setZone('America/Sao_Paulo').format('yyyy') }}\n\nTAREFA:\nResponda ao lead pelo WhatsApp.\nUse as ferramentas quando precisar consultar ou atualizar dados alem do contexto resumido.\n- Se o lead pedir foto, imagem, fachada, material visual ou documento de um imovel especifico, consulte primeiro os detalhes publicos desse imovel pelas ferramentas seguras antes de responder que nao possui esse material.\n\nResponda APENAS em JSON valido:\n{\n  \"message\": \"texto final para enviar no WhatsApp\",\n  \"classification\": \"HOT | WARM | COLD | NAO_APLICAVEL\",\n  \"should_reply\": true,\n  \"delivery\": {\n    \"type\": \"text | image | document\",\n    \"url\": null,\n    \"urls\": [],\n    \"reference\": null,\n    \"caption\": null,\n    \"file_name\": null\n  },\n  \"profile_updates\": {\n    \"full_name\": null,\n    \"email\": null,\n    \"intent\": \"buy | sell | rent | unknown\",\n    \"score_delta\": 0,\n    \"notes_ai\": [\"observacoes curtas que a IA pode reutilizar depois\"],\n    \"notes_internal\": [\"observacoes internas para a equipe\"],\n    \"property_links\": [\n      {\n        \"reference\": \"nome, slug ou endereco exato citado pelo lead\",\n        \"relationship_type\": \"interested | owner\",\n        \"notes\": \"motivo do vinculo\"\n      }\n    ]\n  }\n}",
+        "options": {
+          "systemMessage": "=Voce e Mariana, SDR da Novian, uma imobiliaria moderna em Jundiai.\n\nVoce esta falando diretamente com um lead pelo WhatsApp.\n\nObjetivo:\n- responder rapido\n- ser natural\n- qualificar o lead\n- descobrir intencao imobiliaria\n- enriquecer o perfil sem vazar dados de outras pessoas\n\nRegras:\n- Responda sempre em portugues do Brasil (pt-BR).\n- Nao diga que e IA.\n- Nao fale sobre banco de dados, sistema, Supabase, Postgres, webhook ou automacao.\n- Use somente o contexto seguro da propria pessoa recebido na entrada ou retornado pelas ferramentas seguras.\n- O CONTEXTO SEGURO DA PESSOA traz dados da pessoa, estagio, intencao, perfil, imoveis ativos ja vinculados e notas que a IA pode usar internamente.\n- Voce pode ler e usar os dados do contato recebidos na entrada, como nome, telefone, e-mail, intencao, etapa, perfil, imoveis vinculados e notas visiveis para IA, para conduzir a conversa com contexto.\n- Use notes_ai apenas como memoria operacional para personalizar a conversa, priorizar contexto e evitar repetir perguntas. Nunca revele, cite ou copie notas privadas na mensagem ao lead.\n- O RESUMO DO CATALOGO SEGURO e apenas um guia rapido. Quando precisar localizar imoveis, filtrar opcoes, confirmar detalhes publicos de um imovel ou reler dados atuais do contato, use as ferramentas Postgres seguras.\n- So fale de imoveis que estejam no contexto seguro recebido ou retornados pelas ferramentas seguras de imoveis.\n- Os dados retornados pelas ferramentas de imoveis contem apenas informacoes publicas e seguras para atendimento comercial, como titulo, endereco, preco final, descricao, caracteristicas e detalhes uteis ao comprador.\n- Quando enviar link de imovel ao lead, use somente o campo public_url retornado pelo contexto seguro ou pelas ferramentas. Copie a URL exatamente como veio. Nunca monte link manualmente a partir do titulo, endereco ou slug.\n- Se precisar enviar imagem ou documento pelo WhatsApp, use apenas URLs publicas e seguras retornadas pelo contexto seguro ou pelas ferramentas seguras. Nunca invente URL, nunca envie data URL e nunca envie base64 longa.\n- Quando houver um imovel com cover_image valido e o lead pedir foto, imagem, fachada, ambiente ou material visual do imovel, prefira usar Enviar imagem com esse cover_image ou outra URL publica segura da propria listagem.\n- Se o lead pedir foto, imagem, fachada, ambiente ou material visual de um imovel citado por nome, slug, link ou endereco, consulte primeiro get_property_public_details ou get_current_contact_linked_properties para verificar cover_image e public_url antes de dizer que nao tem imagens.\n- Use Enviar documento apenas para PDF, apresentacao, memorial, regulamento, proposta ou outro anexo formal. Nao use Enviar documento para mandar foto de imovel quando existir uma imagem publica adequada.\n- So envie imagem ou documento quando o lead pedir esse material ou quando isso ajudar claramente o atendimento comercial.\n- Para controlar isso no fluxo, preencha o objeto delivery no JSON final.\n- Use delivery.type = text para resposta normal sem anexo.\n- Use delivery.type = image quando o lead pedir foto, fachada, ambientes ou material visual do imovel.\n- Para uma unica imagem, voce pode preencher delivery.url com uma URL publica segura.\n- Para varias imagens do mesmo imovel, prefira preencher delivery.reference com a referencia exata do imovel citado pelo lead e, se ja tiver URLs publicas seguras, voce tambem pode preencher delivery.urls com uma ou mais URLs.\n- Nao cole arrays longos de base64 no JSON final. Quando houver varias imagens do imovel, prefira delivery.reference para que o proprio fluxo busque e envie todas as imagens disponiveis.\n- Use delivery.type = document somente quando houver URL publica segura de PDF ou anexo formal em delivery.url.\n- Se nao houver material seguro disponivel, mantenha delivery.type = text e responda com texto e, se ajudar, com o public_url do imovel.\n- Nunca use, mencione ou infira detalhes internos de precificacao, como composicao do preco, owner_price, comissao, repasse, margem ou qualquer observacao interna.\n- Quando sugerir imoveis, priorize apenas opcoes ativas que estejam alinhadas ao que o lead pediu de forma explicita, como objetivo, bairro/regiao, tipo, faixa de valor, prazo ou outras preferencias. Se ainda nao houver criterio suficiente, faca perguntas curtas antes de sugerir imoveis.\n- Compartilhe somente o preco final exibido no contexto ou nas ferramentas seguras. Nunca mencione comissao, repasse, preco do proprietario ou detalhes financeiros internos.\n- Nunca invente imoveis, valores ou informacoes.\n- Nao associe imovel se a referencia estiver vaga ou ambigua.\n- Se faltar e-mail e fizer sentido, peca o e-mail de forma natural.\n- E-mail valido do lead e obrigatorio para agendar, remarcar ou confirmar visita.\n- Para agendar ou remarcar visita, voce deve obrigatoriamente pedir que o lead informe o e-mail no chat atual antes de usar qualquer ferramenta de calendario, mesmo que ja exista um e-mail salvo no contexto.\n- Nunca agende usando apenas um e-mail antigo, inferido ou preexistente sem que o lead tenha informado esse e-mail nesta conversa.\n- Se o lead quiser agendar, remarcar ou confirmar visita, sua proxima resposta deve ser pedir o e-mail antes de criar ou atualizar o evento.\n- Sem e-mail informado pelo lead nesta conversa, nao use create_google_calendar_event nem update_google_calendar_event e nao confirme a visita como agendada.\n- Se a pessoa demonstrar interesse, tente descobrir se quer comprar, vender ou alugar, alem de regiao, tipo de imovel, faixa de valor e prazo.\n- Use profile_updates como o meio padrao para registrar full_name, email, intent, notes_ai, notes_internal e property_links na saida final.\n- Use update_current_contact_safe_fields apenas quando precisar persistir imediatamente uma correcao ou dado estruturado do contato durante a propria execucao. Nao duplique a mesma mudanca no tool e em profile_updates sem necessidade.\n- Se o lead corrigir ou informar o proprio nome, preencha profile_updates.full_name.\n- Nao envie JSON para o cliente, apenas coloque a resposta dentro do campo message.\n- notes_ai deve conter fatos uteis e reutilizaveis pela agente.\n- notes_internal deve conter sinais comerciais ou operacionais relevantes para a equipe.\n- notes_ai e notes_internal sao memoria interna. Nunca exponha esse conteudo ao lead.\n- property_links so deve incluir referencias explicitamente citadas pelo lead.\n\nFormatacao para WhatsApp:\n- Escreva em texto simples e compativel com WhatsApp.\n- Se quiser dar destaque, use apenas *negrito* com um unico asterisco.\n- Voce pode usar listas simples com '-'.\n- Nunca use **negrito duplo**, __underline__, titulos com #, tabelas, HTML, blocos de codigo, links em Markdown no formato [texto](url) ou qualquer sintaxe que o WhatsApp nao renderize bem.\n- Evite mensagens longas demais e blocos muito grandes.\n\nClassificacao:\n- HOT: quer visitar, comprar/vender logo, tem urgencia ou intencao clara.\n- WARM: interessado, mas ainda faltam dados.\n- COLD: muito vago ou pouca intencao.\n- NAO_APLICAVEL: saudacao ou contexto insuficiente.\n\nAgendamento de Visitas:\n- Hoje e {{ $now.setZone('America/Sao_Paulo').format('dd/MM/yyyy HH:mm') }}.\n- Considere sempre o ano atual informado na entrada ao interpretar datas sem ano.\n- Para agendar visitas, use as ferramentas de calendario.\n- Para verificar se um horario esta livre, use PRIMEIRO a ferramenta check_google_calendar_availability.\n- Nunca use create_google_calendar_event ou update_google_calendar_event sem ter chamado check_google_calendar_availability para a mesma faixa de start/end nesta execucao atual e sem o retorno indicar claramente que o horario esta livre.\n- Se check_google_calendar_availability indicar conflito, indisponibilidade, evento sobreposto ou retorno ambiguo, nao agende nem remarque nesse horario; ofereca 2 ou 3 alternativas livres.\n- Se create_google_calendar_event ou update_google_calendar_event retornar BLOQUEIO_DE_AGENDA, nao insista no mesmo horario, nao tente contornar a validacao e nao confirme a visita; use o erro como sinal para verificar novamente ou oferecer 2 ou 3 alternativas livres.\n- So use get_google_calendar_events quando precisar listar, resumir ou localizar eventos ja agendados, nunca como primeira opcao para decidir se um horario especifico esta disponivel.\n- Horario comercial: 09h as 18h, de segunda a sexta.\n- Antes de criar ou atualizar um evento, confirme data, hora, duracao, imovel/unidade ou endereco, nome do lead e o e-mail informado pelo lead no chat atual.\n- O e-mail precisa ser coletado nesta conversa para que a pessoa receba o convite por e-mail.\n- Mesmo que haja e-mail salvo no contexto seguro, nao reutilize esse valor para agendar sem pedir o e-mail novamente ao lead antes de qualquer chamada de create_google_calendar_event ou update_google_calendar_event.\n- Quando o lead usar data relativa, como amanha, depois de amanha, na proxima semana, terca que vem ou terca-feira da semana que vem, resolva primeiro para uma data absoluta em Sao Paulo e so agende se o dia da semana e a data final forem coerentes entre si.\n- Exemplo: terca-feira da semana que vem significa a terca-feira da proxima semana calendario, nunca o mesmo dia do mes no proximo mes.\n- Se o lead mencionar um dia da semana e a data calculada nao cair nesse mesmo dia da semana, pare e peca confirmacao antes de agendar.\n- Antes de usar create_google_calendar_event ou update_google_calendar_event, repita internamente a data final no formato DIA-DA-SEMANA, DD/MM/AAAA as HHh e so prossiga se isso bater exatamente com o pedido do lead.\n- Se a duracao nao for informada, assuma 1 hora.\n- Ao criar ou atualizar horarios no calendario, use sempre ISO 8601 completo com offset explicito de Sao Paulo. Exemplo para 28 de abril as 11h: 2026-04-28T11:00:00-03:00. Nunca use horario sem timezone, nunca use Z quando o horario for local de Sao Paulo e nunca troque formato de 24 horas por AM/PM.\n- O horario confirmado ao lead, o horario escrito na description e os campos start/end enviados para a ferramenta devem ser exatamente o mesmo horario local. Se houver qualquer divergencia, nao confirme ainda.\n- Ao atualizar um evento existente, sempre envie start e end novos de forma explicita. Nunca preserve o horario antigo quando o lead escolheu outro horario.\n- Ao criar um evento com create_google_calendar_event, voce DEVE preencher summary, description, attendees e, se souber, location.\n- O campo attendees e obrigatorio no create_google_calendar_event e deve conter pelo menos um e-mail valido que tenha sido informado pelo lead nesta conversa. Nunca envie null, undefined, vazio ou texto que nao seja e-mail.\n- O summary deve ser curto e claro. Exemplo: Visita | Nome do lead | Imovel ou bairro.\n- O lead comprador deve ser adicionado como convidado no evento usando o e-mail dele em attendees.\n- A description deve seguir um padrao visivel ao cliente, sem notas internas, sem contexto operacional oculto e sem qualquer texto que a Novian nao queira que o lead veja.\n- O nome da pessoa deve aparecer de forma clara na description.\n- Nao inclua comentarios, qualificacoes ou observacoes sobre o lead na description, porque isso ja pertence ao contexto interno da plataforma Novian.\n- Use este modelo de description:\n  Visita Novian\n  Nome: NOME DO LEAD\n  Telefone: TELEFONE DO LEAD\n  E-mail: E-MAIL DO LEAD\n  Imovel: NOME DO IMOVEL OU REFERENCIA\n  Endereco: ENDERECO DA VISITA\n  Data e horario: DATA E HORA COMBINADAS\n  Corretora responsavel: Barbara Camargo\n  Origem: WhatsApp Novian\n- A linha E-mail na description da visita e obrigatoria e deve usar o e-mail informado pelo lead nesta conversa.\n- Se o e-mail ainda nao tiver sido informado pelo lead, nao agende e peca esse dado primeiro.\n- Para os demais campos, se algum nao estiver disponivel, omita a linha em vez de inventar.\n- Confirme para o lead APENAS depois que o evento for criado ou atualizado com sucesso.\n- Se o lead pedir para remarcar, primeiro identifique o evento atual com get_google_calendar_events e confirme qual e o evento certo se houver ambiguidade.\n- Se o lead disser apenas que quer outro dia, outro horario ou remarcar sem definir exatamente a nova opcao, NAO altere a agenda ainda. Primeiro descubra a preferencia ou verifique disponibilidade e envie 2 ou 3 opcoes objetivas de novos horarios ao lead.\n- So remarcar depois que o lead escolher claramente uma das opcoes oferecidas ou confirmar uma nova data e hora exatas, e depois de validar a disponibilidade com check_google_calendar_availability.\n- A validacao de disponibilidade deve usar exatamente o mesmo start e end que serao enviados no create_google_calendar_event ou update_google_calendar_event. Se os horarios nao forem identicos, repita a validacao antes de prosseguir.\n- Para remarcacao, prefira update_google_calendar_event no evento existente para evitar duplicidade.\n- Ao remarcar, preserve ou volte a incluir em attendees apenas o e-mail que o lead informou nesta conversa e trate esse e-mail como obrigatorio para concluir a visita.\n- Se, em um caso excepcional, voce precisar criar um novo evento para substituir o anterior, so confirme a remarcacao depois que o novo evento estiver criado com sucesso e o evento antigo tiver sido cancelado com delete_google_calendar_event.\n- Se o lead pedir para cancelar, primeiro identifique o evento correto com get_google_calendar_events, confirme se houver ambiguidade e depois use delete_google_calendar_event.\n- Nunca faca uma remarcacao silenciosa sem antes coletar ou confirmar a nova opcao com o lead.\n- Se uma busca de eventos retornar multiplos candidatos ou nenhum candidato confiavel, nao fique repetindo a mesma ferramenta. Pare e peca uma confirmacao objetiva ao lead.\n- Evite chamar a mesma ferramenta varias vezes com os mesmos parametros. Se a primeira tentativa nao resolver, refine os parametros uma unica vez ou faca uma pergunta curta de esclarecimento.\n\nFerramentas:\n- get_current_contact_safe_context: reler os dados seguros mais atuais do contato desta conversa.\n- get_current_contact_linked_properties: listar os imoveis ativos ja vinculados a este contato, incluindo cover_image e public_url quando existirem. Use tambem quando o lead pedir fotos de um imovel ja vinculado.\n- search_active_properties_public: buscar imoveis ativos publicos com filtros comerciais.\n- get_property_public_details: obter detalhes publicos de um imovel especifico citado pelo lead, incluindo cover_image e public_url quando existirem. Use antes de responder sobre fotos, imagens ou material visual de um imovel nomeado.\n- update_current_contact_safe_fields: atualizar campos estruturados e seguros do contato atual.\n- check_google_calendar_availability: verificar se uma faixa de horario esta livre na agenda.\n- get_google_calendar_events: listar, resumir ou localizar eventos existentes na agenda. Use tambem para obter o eventId antes de remarcar ou cancelar.\n- create_google_calendar_event: criar uma visita nova na agenda com titulo e descricao completos. So use se o lead tiver informado o e-mail nesta conversa atual; caso contrario, primeiro peca o e-mail. So use depois de resolver qualquer data relativa para uma data absoluta coerente com o dia da semana pedido pelo lead e depois que check_google_calendar_availability confirmar que exatamente essa faixa esta livre nesta mesma execucao. Nao use para remarcacao se ja existir um evento confiavel para atualizar.\n- update_google_calendar_event: remarcar ou atualizar um evento ja existente usando o eventId. Esta e a ferramenta preferida para remarcacao e tambem exige que o lead tenha informado o e-mail nesta conversa antes da atualizacao. Antes de atualizar, valide tambem se a nova data absoluta bate com o dia da semana mencionado pelo lead e se check_google_calendar_availability confirmou que exatamente essa nova faixa esta livre nesta mesma execucao.\n- delete_google_calendar_event: cancelar um evento ja existente usando o eventId. Use tambem para remover o evento antigo se uma remarcacao excepcional exigir criar um evento substituto.\n"
+        }
+      },
+      "id": "0c8eed7b-bf2e-4d00-af0b-d78f3d1d6360",
+      "name": "AI Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        78640,
+        37424
+      ]
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "2e1af0a0-66bc-424d-b765-7d03b926cf3a",
+      "name": "OpenRouter",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        78624,
+        37616
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "gpPO0FA1QhoMGl7t",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'whatsapp:' + $json.thread_id }}",
+        "tableName": "agent_chat_histories",
+        "contextWindowLength": 4
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        78752,
+        37648
+      ],
+      "id": "13f32252-67a0-400a-9e63-2ada8032a830",
+      "name": "Postgres Chat Memory1",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Montar contexto do lead').first().json;\n\nfunction parseObject(value) {\n  if (typeof value === 'string') {\n    try {\n      return JSON.parse(value);\n    } catch (error) {\n      return { message: value };\n    }\n  }\n\n  if (value && typeof value === 'object') {\n    return value;\n  }\n\n  return {};\n}\n\nfunction asTrimmedString(value) {\n  return typeof value === 'string' && value.trim() ? value.trim() : null;\n}\n\nfunction uniqueStrings(value) {\n  if (!Array.isArray(value)) return [];\n  return Array.from(new Set(value.map((item) => asTrimmedString(item)).filter(Boolean)));\n}\n\nfunction normalizeEmail(value) {\n  const email = asTrimmedString(value);\n  if (!email) return null;\n\n  const normalized = email.toLowerCase();\n  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalized) ? normalized : null;\n}\n\nfunction normalizeFullName(value) {\n  const name = asTrimmedString(value);\n  if (!name) return null;\n\n  return name\n    .replace(/\\s+/g, ' ')\n    .split(' ')\n    .filter(Boolean)\n    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())\n    .join(' ');\n}\n\nfunction normalizeIntent(value) {\n  const intent = asTrimmedString(value);\n  if (!intent) return 'unknown';\n\n  const normalized = intent.toLowerCase();\n  if (['buy', 'sell', 'rent', 'unknown'].includes(normalized)) {\n    return normalized;\n  }\n\n  return 'unknown';\n}\n\nfunction normalizeRelationshipType(value) {\n  return value === 'owner' ? 'owner' : 'interested';\n}\n\nfunction normalizePropertyLinks(value) {\n  if (!Array.isArray(value)) return [];\n\n  const dedupe = new Map();\n  for (const item of value) {\n    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;\n\n    const reference = asTrimmedString(item.reference);\n    if (!reference) continue;\n\n    const relationshipType = normalizeRelationshipType(item.relationship_type);\n    const notes = asTrimmedString(item.notes);\n    const key = `${reference.toLowerCase()}::${relationshipType}`;\n\n    if (!dedupe.has(key)) {\n      dedupe.set(key, {\n        reference,\n        relationship_type: relationshipType,\n        notes,\n      });\n    }\n  }\n\n  return Array.from(dedupe.values());\n}\n\nfunction normalizeWhatsAppFormatting(value) {\n  let text = asTrimmedString(value) || '';\n  if (!text) return '';\n\n  text = text.replace(/\\r\\n/g, '\\n');\n  text = text.replace(/<br\\s*\\/?>/gi, '\\n');\n  text = text.replace(/<[^>]+>/g, '');\n  text = text.replace(/```([\\s\\S]*?)```/g, '$1');\n  text = text.replace(/`([^`]+)`/g, '$1');\n  text = text.replace(/^\\s{0,3}#{1,6}\\s+/gm, '');\n  text = text.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g, '$1: $2');\n  text = text.replace(/\\*\\*\\*([^*]+)\\*\\*\\*/g, '*$1*');\n  text = text.replace(/\\*\\*([^*]+)\\*\\*/g, '*$1*');\n  text = text.replace(/__([^_]+)__/g, '_$1_');\n  text = text.replace(/~~([^~]+)~~/g, '~$1~');\n  text = text.replace(/^\\s*[\\u2022*+]\\s+/gm, '- ');\n  text = text.replace(/[ \\t]+\\n/g, '\\n');\n  text = text.replace(/\\n{3,}/g, '\\n\\n');\n\n  return text.trim();\n}\n\nfunction normalizeDeliveryType(value) {\n  const normalized = asTrimmedString(value)?.toLowerCase();\n  if (normalized === 'image' || normalized === 'document') {\n    return normalized;\n  }\n  return 'text';\n}\n\nfunction normalizeMediaUrl(value, deliveryType) {\n  const url = asTrimmedString(value);\n  if (!url) return null;\n\n  if (/^https?:\\/\\//i.test(url)) {\n    return url;\n  }\n\n  if (deliveryType === 'image' && /^data:image\\//i.test(url)) {\n    return url;\n  }\n\n  if (deliveryType === 'document' && /^data:application\\//i.test(url)) {\n    return url;\n  }\n\n  return null;\n}\n\nfunction normalizeMediaUrls(values, deliveryType) {\n  const list = Array.isArray(values) ? values : [values];\n  const dedupe = new Set();\n  const output = [];\n\n  for (const entry of list.flat()) {\n    let candidate = entry;\n\n    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {\n      candidate = candidate.url ?? candidate.media_url ?? candidate.image_url ?? null;\n    }\n\n    const normalized = normalizeMediaUrl(candidate, deliveryType);\n    if (!normalized || dedupe.has(normalized)) continue;\n\n    dedupe.add(normalized);\n    output.push(normalized);\n  }\n\n  return output;\n}\n\nfunction normalizeFileName(value, deliveryType) {\n  const raw = asTrimmedString(value);\n  if (!raw) {\n    return deliveryType === 'document' ? 'arquivo.pdf' : null;\n  }\n\n  return raw.replace(/[\\\\/]/g, '-').slice(0, 120);\n}\n\nlet response = parseObject($json.output ?? $json);\nif (response && typeof response.output === 'string') {\n  response = parseObject(response.output);\n}\n\nconst message = normalizeWhatsAppFormatting(\n  asTrimmedString(response?.message) ||\n  asTrimmedString(response?.response) ||\n  asTrimmedString(response?.text) ||\n  'Oi! Posso te ajudar. Você está buscando comprar, vender ou alugar?'\n);\n\nconst classification = ['HOT', 'WARM', 'COLD', 'NAO_APLICAVEL'].includes(response?.classification)\n  ? response.classification\n  : 'NAO_APLICAVEL';\n\nconst rawUpdates = response?.profile_updates && typeof response.profile_updates === 'object' && !Array.isArray(response.profile_updates)\n  ? response.profile_updates\n  : {};\n\nconst propertyLinks = normalizePropertyLinks(rawUpdates.property_links).slice(0, 5);\n\nconst rawDelivery = response?.delivery && typeof response.delivery === 'object' && !Array.isArray(response.delivery)\n  ? response.delivery\n  : {};\n\nconst requestedDeliveryType = normalizeDeliveryType(rawDelivery.type);\nconst mediaUrls = normalizeMediaUrls([\n  rawDelivery.urls,\n  rawDelivery.media_urls,\n  rawDelivery.images,\n  rawDelivery.url,\n  rawDelivery.media_url,\n  rawDelivery.image_url,\n  rawDelivery.document_url,\n], requestedDeliveryType);\nconst mediaCaption = normalizeWhatsAppFormatting(\n  asTrimmedString(rawDelivery.caption) ||\n  asTrimmedString(rawDelivery.message) ||\n  ''\n);\nconst mediaFileName = normalizeFileName(\n  rawDelivery.file_name ?? rawDelivery.filename ?? rawDelivery.fileName,\n  requestedDeliveryType\n);\nconst deliveryReference =\n  asTrimmedString(rawDelivery.reference) ||\n  asTrimmedString(rawDelivery.property_reference) ||\n  asTrimmedString(rawDelivery.property) ||\n  (propertyLinks[0]?.reference ?? null);\nconst deliveryType = requestedDeliveryType !== 'text' && (mediaUrls.length > 0 || !!deliveryReference)\n  ? requestedDeliveryType\n  : 'text';\n\nconst scoreDefaults = {\n  HOT: 20,\n  WARM: 10,\n  COLD: 3,\n  NAO_APLICAVEL: 0,\n};\n\nconst explicitScore = Number(rawUpdates.score_delta);\nconst scoreDelta = Number.isFinite(explicitScore)\n  ? Math.max(0, Math.round(explicitScore))\n  : scoreDefaults[classification] || 0;\n\nreturn [{\n  json: {\n    instance: original.instance || 'mariana-sdr',\n    agent_id: original.agent_id || 'mariana-sdr',\n    agent_label: original.agent_label || 'Mariana Silva',\n    remote_jid: original.remote_jid,\n    thread_id: original.thread_id,\n    person_id: original.person_id || null,\n    phone: original.phone,\n    provider_message_id: original.provider_message_id || null,\n    text: String(message).trim(),\n    should_reply: response?.should_reply !== false,\n    classification,\n    delivery_type: deliveryType,\n    delivery_reference: deliveryReference,\n    media_url: mediaUrls[0] || null,\n    media_urls: deliveryType !== 'text' ? mediaUrls : [],\n    media_caption: mediaCaption || null,\n    media_file_name: mediaFileName,\n    profile_updates: {\n      full_name: normalizeFullName(rawUpdates.full_name),\n      email: normalizeEmail(rawUpdates.email),\n      intent: normalizeIntent(rawUpdates.intent),\n      score_delta: scoreDelta,\n      notes_ai: uniqueStrings(rawUpdates.notes_ai).slice(0, 4),\n      notes_internal: uniqueStrings(rawUpdates.notes_internal).slice(0, 4),\n      property_links: propertyLinks,\n    },\n  },\n}];"
+      },
+      "id": "adb41c07-c627-4ee3-a6c4-0d86372623cb",
+      "name": "Prepare Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        78960,
+        37424
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ !!$json.should_reply && (!!$json.text || !!$json.media_url || (($json.media_urls || []).length > 0) || !!$json.delivery_reference) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "b864d4e3-15ea-4cca-9a58-f47936734fab",
+      "name": "Enviar somente se deve responder",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        79152,
+        37424
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "instanceName": "={{ $json.instance }}",
+        "remoteJid": "={{ $('Normalizar WhatsApp').item.json.phone }}",
+        "messageText": "={{ $json.text }}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        80592,
+        37456
+      ],
+      "id": "1651452d-479c-4964-b8a1-d6a8cea9cdd5",
+      "name": "Enviar texto",
+      "credentials": {
+        "evolutionApi": {
+          "id": "GqUEUbeN7EHwcMY2",
+          "name": "Novian Whatsapp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function esc(value) {\n  if (value === null || value === undefined) return 'NULL';\n  return `'${String(value).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\")}'`;\n}\n\nfunction escJson(value) {\n  const json = JSON.stringify(value ?? {});\n  return `${esc(json)}::jsonb`;\n}\n\nfunction normalizeEmail(value) {\n  if (typeof value !== 'string' || !value.trim()) return null;\n  const email = value.trim().toLowerCase();\n  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) ? email : null;\n}\n\nfunction normalizeFullName(value) {\n  if (typeof value !== 'string' || !value.trim()) return null;\n\n  return value\n    .trim()\n    .replace(/\\s+/g, ' ')\n    .split(' ')\n    .filter(Boolean)\n    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())\n    .join(' ');\n}\n\nconst replyData = $('Prepare Reply').first().json;\nconst sendResult = $json;\n\nif (replyData.delivery_type === 'image' && Number(sendResult.media_index ?? 0) > 0) {\n  return [{\n    json: {\n      ...sendResult,\n      outbound_sql: 'SELECT 1 AS skipped_persist;',\n    },\n  }];\n}\n\nconst updates = replyData.profile_updates && typeof replyData.profile_updates === 'object' && !Array.isArray(replyData.profile_updates)\n  ? replyData.profile_updates\n  : {};\nconst nowIso = new Date().toISOString();\nconst author = replyData.agent_label || replyData.agent_id || 'Mariana Silva';\nconst extractedFullName = normalizeFullName(updates.full_name);\nconst extractedEmail = normalizeEmail(updates.email);\nconst extractedIntent = ['buy', 'sell', 'rent', 'unknown'].includes(updates.intent) ? updates.intent : 'unknown';\nconst scoreDelta = Number.isFinite(Number(updates.score_delta)) ? Math.max(0, Math.round(Number(updates.score_delta))) : 0;\nconst propertyLinks = Array.isArray(updates.property_links) ? updates.property_links : [];\n\nfunction createNote(content, visibility) {\n  return {\n    id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,\n    content,\n    visibility,\n    author,\n    createdAt: nowIso,\n    updatedAt: nowIso,\n  };\n}\n\nconst notesToAppend = [\n  ...(Array.isArray(updates.notes_ai) ? updates.notes_ai : [])\n    .map((item) => typeof item === 'string' ? item.trim() : '')\n    .filter(Boolean)\n    .map((content) => createNote(content, 'ai')),\n  ...(Array.isArray(updates.notes_internal) ? updates.notes_internal : [])\n    .map((item) => typeof item === 'string' ? item.trim() : '')\n    .filter(Boolean)\n    .map((content) => createNote(content, 'internal')),\n];\n\nconst metadataPatch = {\n  latest_real_estate_intent: extractedIntent,\n  last_extracted_email: extractedEmail,\n  qualification_source: 'whatsapp_ai',\n  qualification_updated_at: nowIso,\n  last_property_link_hints: propertyLinks,\n  last_classification: replyData.classification || 'NAO_APLICAVEL',\n};\n\nconst d = {\n  ...replyData,\n  send_result: sendResult,\n};\n\nconst outboundSql = `\nWITH payload AS (\n  SELECT\n    ${esc(d.thread_id)}::text AS thread_id,\n    ${esc(d.agent_label || d.agent_id || 'Agente')}::text AS agent_label,\n    ${esc(d.text)}::text AS message_text,\n    ${esc(d.person_id || null)}::uuid AS person_id,\n    ${esc(extractedFullName)}::text AS extracted_full_name,\n    ${esc(extractedEmail)}::text AS extracted_email,\n    ${esc(extractedIntent)}::text AS extracted_intent,\n    ${scoreDelta}::integer AS score_delta,\n    ${escJson(notesToAppend)} AS notes_to_append,\n    ${escJson(propertyLinks)} AS property_links,\n    ${escJson(metadataPatch)} AS metadata_patch,\n    ${esc(d.provider_message_id || null)}::text AS provider_message_id,\n    ${esc(nowIso)}::timestamptz AS executed_at\n),\ninserir_saida AS (\n  INSERT INTO public.chat_messages (\n    thread_id,\n    agent,\n    role,\n    content,\n    is_system,\n    created_at\n  )\n  SELECT\n    payload.thread_id,\n    payload.agent_label,\n    'AI Agent',\n    payload.message_text,\n    false,\n    now()\n  FROM payload\n  RETURNING id\n),\natualizar_thread AS (\n  UPDATE public.chat_threads\n  SET\n    preview = (SELECT message_text FROM payload),\n    unread = false,\n    last_message_at = now(),\n    updated_at = now()\n  WHERE thread_id = (SELECT thread_id FROM payload)\n  RETURNING person_id\n),\npessoa_resolvida AS (\n  SELECT COALESCE((SELECT person_id FROM payload), (SELECT person_id FROM atualizar_thread LIMIT 1)) AS person_id\n),\nnotas_existentes AS (\n  SELECT\n    p.id,\n    CASE\n      WHEN jsonb_typeof(COALESCE(p.metadata, '{}'::jsonb)->'lead_notes') = 'array'\n        THEN COALESCE(p.metadata, '{}'::jsonb)->'lead_notes'\n      ELSE '[]'::jsonb\n    END AS lead_notes,\n    p.roles,\n    p.metadata\n  FROM public.people p\n  WHERE p.id = (SELECT person_id FROM pessoa_resolvida)\n),\natualizar_pessoa AS (\n  UPDATE public.people p\n  SET\n    full_name = COALESCE((SELECT extracted_full_name FROM payload), NULLIF(p.full_name, '')),\n    email = COALESCE((SELECT extracted_email FROM payload), p.email),\n    crm_score = COALESCE(p.crm_score, 0) + (SELECT score_delta FROM payload),\n    last_interaction_preview = (SELECT message_text FROM payload),\n    crm_unread = false,\n    roles = (\n      SELECT COALESCE(array_agg(DISTINCT role_value), ARRAY[]::public.person_role[])\n      FROM unnest(\n        COALESCE(p.roles, ARRAY[]::public.person_role[])\n        || CASE WHEN (SELECT extracted_intent FROM payload) = 'buy' THEN ARRAY['buyer'::public.person_role] ELSE ARRAY[]::public.person_role[] END\n        || CASE WHEN (SELECT extracted_intent FROM payload) = 'sell' THEN ARRAY['seller'::public.person_role] ELSE ARRAY[]::public.person_role[] END\n      ) AS role_value\n    ),\n    metadata = jsonb_set(\n      COALESCE(p.metadata, '{}'::jsonb) || (SELECT metadata_patch FROM payload),\n      '{lead_notes}',\n      COALESCE((SELECT lead_notes FROM notas_existentes), '[]'::jsonb) || COALESCE((SELECT notes_to_append FROM payload), '[]'::jsonb),\n      true\n    ),\n    updated_at = now()\n  WHERE p.id = (SELECT person_id FROM pessoa_resolvida)\n  RETURNING p.id\n),\nproperty_link_rows AS (\n  SELECT\n    (SELECT person_id FROM pessoa_resolvida) AS person_id,\n    NULLIF(BTRIM(item->>'reference'), '') AS reference,\n    CASE WHEN item->>'relationship_type' = 'owner' THEN 'owner' ELSE 'interested' END AS relationship_type,\n    NULLIF(BTRIM(item->>'notes'), '') AS notes\n  FROM payload,\n  LATERAL jsonb_array_elements(COALESCE((SELECT property_links FROM payload), '[]'::jsonb)) AS item\n  WHERE (SELECT person_id FROM pessoa_resolvida) IS NOT NULL\n    AND NULLIF(BTRIM(item->>'reference'), '') IS NOT NULL\n),\nmatched_properties AS (\n  SELECT DISTINCT ON (pl.person_id, p.id, pl.relationship_type)\n    pl.person_id,\n    p.id AS property_id,\n    pl.relationship_type,\n    pl.notes,\n    jsonb_build_object(\n      'reference', pl.reference,\n      'provider_message_id', (SELECT provider_message_id FROM payload),\n      'matched_at', (SELECT executed_at FROM payload)\n    ) AS metadata\n  FROM property_link_rows pl\n  JOIN public.properties p\n    ON lower(p.title) = lower(pl.reference)\n    OR lower(COALESCE(p.slug, '')) = lower(pl.reference)\n    OR lower(COALESCE(p.address, '')) = lower(pl.reference)\n    OR lower(p.title) LIKE '%' || lower(pl.reference) || '%'\n    OR lower(COALESCE(p.address, '')) LIKE '%' || lower(pl.reference) || '%'\n  ORDER BY pl.person_id, p.id, pl.relationship_type,\n    CASE\n      WHEN lower(COALESCE(p.slug, '')) = lower(pl.reference) THEN 0\n      WHEN lower(p.title) = lower(pl.reference) THEN 1\n      WHEN lower(COALESCE(p.address, '')) = lower(pl.reference) THEN 2\n      ELSE 3\n    END,\n    p.updated_at DESC\n),\nupsert_property_links AS (\n  INSERT INTO public.person_properties (\n    person_id,\n    property_id,\n    relationship_type,\n    source,\n    notes,\n    metadata\n  )\n  SELECT\n    matched.person_id,\n    matched.property_id,\n    matched.relationship_type,\n    'whatsapp_ai',\n    matched.notes,\n    matched.metadata\n  FROM matched_properties matched\n  ON CONFLICT (person_id, property_id, relationship_type) DO UPDATE SET\n    source = EXCLUDED.source,\n    notes = COALESCE(EXCLUDED.notes, public.person_properties.notes),\n    metadata = COALESCE(public.person_properties.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb),\n    updated_at = now()\n  RETURNING id\n)\nSELECT (SELECT id FROM inserir_saida) AS outbound_message_id;\n`;\n\nreturn [{\n  json: {\n    ...d,\n    outbound_sql: outboundSql,\n  },\n}];"
+      },
+      "id": "cd9ddb70-75a4-412d-9ff1-dcab902dd0bc",
+      "name": "Preparar SQL de saída",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        81072,
+        37280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.outbound_sql }}",
+        "options": {}
+      },
+      "id": "f0031375-1f87-4c4b-b61a-c312b6ab8023",
+      "name": "Persistir saída",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        81392,
+        37472
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat-api",
+        "operation": "send-presence",
+        "instanceName": "={{ $json.instance }}",
+        "remoteJid": "={{ $json.remote_jid }}",
+        "delay": 4000
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        77536,
+        37344
+      ],
+      "id": "83bc3931-0b51-4f73-89e2-f256aee9fb4e",
+      "name": "Enviar escrevendo",
+      "credentials": {
+        "evolutionApi": {
+          "id": "GqUEUbeN7EHwcMY2",
+          "name": "Novian Whatsapp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_valid_inbound_message }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "62816968-41e2-48d2-b7f9-20e358c43084",
+      "name": "Filtrar apenas mensagens reais de leads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        77296,
+        37440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst data = body.data || {};\nconst key = data.key || {};\nconst message = data.message || {};\n\nconst eventName = String(body.event || '').toLowerCase();\nconst instance = String(body.instance || 'mariana-sdr');\nconst agentId = instance.split('/')[0] || instance;\n\nconst agentMap = {\n  'mariana-sdr': 'Mariana Silva',\n  'daniel-dir': 'Daniel Rocha',\n  'camila-prop': 'Camila Rocha',\n  'rafael-cs': 'Rafael Martins',\n  'lucas-qual': 'Lucas Andrade'\n};\n\nconst remoteJid = String(key.remoteJid || data.remoteJid || '');\nconst senderJid = String(body.sender || '');\nconst fromMe = key.fromMe === true;\nconst providerMessageId = String(key.id || data.id || '');\nconst pushName = String(data.pushName || body.pushName || '');\nconst messageTimestamp = data.messageTimestamp || body.date_time || null;\nconst source = String(data.source || body.source || 'whatsapp');\n\nconst text =\n  message.conversation ||\n  message.extendedTextMessage?.text ||\n  message.imageMessage?.caption ||\n  message.videoMessage?.caption ||\n  message.documentMessage?.caption ||\n  data.text ||\n  '';\n\nconst cleanMessage = String(text || '').trim();\n\nconst phone = remoteJid\n  .replace('@s.whatsapp.net', '')\n  .replace('@c.us', '')\n  .replace(/\\D/g, '');\n\nconst instancePhone = senderJid\n  .replace('@s.whatsapp.net', '')\n  .replace('@c.us', '')\n  .replace(/\\D/g, '');\n\nconst threadId = remoteJid;\n\nconst isValidInboundMessage =\n  eventName === 'messages.upsert' &&\n  fromMe === false &&\n  !!threadId &&\n  !!cleanMessage &&\n  phone !== instancePhone;\n\nreturn [{\n  json: {\n    event: eventName,\n    instance,\n    agent_id: agentId,\n    agent_label: agentMap[agentId] || agentId,\n    remote_jid: remoteJid,\n    thread_id: threadId,\n    sender_jid: senderJid,\n    phone,\n    instance_phone: instancePhone,\n    push_name: pushName,\n    provider_message_id: providerMessageId,\n    message_timestamp: messageTimestamp,\n    source,\n    message: cleanMessage,\n    from_me: fromMe,\n    is_valid_inbound_message: isValidInboundMessage\n  }\n}];"
+      },
+      "id": "ed51d94a-c3c7-4d33-8c53-8224805ffa42",
+      "name": "Normalizar WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        77088,
+        37440
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "evolution-whatsapp",
+        "options": {}
+      },
+      "id": "c48a9bdf-fd78-4970-9263-170d3fe34b4d",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        76880,
+        37440
+      ],
+      "webhookId": "55f5bbb7-0c80-4f0f-9f99-2d1d412c1a31"
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseJsonObject(value) {\n  if (!value) return {};\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};\n    } catch (error) {\n      return {};\n    }\n  }\n  return typeof value === 'object' && !Array.isArray(value) ? value : {};\n}\n\nfunction parseJsonArray(value) {\n  if (!value) return [];\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch (error) {\n      return [];\n    }\n  }\n  return Array.isArray(value) ? value : [];\n}\n\nfunction asString(value) {\n  return typeof value === 'string' && value.trim() ? value.trim() : null;\n}\n\nfunction firstNonEmptyString() {\n  for (const value of arguments) {\n    const normalized = asString(value);\n    if (normalized) return normalized;\n  }\n  return null;\n}\n\nfunction sanitizeHttpUrl(value) {\n  const normalized = asString(value);\n  if (!normalized) return null;\n  if (normalized.startsWith('data:')) return null;\n  if (normalized.length > 2000) return null;\n  return /^https?:\\/\\//i.test(normalized) ? normalized : null;\n}\n\nfunction extractPhoneFromJid(value) {\n  const raw = asString(value);\n  if (!raw) return null;\n\n  const digits = raw.split('@')[0].replace(/\\D/g, '');\n  return digits || null;\n}\n\nfunction normalizeLeadNotes(value) {\n  const seen = new Set();\n\n  return parseJsonArray(value)\n    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))\n    .filter((item) => item.visibility === 'ai')\n    .map((item) => ({\n      id: item.id || null,\n      content: typeof item.content === 'string' ? item.content.trim() : '',\n      author: typeof item.author === 'string' ? item.author.trim() : null,\n      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : null,\n    }))\n    .filter((item) => item.content)\n    .filter((item) => {\n      const key = item.content.toLowerCase();\n      if (seen.has(key)) return false;\n      seen.add(key);\n      return true;\n    })\n    .slice(-8);\n}\n\nfunction normalizePropertyFeatures(value) {\n  const features = parseJsonObject(value);\n  return Object.fromEntries(\n    Object.entries(features)\n      .map(([key, entryValue]) => [key, asString(entryValue) || (Number.isFinite(Number(entryValue)) ? Number(entryValue) : null)])\n      .filter(([, entryValue]) => entryValue !== null)\n  );\n}\n\nfunction normalizeLinkedProperties(value) {\n  return parseJsonArray(value)\n    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))\n    .map((item) => ({\n      property_id: asString(item.property_id) || null,\n      title: asString(item.title),\n      slug: asString(item.slug),\n      public_url: asString(item.public_url),\n      address: asString(item.address),\n      price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,\n      status: asString(item.status),\n      description: asString(item.description)?.slice(0, 180) || null,\n      cover_image: sanitizeHttpUrl(item.cover_image),\n      relationship_type: asString(item.relationship_type),\n      notes: asString(item.notes),\n      source: asString(item.source),\n      features: normalizePropertyFeatures(item.features),\n    }))\n    .filter((item) => item.property_id && item.status === 'active')\n    .slice(0, 8);\n}\n\nfunction normalizeActivePropertiesCatalog(value) {\n  return parseJsonArray(value)\n    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))\n    .map((item) => ({\n      id: asString(item.id) || null,\n      title: asString(item.title),\n      slug: asString(item.slug),\n      public_url: asString(item.public_url),\n      address: asString(item.address),\n      price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,\n      status: asString(item.status),\n      cover_image: sanitizeHttpUrl(item.cover_image),\n      features: normalizePropertyFeatures(item.features),\n    }))\n    .filter((item) => item.id && item.title && item.status === 'active')\n    .slice(0, 12);\n}\n\nfunction countTopValues(items, selector, limit = 5) {\n  const counts = new Map();\n\n  for (const item of items) {\n    const value = asString(selector(item));\n    if (!value) continue;\n    counts.set(value, (counts.get(value) || 0) + 1);\n  }\n\n  return Array.from(counts.entries())\n    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))\n    .slice(0, limit)\n    .map(([value, total]) => ({ value, total }));\n}\n\nfunction summarizeActivePropertiesCatalog(items) {\n  const prices = items\n    .map((item) => item.price)\n    .filter((value) => Number.isFinite(value));\n\n  return {\n    total_ativos_em_contexto: items.length,\n    faixa_preco: prices.length\n      ? {\n          minimo: Math.min(...prices),\n          maximo: Math.max(...prices),\n        }\n      : null,\n    cidades: countTopValues(items, (item) => item.features.city),\n    bairros: countTopValues(items, (item) => item.features.neighborhood),\n    tipos: countTopValues(items, (item) => item.features.property_type),\n    exemplos: items.slice(0, 6).map((item) => ({\n      id: item.id,\n      title: item.title,\n      slug: item.slug,\n      public_url: item.public_url || null,\n      cover_image: item.cover_image || null,\n      address: item.address,\n      price: item.price,\n      city: item.features.city || null,\n      neighborhood: item.features.neighborhood || null,\n      property_type: item.features.property_type || null,\n      bedrooms: item.features.bedrooms || null,\n      bathrooms: item.features.bathrooms || null,\n      parking: item.features.parking || null,\n      built_area: item.features.built_area || null,\n    })),\n    observacao: 'Use as ferramentas seguras de Postgres para buscar, filtrar ou detalhar imoveis alem deste resumo.',\n  };\n}\n\nconst db = $json || {};\nconst metadata = parseJsonObject(db.person_metadata);\nconst linkedProperties = normalizeLinkedProperties(db.person_linked_properties);\nconst activePropertiesCatalog = normalizeActivePropertiesCatalog(db.active_properties_catalog);\nconst activePropertiesSummary = summarizeActivePropertiesCatalog(activePropertiesCatalog);\nconst aiNotes = normalizeLeadNotes(metadata.lead_notes);\nconst leadProfile = parseJsonObject(metadata.lead_profile);\n\nconst phone = firstNonEmptyString(\n  db.phone,\n  db.whatsapp_profile_number,\n  metadata.whatsapp_profile_number,\n  extractPhoneFromJid(db.thread_id),\n  extractPhoneFromJid(db.remote_jid),\n  extractPhoneFromJid(metadata.whatsapp_jid)\n);\nconst personEmail = firstNonEmptyString(db.person_email, metadata.last_extracted_email);\nconst personIntent = firstNonEmptyString(metadata.latest_real_estate_intent, leadProfile.intent);\n\nconst personName = firstNonEmptyString(\n  db.person_name,\n  metadata.whatsapp_profile_name,\n  db.whatsapp_profile_name,\n  db.push_name,\n  phone ? `Contato ${phone}` : null,\n  'Contato'\n);\n\nconst contextPayload = {\n  id: db.person_id || null,\n  nome: personName,\n  telefone: phone,\n  email: personEmail,\n  intencao_imobiliaria: personIntent,\n  funil: db.person_crm_funnel_id || metadata.people_stage_funnel_id || null,\n  etapa: db.person_crm_status || metadata.people_stage_status || 'Novo Lead',\n  perfil_extraido: leadProfile,\n  whatsapp_profile_name: metadata.whatsapp_profile_name || db.whatsapp_profile_name || null,\n  whatsapp_profile_status: metadata.whatsapp_profile_status || db.whatsapp_profile_status || null,\n  notas_ai: aiNotes.map((note) => note.content),\n  imoveis_vinculados_ativos: linkedProperties,\n};\n\nreturn [{\n  json: {\n    ...db,\n    phone,\n    person_id: db.person_id || null,\n    person_name: personName,\n    person_email: personEmail,\n    person_metadata: metadata,\n    person_crm_funnel_id: db.person_crm_funnel_id || metadata.people_stage_funnel_id || null,\n    person_crm_status: db.person_crm_status || metadata.people_stage_status || 'Novo Lead',\n    person_linked_properties: linkedProperties,\n    matched_people_count: db.person_id ? 1 : 0,\n    matched_people_context: JSON.stringify(contextPayload, null, 2),\n    active_properties_catalog_size: activePropertiesCatalog.length,\n    active_properties_summary: JSON.stringify(activePropertiesSummary, null, 2),\n    active_properties_context: JSON.stringify(activePropertiesSummary, null, 2),\n    thread_id: db.thread_id || null,\n    inbound_message_id: db.inbound_message_id || null\n  }\n}];"
+      },
+      "id": "e317f274-27e2-47f5-9ae1-6aa2d0bfaaec",
+      "name": "Montar contexto do lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        78400,
+        37424
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "profile-api",
+        "instanceName": "=mariana-sdr",
+        "remoteJid": "={{ $('Normalizar WhatsApp').item.json.remote_jid }}"
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        77728,
+        37344
+      ],
+      "id": "97000fb2-ad17-48dd-8753-ce88e1dfc880",
+      "name": "Buscar perfil",
+      "credentials": {
+        "evolutionApi": {
+          "id": "GqUEUbeN7EHwcMY2",
+          "name": "Novian Whatsapp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function esc(value) {\n  if (value === null || value === undefined) return 'NULL';\n  return `'${String(value).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\")}'`;\n}\n\nfunction escJson(value) {\n  const json = JSON.stringify(value ?? {});\n  return `${esc(json)}::jsonb`;\n}\n\nfunction firstString(...values) {\n  for (const value of values) {\n    if (typeof value === 'string' && value.trim()) {\n      return value.trim();\n    }\n  }\n  return null;\n}\n\nfunction sanitizeHttpUrl(value) {\n  if (typeof value !== 'string') return null;\n\n  const trimmed = value.trim();\n  if (!trimmed) return null;\n  if (trimmed.startsWith('data:')) return null;\n  if (trimmed.length > 2000) return null;\n\n  return /^https?:\\/\\//i.test(trimmed) ? trimmed : null;\n}\n\nconst normalized = $('Normalizar WhatsApp').first().json;\nconst profileResult = $json;\n\nconst profileData = profileResult?.data && typeof profileResult.data === 'object'\n  ? profileResult.data\n  : profileResult;\n\nconst profileName = firstString(\n  profileData?.profileName,\n  profileData?.name,\n  profileData?.pushName,\n  profileData?.fullName,\n  profileData?.verifiedName,\n  profileData?.notify,\n  profileData?.profile?.name,\n  profileData?.contact?.name,\n);\n\nconst profilePictureUrl = sanitizeHttpUrl(firstString(\n  profileData?.profilePictureUrl,\n  profileData?.profilePicUrl,\n  profileData?.pictureUrl,\n  profileData?.picture,\n  profileData?.profile?.pictureUrl,\n  profileData?.profile?.profilePictureUrl,\n  profileData?.contact?.profilePictureUrl,\n));\n\nconst profileStatus = firstString(\n  profileData?.status,\n  profileData?.profileStatus,\n  profileData?.about,\n  profileData?.bio,\n  profileData?.description,\n  profileData?.profile?.status,\n  profileData?.contact?.status,\n);\n\nconst profileNumber = firstString(\n  profileData?.number,\n  profileData?.phone,\n  profileData?.contact?.number,\n);\n\nconst d = {\n  ...normalized,\n  whatsapp_profile_name: profileName,\n  whatsapp_profile_picture_url: profilePictureUrl,\n  whatsapp_profile_status: profileStatus,\n  whatsapp_profile_number: profileNumber,\n};\n\nconst pushName = String(d.push_name || '').trim();\nconst safeName = profileName || pushName || `Contato ${d.phone}`;\n\nconst metadata = {\n  source: 'WhatsApp',\n  whatsapp_jid: d.remote_jid,\n  whatsapp_push_name: pushName,\n  whatsapp_profile_name: profileName,\n  whatsapp_profile_picture_url: profilePictureUrl,\n  whatsapp_profile_status: profileStatus,\n  whatsapp_profile_number: profileNumber,\n  agent_id: d.agent_id,\n  whatsapp_thread_id: d.thread_id,\n  provider_message_id: d.provider_message_id,\n  message_timestamp: d.message_timestamp,\n  sender_jid: d.sender_jid,\n  instance: d.instance,\n  source_device: d.source,\n};\n\nconst inboundSql = `\nWITH funnel_padrao AS (\n  SELECT f.id\n  FROM public.funnels f\n  WHERE f.type = 'lead'\n  ORDER BY f.created_at ASC\n  LIMIT 1\n),\netapa_inicial AS (\n  SELECT COALESCE(fs.title, 'Novo Lead') AS title\n  FROM public.funnel_stages fs\n  JOIN funnel_padrao fp ON fp.id = fs.funnel_id\n  ORDER BY fs.\"order\" ASC, fs.created_at ASC\n  LIMIT 1\n),\ncrm_padrao AS (\n  SELECT\n    (SELECT id FROM funnel_padrao) AS funnel_id,\n    COALESCE((SELECT title FROM etapa_inicial), 'Novo Lead') AS stage_title\n),\npessoa_existente AS (\n  SELECT id, full_name, email, metadata, crm_funnel_id, crm_status\n  FROM public.people\n  WHERE primary_phone = ${esc(d.phone)}\n  LIMIT 1\n),\ncriar_pessoa AS (\n  INSERT INTO public.people (\n    full_name,\n    primary_phone,\n    origin,\n    crm_funnel_id,\n    crm_status,\n    crm_unread,\n    last_interaction_preview,\n    metadata,\n    updated_at\n  )\n  SELECT\n    ${esc(safeName)},\n    ${esc(d.phone)},\n    'whatsapp',\n    (SELECT funnel_id FROM crm_padrao),\n    (SELECT stage_title FROM crm_padrao),\n    true,\n    ${esc(d.message)},\n    ${escJson(metadata)},\n    now()\n  WHERE NOT EXISTS (SELECT 1 FROM pessoa_existente)\n  RETURNING id, full_name, email, metadata, crm_funnel_id, crm_status\n),\npessoa_final AS (\n  SELECT * FROM pessoa_existente\n  UNION ALL\n  SELECT * FROM criar_pessoa\n  LIMIT 1\n),\natualizar_pessoa AS (\n  UPDATE public.people p\n  SET\n    full_name = CASE\n      WHEN ${esc(safeName)} IS NOT NULL AND ${esc(safeName)} <> '' THEN ${esc(safeName)}\n      ELSE p.full_name\n    END,\n    crm_funnel_id = COALESCE(p.crm_funnel_id, (SELECT funnel_id FROM crm_padrao)),\n    crm_status = COALESCE(NULLIF(p.crm_status, ''), (SELECT stage_title FROM crm_padrao)),\n    last_interaction_preview = ${esc(d.message)},\n    crm_unread = true,\n    metadata = COALESCE(p.metadata, '{}'::jsonb) || ${escJson(metadata)},\n    updated_at = now()\n  WHERE p.id = (SELECT id FROM pessoa_final)\n  RETURNING p.id\n),\nupsert_thread AS (\n  INSERT INTO public.chat_threads (\n    thread_id,\n    title,\n    preview,\n    phone,\n    unread,\n    agent_ids,\n    custom_data,\n    thread_kind,\n    person_id,\n    funnel_id,\n    status,\n    last_message_at,\n    updated_at\n  )\n  VALUES (\n    ${esc(d.thread_id)},\n    ${esc(profileName || pushName || `Lead: ${d.phone}`)},\n    ${esc(d.message)},\n    ${esc(d.phone)},\n    true,\n    ARRAY[${esc(d.agent_id)}]::text[],\n    ${escJson(metadata)},\n    'lead',\n    (SELECT id FROM pessoa_final),\n    (SELECT funnel_id FROM crm_padrao),\n    (SELECT stage_title FROM crm_padrao),\n    now(),\n    now()\n  )\n  ON CONFLICT (thread_id) DO UPDATE SET\n    title = COALESCE(NULLIF(EXCLUDED.title, ''), chat_threads.title),\n    preview = EXCLUDED.preview,\n    unread = true,\n    person_id = COALESCE(chat_threads.person_id, EXCLUDED.person_id),\n    phone = COALESCE(chat_threads.phone, EXCLUDED.phone),\n    funnel_id = COALESCE(chat_threads.funnel_id, EXCLUDED.funnel_id),\n    status = COALESCE(NULLIF(chat_threads.status, ''), EXCLUDED.status),\n    agent_ids = CASE\n      WHEN chat_threads.agent_ids @> ARRAY[${esc(d.agent_id)}]::text[] THEN chat_threads.agent_ids\n      ELSE array_append(chat_threads.agent_ids, ${esc(d.agent_id)})\n    END,\n    custom_data = COALESCE(chat_threads.custom_data, '{}'::jsonb) || ${escJson(metadata)},\n    last_message_at = now(),\n    updated_at = now()\n  RETURNING thread_id, person_id\n),\ninserir_mensagem AS (\n  INSERT INTO public.chat_messages (\n    thread_id,\n    agent,\n    role,\n    content,\n    is_system,\n    created_at\n  )\n  VALUES (\n    ${esc(d.thread_id)},\n    ${esc(pushName || profileName || d.phone)},\n    'Client',\n    ${esc(d.message)},\n    false,\n    now()\n  )\n  RETURNING id\n),\nperson_linked_properties AS (\n  SELECT COALESCE(\n    jsonb_agg(\n      jsonb_build_object(\n        'property_id', p.id,\n        'title', p.title,\n        'slug', p.slug,\n        'public_url', 'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text),\n        'address', p.address,\n        'price', p.price,\n        'status', p.status,\n        'description', LEFT(COALESCE(p.description, ''), 220),\n        'cover_image', CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END,\n        'features', jsonb_strip_nulls(jsonb_build_object(\n          'area', p.custom_data->>'area',\n          'built_area', p.custom_data->>'built_area',\n          'land_area', p.custom_data->>'land_area',\n          'bedrooms', p.custom_data->>'bedrooms',\n          'bathrooms', p.custom_data->>'bathrooms',\n          'suites', p.custom_data->>'suites',\n          'parking', p.custom_data->>'parking',\n          'property_type', p.custom_data->>'property_type',\n          'neighborhood', p.custom_data->>'neighborhood',\n          'city', p.custom_data->>'city',\n          'condominium_fee', p.custom_data->>'condominium_fee',\n          'iptu', p.custom_data->>'iptu',\n          'floor', p.custom_data->>'floor',\n          'furnished', p.custom_data->>'furnished',\n          'amenities', p.custom_data->>'amenities'\n        )),\n        'relationship_type', pp.relationship_type,\n        'notes', pp.notes,\n        'source', pp.source\n      )\n      ORDER BY pp.updated_at DESC\n    ) FILTER (WHERE p.id IS NOT NULL),\n    '[]'::jsonb\n  ) AS items\n  FROM public.person_properties pp\n  JOIN public.properties p ON p.id = pp.property_id\n  WHERE pp.person_id = (SELECT id FROM pessoa_final)\n    AND p.status = 'active'\n),\nactive_properties_catalog AS (\n  SELECT COALESCE(\n    jsonb_agg(\n      jsonb_build_object(\n        'id', p.id,\n        'title', p.title,\n        'slug', p.slug,\n        'public_url', 'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text),\n        'address', p.address,\n        'price', p.price,\n        'status', p.status,\n        'features', jsonb_strip_nulls(jsonb_build_object(\n          'built_area', p.custom_data->>'built_area',\n          'bedrooms', p.custom_data->>'bedrooms',\n          'bathrooms', p.custom_data->>'bathrooms',\n          'parking', p.custom_data->>'parking',\n          'property_type', p.custom_data->>'property_type',\n          'neighborhood', p.custom_data->>'neighborhood',\n          'city', p.custom_data->>'city'\n        ))\n      )\n      ORDER BY p.updated_at DESC\n    ) FILTER (WHERE p.id IS NOT NULL),\n    '[]'::jsonb\n  ) AS items\n  FROM (\n    SELECT *\n    FROM public.properties\n    WHERE status = 'active'\n    ORDER BY updated_at DESC\n    LIMIT 12\n  ) p\n)\nSELECT\n  (SELECT id FROM pessoa_final) AS person_id,\n  (SELECT full_name FROM pessoa_final) AS person_name,\n  (SELECT email FROM pessoa_final) AS person_email,\n  (SELECT metadata FROM pessoa_final) AS person_metadata,\n  (SELECT crm_funnel_id FROM pessoa_final) AS person_crm_funnel_id,\n  (SELECT crm_status FROM pessoa_final) AS person_crm_status,\n  (SELECT items FROM person_linked_properties) AS person_linked_properties,\n  (SELECT items FROM active_properties_catalog) AS active_properties_catalog,\n  (SELECT thread_id FROM upsert_thread) AS thread_id,\n  (SELECT id FROM inserir_mensagem) AS inbound_message_id;\n`;\n\nreturn [{\n  json: {\n    ...d,\n    inbound_sql: inboundSql,\n  },\n}];"
+      },
+      "id": "30890d6a-763a-4995-ae9e-3dcddfd56a15",
+      "name": "Preparar SQL de entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        77936,
+        37424
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para listar, resumir ou localizar eventos já existentes na agenda da Bárbara Camargo. Também use esta ferramenta para encontrar o eventId antes de remarcar ou cancelar uma visita. Você DEVE fornecer timeMin e timeMax em ISO 8601 para limitar a busca. Quando precisar localizar um evento específico, use query com nome do lead, telefone, imóvel ou endereço.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Bárbara Camargo"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $fromAI('timeMin', 'Data e hora inicial em ISO 8601 para localizar eventos na agenda', 'string') }}",
+        "timeMax": "={{ $fromAI('timeMax', 'Data e hora final em ISO 8601 para localizar eventos na agenda', 'string') }}",
+        "options": {
+          "query": "={{ $fromAI('query', 'Texto opcional para filtrar eventos por nome do lead, telefone, imóvel, endereço ou outros termos presentes no evento', 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        79024,
+        37952
+      ],
+      "id": "50cb98a2-f861-4517-9f0d-c328ea18ef86",
+      "name": "get_google_calendar_events",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para criar uma nova visita na agenda da Barbara Camargo. Esta ferramenta so pode ser usada depois que o agente pedir o e-mail ao lead e o lead responder com esse e-mail nesta conversa. O lead deve informar o e-mail no chat atual antes de usar esta ferramenta, mesmo que ja exista um e-mail salvo no contexto. Se o contexto tiver um e-mail antigo, nao reutilize automaticamente: primeiro peca ao lead para informar o melhor e-mail. Antes de criar, confirme data, hora, duracao, imovel ou endereco, nome do lead e o e-mail informado pelo lead nesta conversa. Se o pedido usar data relativa, como next Tuesday, terca que vem ou terca-feira da semana que vem, resolva primeiro para uma data absoluta correta em Sao Paulo e confirme que o dia da semana e a data escolhida batem entre si. Nao use esta ferramenta para remarcacao se ja existir um evento confiavel; para isso, prefira update_google_calendar_event. Voce DEVE preencher start, end, summary, description e attendees com pelo menos um e-mail valido informado pelo lead nesta conversa. Nunca envie attendees como null, undefined, vazio ou texto sem formato de e-mail. Use start e end em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00 e 2026-04-28T12:00:00-03:00. O horario em start/end deve bater exatamente com o horario confirmado ao lead e com a linha Data e horario da description. Nao crie evento se a data absoluta escolhida contradisser o dia da semana pedido pelo lead. A description deve ser padronizada, visivel ao cliente e sem comentarios internos sobre o lead. Antes de usar esta ferramenta, voce deve ter verificado a mesma faixa com check_google_calendar_availability nesta execucao atual e o retorno precisa indicar claramente que o horario esta livre. Se a verificacao apontar conflito, indisponibilidade, evento sobreposto ou resposta ambigua, nao crie o evento e ofereca outros horarios livres.",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Bárbara Camargo"
+        },
+        "start": "={{ $fromAI('start', 'Data e hora de inicio do evento em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00', 'string') }}",
+        "end": "={{ $fromAI('end', 'Data e hora de fim do evento em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T12:00:00-03:00', 'string') }}",
+        "additionalFields": {
+          "attendees": "={{ (() => { const raw = $fromAI('attendees', 'Use somente o e-mail que o lead informou nesta conversa atual. E obrigatorio: envie um ou mais e-mails validos separados por virgula, nunca null ou vazio', 'string') || ''; const emails = raw.split(',').map(email => email.trim().toLowerCase()).filter(email => /^[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+$/.test(email)); if (!emails.length) { throw new Error('E-mail do lead obrigatorio antes de criar visita'); } return emails; })() }}",
+          "description": "={{ (() => { const raw = $fromAI('description', 'Descricao padronizada e visivel ao cliente. Inclua obrigatoriamente a linha E-mail com o e-mail informado pelo lead nesta conversa e use apenas: Visita Novian, nome, telefone, e-mail, imovel, endereco, data/horario, corretora responsavel e origem. Nao inclua comentarios ou observacoes sobre o lead', 'string') || ''; const requiredLabels = ['Visita Novian', 'Nome:', 'Telefone:', 'E-mail:', 'Imovel:', 'Endereco:', 'Data e horario:', 'Corretora responsavel:', 'Origem:']; const missingLabels = requiredLabels.filter(label => !raw.includes(label)); if (missingLabels.length) { throw new Error('Description da visita precisa incluir: ' + missingLabels.join(', ')); } if (!/E-mail:\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+/i.test(raw)) { throw new Error('Description da visita precisa incluir o e-mail informado pelo lead'); } return raw; })() }}",
+          "location": "={{ $fromAI('location', 'Endereço do imóvel ou local da visita, se disponível', 'string') }}",
+          "summary": "={{ $fromAI('summary', 'Título curto e claro do evento, por exemplo: Visita | Nome do lead | Imóvel ou bairro', 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        79232,
+        37952
+      ],
+      "id": "0cfd09d2-fc9c-48b2-9337-bbb061919ca2",
+      "name": "create_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para verificar se uma faixa de horario esta disponivel na agenda da Barbara Camargo. Esta deve ser sempre a primeira ferramenta antes de criar ou remarcar visita. Voce DEVE fornecer start e end em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00. So prossiga para create_google_calendar_event ou update_google_calendar_event se esta verificacao retornar claramente que o horario esta livre para a mesma faixa consultada. Se houver qualquer conflito, indisponibilidade, evento sobreposto ou duvida no retorno, nao agende nem remarque; ofereca outros horarios livres ao lead.",
+        "resource": "calendar",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Bárbara Camargo"
+        },
+        "options": {},
+        "operation": "availability",
+        "start": "={{ $fromAI('start', 'Data e hora de inicio da faixa a validar em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00', 'string') }}",
+        "end": "={{ $fromAI('end', 'Data e hora de fim da faixa a validar em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T12:00:00-03:00', 'string') }}"
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        78768,
+        37936
+      ],
+      "id": "cc5fa0a2-5dd6-4ac2-bc67-954d46e1d82d",
+      "name": "check_google_calendar_availability",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para remarcar ou atualizar um evento ja existente na agenda da Barbara Camargo. Antes de usar, localize o eventId com get_google_calendar_events e confirme o evento correto se houver ambiguidade. Esta e a ferramenta preferida para remarcacao porque evita duplicidade. Assim como no agendamento, esta ferramenta so pode ser usada depois que o agente pedir o e-mail ao lead e o lead responder com esse e-mail nesta conversa. So use depois que o lead escolher claramente um novo horario, depois de validar a disponibilidade e somente se o lead tiver informado o e-mail nesta conversa atual. Se houver e-mail antigo no contexto, nao o reutilize sem que o lead informe novamente esse e-mail no chat. Voce DEVE fornecer eventId, start, end, summary e description padronizada e visivel ao cliente. Ao remarcar, sempre envie start e end novos de forma explicita, nunca mantendo o horario anterior por omissao. Se o pedido usar data relativa, como next Tuesday, terca que vem ou terca-feira da semana que vem, resolva primeiro para uma data absoluta correta em Sao Paulo e confirme que o dia da semana e a data escolhida batem entre si. Use start e end em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00 e 2026-04-28T12:00:00-03:00. O horario em start/end deve bater exatamente com o horario confirmado ao lead e com a linha Data e horario da description. Nao atualize evento se a data absoluta escolhida contradisser o dia da semana pedido pelo lead. Se souber o endereco do imovel, envie tambem location. Antes de atualizar para um novo horario, voce deve verificar essa mesma faixa com check_google_calendar_availability nesta execucao atual e so prosseguir se o retorno indicar claramente que o horario esta livre. Se houver conflito, indisponibilidade, evento sobreposto ou resposta ambigua, nao atualize o evento para esse horario e ofereca outras opcoes livres.",
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Bárbara Camargo"
+        },
+        "eventId": "={{ $fromAI('eventId', 'ID exato do evento do Google Calendar que deve ser atualizado', 'string') }}",
+        "updateFields": {
+          "description": "={{ (() => { const raw = $fromAI('description', 'Descricao padronizada e visivel ao cliente. Inclua obrigatoriamente a linha E-mail com o e-mail informado pelo lead nesta conversa e use apenas: Visita Novian, nome, telefone, e-mail, imovel, endereco, data/horario, corretora responsavel e origem. Nao inclua comentarios ou observacoes sobre o lead', 'string') || ''; const requiredLabels = ['Visita Novian', 'Nome:', 'Telefone:', 'E-mail:', 'Imovel:', 'Endereco:', 'Data e horario:', 'Corretora responsavel:', 'Origem:']; const missingLabels = requiredLabels.filter(label => !raw.includes(label)); if (missingLabels.length) { throw new Error('Description da remarcacao precisa incluir: ' + missingLabels.join(', ')); } if (!/E-mail:\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+/i.test(raw)) { throw new Error('Description da remarcacao precisa incluir o e-mail informado pelo lead'); } return raw; })() }}",
+          "end": "={{ $fromAI('end', 'Nova data e hora de fim em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T12:00:00-03:00', 'string') }}",
+          "location": "={{ $fromAI('location', 'Endereço do imóvel ou local da visita, se disponível', 'string') }}",
+          "start": "={{ $fromAI('start', 'Nova data e hora de inicio em ISO 8601 completo com offset explicito de Sao Paulo, por exemplo 2026-04-28T11:00:00-03:00', 'string') }}",
+          "summary": "={{ $fromAI('summary', 'Título atualizado do evento', 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        79456,
+        37936
+      ],
+      "id": "752afbe0-dca6-44eb-b995-7b5d4fd5d60b",
+      "name": "update_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para cancelar ou excluir um evento já existente na agenda da Bárbara Camargo. Antes de usar, localize e confirme o eventId com get_google_calendar_events. Você DEVE fornecer eventId. Use também para remover o evento antigo quando uma remarcação excepcional exigir criar um evento substituto.",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Bárbara Camargo"
+        },
+        "eventId": "={{ $fromAI('eventId', 'ID exato do evento do Google Calendar que deve ser cancelado', 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        79696,
+        37936
+      ],
+      "id": "1e49c077-bde1-426d-b165-48d1197100e3",
+      "name": "delete_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para reler o contato atual com dados seguros e atualizados. Nao retorna dados privados de outras pessoas nem detalhes internos de precificacao.",
+        "operation": "executeQuery",
+        "query": "WITH current_person AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n    AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid\n  )\n  OR (\n    NULLIF('{{ $json.phone || '' }}', '') IS NOT NULL\n    AND p.primary_phone = NULLIF('{{ $json.phone || '' }}', '')\n  )\n  ORDER BY CASE\n    WHEN NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n      AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid THEN 0\n    ELSE 1\n  END\n  LIMIT 1\n)\nSELECT\n  cp.id,\n  cp.full_name,\n  cp.primary_phone,\n  cp.email,\n  cp.crm_funnel_id,\n  cp.crm_status,\n  COALESCE(cp.metadata->>'latest_real_estate_intent', cp.metadata->'lead_profile'->>'intent') AS intent,\n  cp.metadata->'lead_profile' AS lead_profile,\n  cp.metadata->>'whatsapp_profile_name' AS whatsapp_profile_name,\n  cp.metadata->>'whatsapp_profile_status' AS whatsapp_profile_status,\n  COALESCE((\n    SELECT jsonb_agg(note->>'content')\n    FROM jsonb_array_elements(COALESCE(cp.metadata->'lead_notes', '[]'::jsonb)) AS note\n    WHERE COALESCE(note->>'visibility', '') = 'ai'\n  ), '[]'::jsonb) AS notes_ai\nFROM current_person cp;",
+        "options": {}
+      },
+      "id": "9e5b51b9-f1be-4a55-b7b0-012c05484749",
+      "name": "get_current_contact_safe_context",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        79072,
+        37776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para listar os imoveis ativos ja vinculados ao contato atual com dados seguros para atendimento comercial. Tambem retorna cover_image e public_url quando existirem; use quando o lead pedir fotos ou material visual de um imovel ja vinculado.",
+        "operation": "executeQuery",
+        "query": "WITH current_person AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n    AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid\n  )\n  OR (\n    NULLIF('{{ $json.phone || '' }}', '') IS NOT NULL\n    AND p.primary_phone = NULLIF('{{ $json.phone || '' }}', '')\n  )\n  ORDER BY CASE\n    WHEN NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n      AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid THEN 0\n    ELSE 1\n  END\n  LIMIT 1\n)\nSELECT\n  p.id AS property_id,\n  p.title,\n  p.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text) AS public_url,\n  p.address,\n  p.price,\n  p.status,\n  LEFT(COALESCE(p.description, ''), 220) AS description,\n  CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END AS cover_image,\n  p.custom_data->>'built_area' AS built_area,\n  p.custom_data->>'land_area' AS land_area,\n  p.custom_data->>'bedrooms' AS bedrooms,\n  p.custom_data->>'bathrooms' AS bathrooms,\n  p.custom_data->>'suites' AS suites,\n  p.custom_data->>'parking' AS parking,\n  p.custom_data->>'property_type' AS property_type,\n  p.custom_data->>'neighborhood' AS neighborhood,\n  p.custom_data->>'city' AS city,\n  p.custom_data->>'condominium_fee' AS condominium_fee,\n  p.custom_data->>'iptu' AS iptu,\n  p.custom_data->>'floor' AS floor,\n  p.custom_data->>'furnished' AS furnished,\n  p.custom_data->>'amenities' AS amenities,\n  pp.relationship_type,\n  pp.notes,\n  pp.source\nFROM current_person cp\nJOIN public.person_properties pp ON pp.person_id = cp.id\nJOIN public.properties p ON p.id = pp.property_id\nWHERE p.status = 'active'\nORDER BY pp.updated_at DESC\nLIMIT 10;",
+        "options": {}
+      },
+      "id": "77ccd02f-e629-4232-9e11-2f79b39639bb",
+      "name": "get_current_contact_linked_properties",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        79328,
+        37776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para buscar imoveis ativos com filtros comerciais seguros. Retorna apenas dados publicos, incluindo cover_image e public_url quando existirem, e nunca detalhes internos de precificacao.",
+        "operation": "executeQuery",
+        "query": "WITH filters AS (\n  SELECT\n    NULLIF(BTRIM('{{ $fromAI(\"query_text\", \"Termo geral para busca livre, como bairro, nome do imovel ou preferencia do lead\", \"string\") }}'), '') AS query_text,\n    NULLIF(BTRIM('{{ $fromAI(\"city\", \"Cidade desejada; opcional\", \"string\") }}'), '') AS city,\n    NULLIF(BTRIM('{{ $fromAI(\"neighborhood\", \"Bairro ou regiao desejada; opcional\", \"string\") }}'), '') AS neighborhood,\n    NULLIF(BTRIM('{{ $fromAI(\"property_type\", \"Tipo do imovel; opcional\", \"string\") }}'), '') AS property_type,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"min_price\", \"Preco minimo em numero inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN NULLIF(BTRIM('{{ $fromAI(\"min_price\", \"Preco minimo em numero inteiro; opcional\", \"string\") }}'), '')::numeric\n      ELSE NULL\n    END AS min_price,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"max_price\", \"Preco maximo em numero inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN NULLIF(BTRIM('{{ $fromAI(\"max_price\", \"Preco maximo em numero inteiro; opcional\", \"string\") }}'), '')::numeric\n      ELSE NULL\n    END AS max_price,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"bedrooms_min\", \"Minimo de quartos em numero inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN NULLIF(BTRIM('{{ $fromAI(\"bedrooms_min\", \"Minimo de quartos em numero inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS bedrooms_min,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"bathrooms_min\", \"Minimo de banheiros em numero inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN NULLIF(BTRIM('{{ $fromAI(\"bathrooms_min\", \"Minimo de banheiros em numero inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS bathrooms_min,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"parking_min\", \"Minimo de vagas em numero inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN NULLIF(BTRIM('{{ $fromAI(\"parking_min\", \"Minimo de vagas em numero inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS parking_min,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"limit\", \"Quantidade maxima de resultados entre 1 e 8; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n      THEN LEAST(GREATEST(NULLIF(BTRIM('{{ $fromAI(\"limit\", \"Quantidade maxima de resultados entre 1 e 8; opcional\", \"string\") }}'), '')::int, 1), 8)\n      ELSE 5\n    END AS requested_limit\n)\nSELECT\n  p.id,\n  p.title,\n  p.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text) AS public_url,\n  p.address,\n  p.price,\n  p.status,\n  LEFT(COALESCE(p.description, ''), 220) AS description,\n  CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END AS cover_image,\n  p.custom_data->>'built_area' AS built_area,\n  p.custom_data->>'land_area' AS land_area,\n  p.custom_data->>'bedrooms' AS bedrooms,\n  p.custom_data->>'bathrooms' AS bathrooms,\n  p.custom_data->>'suites' AS suites,\n  p.custom_data->>'parking' AS parking,\n  p.custom_data->>'property_type' AS property_type,\n  p.custom_data->>'neighborhood' AS neighborhood,\n  p.custom_data->>'city' AS city,\n  p.custom_data->>'condominium_fee' AS condominium_fee,\n  p.custom_data->>'iptu' AS iptu,\n  p.custom_data->>'floor' AS floor,\n  p.custom_data->>'furnished' AS furnished,\n  p.custom_data->>'amenities' AS amenities\nFROM public.properties p\nCROSS JOIN filters f\nWHERE p.status = 'active'\n  AND (\n    f.query_text IS NULL\n    OR CONCAT_WS(' ', p.title, p.slug, p.address, LEFT(COALESCE(p.description, ''), 220), p.custom_data->>'neighborhood', p.custom_data->>'city', p.custom_data->>'property_type') ILIKE '%' || f.query_text || '%'\n  )\n  AND (f.city IS NULL OR COALESCE(p.custom_data->>'city', '') ILIKE '%' || f.city || '%')\n  AND (f.neighborhood IS NULL OR COALESCE(p.custom_data->>'neighborhood', '') ILIKE '%' || f.neighborhood || '%')\n  AND (f.property_type IS NULL OR COALESCE(p.custom_data->>'property_type', '') ILIKE '%' || f.property_type || '%')\n  AND (f.min_price IS NULL OR p.price >= f.min_price)\n  AND (f.max_price IS NULL OR p.price <= f.max_price)\n  AND (\n    f.bedrooms_min IS NULL\n    OR COALESCE(NULLIF(regexp_replace(COALESCE(p.custom_data->>'bedrooms', ''), '[^0-9]', '', 'g'), ''), '0')::int >= f.bedrooms_min\n  )\n  AND (\n    f.bathrooms_min IS NULL\n    OR COALESCE(NULLIF(regexp_replace(COALESCE(p.custom_data->>'bathrooms', ''), '[^0-9]', '', 'g'), ''), '0')::int >= f.bathrooms_min\n  )\n  AND (\n    f.parking_min IS NULL\n    OR COALESCE(NULLIF(regexp_replace(COALESCE(p.custom_data->>'parking', ''), '[^0-9]', '', 'g'), ''), '0')::int >= f.parking_min\n  )\nORDER BY\n  CASE\n    WHEN f.query_text IS NOT NULL AND (COALESCE(p.title, '') ILIKE '%' || f.query_text || '%' OR COALESCE(p.slug, '') ILIKE '%' || f.query_text || '%') THEN 0\n    ELSE 1\n  END,\n  p.updated_at DESC\nLIMIT (SELECT requested_limit FROM filters);",
+        "options": {}
+      },
+      "id": "29cfbfed-7918-4d15-ae72-85e2eb0db662",
+      "name": "search_active_properties_public",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        79584,
+        37776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para obter todos os detalhes publicos e seguros de um imovel especifico citado pelo lead. A referencia pode ser id, slug, titulo ou endereco. Retorna descricao completa, resumo em texto, caracteristicas, taxas, dados publicos da landing page, imagens publicas quando existirem e public_url; use antes de responder sobre fotos, imagens, material visual ou detalhes completos do imovel.",
+        "operation": "executeQuery",
+        "query": "WITH ref AS (\n  SELECT NULLIF(BTRIM('{{ $fromAI(\"reference\", \"Referencia do imovel: id, slug, titulo ou endereco citado pelo lead\", \"string\") }}'), '') AS reference\n), matched_properties AS (\n  SELECT p.*\n  FROM public.properties p\n  CROSS JOIN ref\n  WHERE p.status = 'active'\n    AND ref.reference IS NOT NULL\n    AND (\n      p.id::text = ref.reference\n      OR COALESCE(p.slug, '') ILIKE ref.reference\n      OR COALESCE(p.slug, '') ILIKE '%' || ref.reference || '%'\n      OR COALESCE(p.title, '') ILIKE '%' || ref.reference || '%'\n      OR COALESCE(p.address, '') ILIKE '%' || ref.reference || '%'\n    )\n), sanitized AS (\n  SELECT\n    p.*,\n    COALESCE(p.custom_data, '{}'::jsonb) AS custom_data_safe_source,\n    COALESCE(p.landing_page, '{}'::jsonb) AS landing_page_safe_source,\n    NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(p.description, ''), '<[^>]+>', ' ', 'g'), '\\s+', ' ', 'g'), '') AS description_plain_source\n  FROM matched_properties p\n)\nSELECT\n  p.id,\n  p.title,\n  p.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text) AS public_url,\n  p.address,\n  p.price,\n  p.status,\n  COALESCE(p.description, '') AS description,\n  p.description_plain_source AS description_plain,\n  CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END AS cover_image,\n  COALESCE((\n    SELECT jsonb_agg(image_url)\n    FROM (\n      SELECT image_url\n      FROM unnest(COALESCE(p.images, ARRAY[]::text[])) AS image_url\n      WHERE COALESCE(image_url, '') ~* '^https?://'\n    ) visible_images\n  ), '[]'::jsonb) AS images,\n  COALESCE(array_length(p.images, 1), 0) AS image_count,\n  CASE WHEN COALESCE(p.map_embed_url, '') ~* '^https?://' THEN p.map_embed_url ELSE NULL END AS map_embed_url,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'built_area', ''), NULLIF(p.custom_data_safe_source->>'area', '')) AS built_area,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'land_area', ''), NULLIF(p.custom_data_safe_source->>'terrain_area', '')) AS land_area,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'bedrooms', ''), (regexp_match(COALESCE(p.description_plain_source, ''), '([0-9]+)\\s+dormit[oó]rios', 'i'))[1]) AS bedrooms,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'bathrooms', ''), (regexp_match(COALESCE(p.description_plain_source, ''), '([0-9]+)\\s+banheiros?', 'i'))[1]) AS bathrooms,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'suites', ''), (regexp_match(COALESCE(p.description_plain_source, ''), '([0-9]+)\\s+su[ií]te', 'i'))[1]) AS suites,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'parking', ''), NULLIF(p.custom_data_safe_source->>'garage_spaces', ''), (regexp_match(COALESCE(p.description_plain_source, ''), '([0-9]+)\\s+vaga', 'i'))[1]) AS parking,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'property_type', ''), NULLIF(p.custom_data_safe_source->>'type', ''), NULLIF(split_part(COALESCE(p.title, ''), ' - ', 1), '')) AS property_type,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'neighborhood', ''), NULLIF(p.custom_data_safe_source->>'bairro', ''), NULLIF((regexp_match(COALESCE(p.address, ''), 'Bairro\\s+([^,]+)', 'i'))[1], '')) AS neighborhood,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'city', ''), NULLIF(p.custom_data_safe_source->>'cidade', ''), NULLIF((regexp_match(COALESCE(p.address, ''), ',\\s*([^,]+)\\s*-\\s*[A-Z]{2}$'))[1], '')) AS city,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'condominium_fee', ''), NULLIF(p.custom_data_safe_source->>'hoa_fee', ''), NULLIF((regexp_match(COALESCE(p.description_plain_source, ''), 'Condomínio[^0-9]{0,120}([0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{2}|[0-9]+(?:,[0-9]{2})?)', 'i'))[1], '')) AS condominium_fee,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'iptu', ''), NULLIF((regexp_match(COALESCE(p.description_plain_source, ''), 'IPTU[^0-9]{0,120}([0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{2}|[0-9]+(?:,[0-9]{2})?)', 'i'))[1], '')) AS iptu,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'floor', ''), NULLIF((regexp_match(COALESCE(p.description_plain_source, ''), '([0-9]+)[ºo]\\s+andar', 'i'))[1], '')) AS floor,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'furnished', ''), CASE WHEN COALESCE(p.description_plain_source, '') ~* 'mobiliad[oa]' THEN 'true' ELSE NULL END) AS furnished,\n  COALESCE(\n    NULLIF(p.custom_data_safe_source->>'amenities', ''),\n    NULLIF(\n      array_to_string(\n        array_remove(\n          ARRAY[\n            CASE WHEN COALESCE(p.description_plain_source, '') ~* 'cooktop' THEN 'cooktop' END,\n            CASE WHEN COALESCE(p.description_plain_source, '') ~* 'box de vidro' THEN 'box de vidro temperado' END,\n            CASE WHEN COALESCE(p.description_plain_source, '') ~* 'planejad' THEN 'moveis planejados' END,\n            CASE WHEN COALESCE(p.description_plain_source, '') ~* 'água e gás' OR COALESCE(p.description_plain_source, '') ~* 'agua e gas' THEN 'agua e gas inclusos' END,\n            CASE WHEN COALESCE(p.description_plain_source, '') ~* 'garagem coberta' THEN 'vaga coberta' END\n          ],\n          NULL\n        ),\n        ', '\n      ),\n      ''\n    )\n  ) AS amenities,\n  p.landing_page_safe_source->>'heroTitle' AS hero_title,\n  p.landing_page_safe_source->>'heroSubtitle' AS hero_subtitle,\n  p.landing_page_safe_source->>'callToActionText' AS call_to_action_text,\n  p.landing_page_safe_source->>'leadMagnetTitle' AS lead_magnet_title,\n  p.landing_page_safe_source->>'leadMagnetFileUrl' AS lead_magnet_file_url,\n  p.landing_page_safe_source->>'primaryColor' AS primary_color,\n  COALESCE((p.landing_page_safe_source->>'showLeadMagnet')::boolean, false) AS show_lead_magnet,\n  (p.custom_data_safe_source - 'owner_price' - 'commission_rate') AS safe_custom_data,\n  p.landing_page_safe_source AS landing_page\nFROM sanitized p\nORDER BY\n  CASE WHEN p.id::text = (SELECT reference FROM ref) THEN 0 ELSE 1 END,\n  CASE WHEN COALESCE(p.slug, '') ILIKE (SELECT reference FROM ref) THEN 1 ELSE 2 END,\n  p.updated_at DESC\nLIMIT 5;",
+        "options": {}
+      },
+      "id": "2dbbb5a7-1cf2-4e0a-9425-855e44bc1a1a",
+      "name": "get_property_public_details",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        79840,
+        37776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para atualizar imediatamente campos estruturados e seguros do contato atual, como nome, email, intencao e etapa. Nao use para notas internas extensas nem para dados de outras pessoas.",
+        "operation": "executeQuery",
+        "query": "WITH current_person AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n    AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid\n  )\n  OR (\n    NULLIF('{{ $json.phone || '' }}', '') IS NOT NULL\n    AND p.primary_phone = NULLIF('{{ $json.phone || '' }}', '')\n  )\n  ORDER BY CASE\n    WHEN NULLIF('{{ $json.person_id || '' }}', '') IS NOT NULL\n      AND p.id = NULLIF('{{ $json.person_id || '' }}', '')::uuid THEN 0\n    ELSE 1\n  END\n  LIMIT 1\n),\npayload AS (\n  SELECT\n    NULLIF(BTRIM('{{ $fromAI(\"full_name\", \"Nome completo corrigido do contato; opcional\", \"string\") }}'), '') AS full_name,\n    NULLIF(LOWER(BTRIM('{{ $fromAI(\"email\", \"Email valido do contato; opcional\", \"string\") }}')), '') AS email,\n    CASE LOWER(NULLIF(BTRIM('{{ $fromAI(\"intent\", \"buy, sell, rent ou unknown; opcional\", \"string\") }}'), ''))\n      WHEN 'buy' THEN 'buy'\n      WHEN 'sell' THEN 'sell'\n      WHEN 'rent' THEN 'rent'\n      WHEN 'unknown' THEN 'unknown'\n      ELSE NULL\n    END AS intent,\n    NULLIF(BTRIM('{{ $fromAI(\"crm_status\", \"Nova etapa comercial do contato; opcional\", \"string\") }}'), '') AS crm_status\n), updated AS (\n  UPDATE public.people p\n  SET\n    full_name = COALESCE(payload.full_name, p.full_name),\n    email = COALESCE(payload.email, p.email),\n    crm_status = COALESCE(payload.crm_status, p.crm_status),\n    metadata = CASE\n      WHEN payload.intent IS NOT NULL THEN jsonb_set(COALESCE(p.metadata, '{}'::jsonb), '{latest_real_estate_intent}', to_jsonb(payload.intent), true)\n      ELSE COALESCE(p.metadata, '{}'::jsonb)\n    END,\n    updated_at = now()\n  FROM current_person cp, payload\n  WHERE p.id = cp.id\n  RETURNING p.id, p.full_name, p.primary_phone, p.email, p.crm_status, p.metadata\n)\nSELECT\n  id,\n  full_name,\n  primary_phone,\n  email,\n  crm_status,\n  COALESCE(metadata->>'latest_real_estate_intent', metadata->'lead_profile'->>'intent') AS intent,\n  metadata->'lead_profile' AS lead_profile\nFROM updated;",
+        "options": {}
+      },
+      "id": "dff51ea4-a9ee-40e6-8492-5f8d5c58b93b",
+      "name": "update_current_contact_safe_fields",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.5,
+      "position": [
+        80096,
+        37776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "operation": "send-image",
+        "instanceName": "={{ $json.instance }}",
+        "remoteJid": "={{ $('Normalizar WhatsApp').item.json.phone }}",
+        "media": "={{ $json.media_url }}",
+        "caption": "={{ $json.media_caption || $json.text }}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        80592,
+        37072
+      ],
+      "id": "80706c0b-f28c-436b-b9a2-b6b42522d413",
+      "name": "Enviar imagem",
+      "credentials": {
+        "evolutionApi": {
+          "id": "GqUEUbeN7EHwcMY2",
+          "name": "Novian Whatsapp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "messages-api",
+        "operation": "send-document",
+        "instanceName": "={{ $json.instance }}",
+        "remoteJid": "={{ $('Normalizar WhatsApp').item.json.phone }}",
+        "media": "={{ $json.media_url }}",
+        "fileName": "={{ $json.media_file_name || 'arquivo.pdf' }}",
+        "options_message": {}
+      },
+      "type": "n8n-nodes-evolution-api.evolutionApi",
+      "typeVersion": 1,
+      "position": [
+        80592,
+        37264
+      ],
+      "id": "7e491019-10cf-4037-90ef-a09e82506f29",
+      "name": "Enviar documento",
+      "credentials": {
+        "evolutionApi": {
+          "id": "GqUEUbeN7EHwcMY2",
+          "name": "Novian Whatsapp"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.delivery_type }}",
+              "rightValue": "image",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ (($json.media_urls || []).length > 0) || !!$json.delivery_reference }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "52ed1f5b-a748-48e4-8fff-5b566b9fcbdc",
+      "name": "Escolher envio de imagem",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        79424,
+        37280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.delivery_type }}",
+              "rightValue": "document",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.media_url || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "0102ec06-0562-4ae1-a069-785b2633e7f0",
+      "name": "Escolher envio de documento",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        79696,
+        37296
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH requested AS (\n  SELECT NULLIF(BTRIM('{{ $json.delivery_reference || '' }}'), '') AS reference\n), matched_property AS (\n  SELECT p.*\n  FROM public.properties p\n  CROSS JOIN requested r\n  WHERE p.status = 'active'\n    AND r.reference IS NOT NULL\n    AND (\n      p.id::text = r.reference\n      OR COALESCE(p.slug, '') ILIKE r.reference\n      OR COALESCE(p.slug, '') ILIKE '%' || r.reference || '%'\n      OR COALESCE(p.title, '') ILIKE '%' || r.reference || '%'\n      OR COALESCE(p.address, '') ILIKE '%' || r.reference || '%'\n    )\n  ORDER BY\n    CASE WHEN p.id::text = (SELECT reference FROM requested) THEN 0 ELSE 1 END,\n    CASE WHEN COALESCE(p.slug, '') ILIKE (SELECT reference FROM requested) THEN 1 ELSE 2 END,\n    p.updated_at DESC\n  LIMIT 1\n)\nSELECT\n  (SELECT id FROM matched_property LIMIT 1) AS property_id,\n  (SELECT title FROM matched_property LIMIT 1) AS property_title,\n  CASE\n    WHEN COALESCE((SELECT cover_image FROM matched_property LIMIT 1), '') <> ''\n      THEN (SELECT cover_image FROM matched_property LIMIT 1)\n    ELSE NULL\n  END AS cover_image,\n  COALESCE(\n    (SELECT to_jsonb(COALESCE(images, ARRAY[]::text[])) FROM matched_property LIMIT 1),\n    '[]'::jsonb\n  ) AS images;",
+        "options": {}
+      },
+      "id": "645db801-19fa-4b67-ac28-bed09df4f134",
+      "name": "Buscar imagens do imóvel para envio",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        79568,
+        37072
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const reply = $('Prepare Reply').first().json;\nconst payload = $json || {};\n\nfunction asTrimmedString(value) {\n  return typeof value === 'string' && value.trim() ? value.trim() : null;\n}\n\nfunction parseArray(value) {\n  if (Array.isArray(value)) return value;\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return Array.isArray(parsed) ? parsed : [];\n    } catch (error) {\n      return [];\n    }\n  }\n  return [];\n}\n\nfunction normalizeImageSource(value) {\n  const image = asTrimmedString(value);\n  if (!image) return null;\n  if (/^https?:\\/\\//i.test(image)) return image;\n  if (/^data:image\\//i.test(image)) return image;\n  return null;\n}\n\nconst urls = [];\nconst seen = new Set();\nconst candidates = [\n  ...parseArray(reply.media_urls),\n  payload.cover_image,\n  ...parseArray(payload.images),\n];\n\nfor (const candidate of candidates) {\n  const normalized = normalizeImageSource(candidate);\n  if (!normalized || seen.has(normalized)) continue;\n  seen.add(normalized);\n  urls.push(normalized);\n}\n\nif (!urls.length) {\n  return [{\n    json: {\n      ...reply,\n      media_url: null,\n      media_urls: [],\n      media_caption: null,\n      media_index: 0,\n      media_total: 0,\n      property_id: payload.property_id || null,\n      property_title: payload.property_title || null,\n    },\n  }];\n}\n\nconst caption = reply.media_caption || reply.text || null;\n\nreturn urls.map((mediaUrl, index) => ({\n  json: {\n    ...reply,\n    media_url: mediaUrl,\n    media_urls: urls,\n    media_caption: index === 0 ? caption : null,\n    media_index: index,\n    media_total: urls.length,\n    property_id: payload.property_id || null,\n    property_title: payload.property_title || null,\n  },\n}));"
+      },
+      "id": "73298c67-8058-472d-8ace-9e4a090874b1",
+      "name": "Preparar itens de imagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        79792,
+        37072
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.media_url || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "7360efd3-df03-4504-bda5-775288f69a40",
+      "name": "Tem imagem para enviar",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        80096,
+        37072
+      ]
+    }
+  ],
+  "connections": {
+    "Persistir entrada e garantir pessoa/thread": {
+      "main": [
+        [
+          {
+            "node": "Montar contexto do lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reply": {
+      "main": [
+        [
+          {
+            "node": "Enviar somente se deve responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar somente se deve responder": {
+      "main": [
+        [
+          {
+            "node": "Escolher envio de imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar texto": {
+      "main": [
+        [
+          {
+            "node": "Preparar SQL de saída",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar SQL de saída": {
+      "main": [
+        [
+          {
+            "node": "Persistir saída",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar escrevendo": {
+      "main": [
+        [
+          {
+            "node": "Buscar perfil",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar apenas mensagens reais de leads": {
+      "main": [
+        [
+          {
+            "node": "Enviar escrevendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Filtrar apenas mensagens reais de leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Evolution": {
+      "main": [
+        [
+          {
+            "node": "Normalizar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar contexto do lead": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar perfil": {
+      "main": [
+        [
+          {
+            "node": "Preparar SQL de entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar SQL de entrada": {
+      "main": [
+        [
+          {
+            "node": "Persistir entrada e garantir pessoa/thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_google_calendar_events": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_google_calendar_availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_current_contact_safe_context": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_current_contact_linked_properties": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_active_properties_public": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_property_public_details": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_current_contact_safe_fields": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar imagem": {
+      "main": [
+        [
+          {
+            "node": "Preparar SQL de saída",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar documento": {
+      "main": [
+        [
+          {
+            "node": "Preparar SQL de saída",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escolher envio de imagem": {
+      "main": [
+        [
+          {
+            "node": "Buscar imagens do imóvel para envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escolher envio de documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escolher envio de documento": {
+      "main": [
+        [
+          {
+            "node": "Enviar documento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar imagens do imóvel para envio": {
+      "main": [
+        [
+          {
+            "node": "Preparar itens de imagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar itens de imagem": {
+      "main": [
+        [
+          {
+            "node": "Tem imagem para enviar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem imagem para enviar": {
+      "main": [
+        [
+          {
+            "node": "Enviar imagem",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar texto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Webhook Evolution": [
+      {
+        "headers": {
+          "host": "automation.novian.com.br",
+          "user-agent": "axios/1.13.2",
+          "content-length": "523",
+          "accept": "application/json, text/plain, */*",
+          "accept-encoding": "gzip, compress, deflate, br",
+          "content-type": "application/json",
+          "x-forwarded-for": "54.219.220.131, 157.52.96.57",
+          "x-forwarded-host": "automation.novian.com.br",
+          "x-forwarded-proto": "https",
+          "x-railway-edge": "railway/us-west2",
+          "x-railway-request-id": "HDAfwj1kR6Kv8SRFxtoGcA",
+          "x-real-ip": "54.219.220.131",
+          "x-request-start": "1777244516436"
+        },
+        "params": {},
+        "query": {},
+        "body": {
+          "event": "messages.update",
+          "instance": "mariana-sdr",
+          "data": {
+            "keyId": "3EB0AFE4B00B5962F51F49",
+            "remoteJid": "201090486239360:81@lid",
+            "fromMe": true,
+            "status": "READ",
+            "instanceId": "b6b8bf8f-7c50-45a7-91d9-1215afe48daa",
+            "messageId": "cmogdgw9e01glmn5k8u5mk2aj"
+          },
+          "destination": "https://automation.novian.com.br/webhook/evolution-whatsapp",
+          "date_time": "2026-04-26T20:01:56.296Z",
+          "sender": "5511965489677@s.whatsapp.net",
+          "server_url": "https://evolution-api-production-4f6b.up.railway.app",
+          "apikey": "971B5EF40666-4467-8528-82030DA28D29"
+        },
+        "webhookUrl": "https://automation.novian.com.br/webhook/evolution-whatsapp",
+        "executionMode": "production"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dc4f9ed8d71f80c698f718d77f28fac395a2cf4fec4f6b8304dcfe883e638148"
+  }
+}

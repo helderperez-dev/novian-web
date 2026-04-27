@@ -152,6 +152,39 @@ type LeadDetailItem = {
   href?: string;
 };
 
+type LeadDrawerLinkedProperty = {
+  id: string;
+  propertyId: string;
+  relationshipType: "interested" | "owner";
+  source: string;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  property: {
+    id: string;
+    title: string;
+    slug: string | null;
+    address: string | null;
+    price: number;
+    status: "active" | "inactive" | "sold";
+    coverImage: string | null;
+  } | null;
+};
+
+type LeadDrawerPersonDetail = {
+  id: string;
+  fullName: string;
+  primaryPhone: string | null;
+  email: string | null;
+  roles: Array<"lead" | "client" | "buyer" | "seller">;
+  linkedProperties: LeadDrawerLinkedProperty[];
+  lead: {
+    status: string | null;
+    score: number | null;
+  } | null;
+};
+
 type LeadContextTab = "overview" | "notes";
 const getLeadPhoneValue = (thread: Pick<Thread, "phone" | "id">) => {
   const phone = thread.phone?.trim();
@@ -237,6 +270,38 @@ const formatNoteTimestamp = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const getLeadRoleLabel = (role: "lead" | "client" | "buyer" | "seller") => {
+  if (role === "buyer") return "Comprador";
+  if (role === "seller") return "Proprietario";
+  if (role === "client") return "Cliente";
+  return "Lead";
+};
+
+const getLinkedPropertyStatusLabel = (status: "active" | "inactive" | "sold") => {
+  if (status === "active") return "Ativo";
+  if (status === "sold") return "Vendido";
+  return "Inativo";
+};
+
+const getLinkedPropertyStatusTone = (status: "active" | "inactive" | "sold") => {
+  if (status === "active") {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+  }
+
+  if (status === "sold") {
+    return "border-sky-500/30 bg-sky-500/10 text-sky-100";
+  }
+
+  return "border-novian-muted/30 bg-novian-surface/25 text-novian-text/70";
+};
+
+const formatCurrencyValue = (value: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  }).format(value);
 
 function LeadContextTabs({
   value,
@@ -1276,6 +1341,8 @@ function DashboardLoader() {
 export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number }) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [selectedLead, setSelectedLead] = useState<Thread | null>(null);
+  const [selectedLeadPerson, setSelectedLeadPerson] = useState<LeadDrawerPersonDetail | null>(null);
+  const [isLoadingSelectedLeadPerson, setIsLoadingSelectedLeadPerson] = useState(false);
   const [selectedLeadTab, setSelectedLeadTab] = useState<LeadContextTab>("overview");
   const [isEditingLead, setIsEditingLead] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -1358,7 +1425,6 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
   };
 
   useEffect(() => {
-    let isMounted = true;
     const initFetch = async () => {
       await fetchFunnels();
       await fetchLeads();
@@ -1366,13 +1432,52 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
     initFetch();
     const interval = setInterval(fetchLeads, 5000);
     return () => {
-      isMounted = false;
       clearInterval(interval);
     };
   }, [refreshTrigger]);
 
   useEffect(() => {
     setSelectedLeadTab("overview");
+  }, [selectedLead?.id]);
+
+  useEffect(() => {
+    if (!selectedLead?.id) {
+      setSelectedLeadPerson(null);
+      setIsLoadingSelectedLeadPerson(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSelectedLeadPerson(true);
+
+    const loadSelectedLeadPerson = async () => {
+      try {
+        const res = await fetch(`/api/people/${encodeURIComponent(selectedLead.id)}`, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error("Failed to load person detail");
+        }
+
+        const data = await res.json();
+        if (!cancelled) {
+          setSelectedLeadPerson((data.person as LeadDrawerPersonDetail) || null);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSelectedLeadPerson(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSelectedLeadPerson(false);
+        }
+      }
+    };
+
+    loadSelectedLeadPerson();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedLead?.id]);
 
   const activeFunnel = funnelsList.find(f => f.id === activeFunnelId) || funnelsList[0];
@@ -1513,6 +1618,11 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
 
   const selectedLeadPhone = selectedLead ? getLeadPhoneValue(selectedLead) : "";
   const selectedLeadMetadataDetails = selectedLead ? getLeadMetadataDetails(selectedLead.customData) : [];
+  const selectedLeadRoles = selectedLeadPerson?.roles || [];
+  const selectedLeadLinkedProperties = selectedLeadPerson?.linkedProperties || [];
+  const selectedLeadEmail =
+    selectedLeadPerson?.email ||
+    (typeof selectedLead?.customData?.email === "string" ? String(selectedLead.customData.email) : "");
 
   return (
     <div className="flex-1 flex flex-col h-full bg-novian-primary overflow-hidden min-w-0 relative">
@@ -1868,6 +1978,10 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                             <p className="text-sm font-mono text-novian-text/90">{selectedLeadPhone || "Nao informado"}</p>
                           </div>
                           <div>
+                            <p className="text-xs text-novian-text/50 mb-1">E-mail</p>
+                            <p className="text-sm text-novian-text/90 break-all">{selectedLeadEmail || "Nao informado"}</p>
+                          </div>
+                          <div>
                             <p className="text-xs text-novian-text/50 mb-1">Origem</p>
                             <p className="text-sm text-novian-text/90">{String(selectedLead.customData?.source || "Manual")}</p>
                           </div>
@@ -1882,6 +1996,23 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                             <span className="inline-block bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-md text-xs font-bold border border-yellow-500/30">
                               🔥 {selectedLead.score || 0} pts
                             </span>
+                          </div>
+                          <div className="col-span-2">
+                            <p className="text-xs text-novian-text/50 mb-1">Perfis</p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedLeadRoles.length > 0 ? (
+                                selectedLeadRoles.map((role) => (
+                                  <span
+                                    key={role}
+                                    className="inline-flex items-center rounded-full border border-novian-accent/20 bg-novian-accent/10 px-2.5 py-1 text-[11px] font-medium text-novian-text"
+                                  >
+                                    {getLeadRoleLabel(role)}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-sm text-novian-text/55">Nenhum perfil adicional</span>
+                              )}
+                            </div>
                           </div>
                           <div className="col-span-2">
                             <p className="text-xs text-novian-text/50 mb-1">Criado em</p>
@@ -1941,6 +2072,77 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                           </div>
                         </div>
                       )}
+
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">
+                          Imoveis Vinculados
+                        </h3>
+
+                        {isLoadingSelectedLeadPerson ? (
+                          <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-4 py-5 text-sm text-novian-text/50">
+                            Carregando vinculos de imoveis...
+                          </div>
+                        ) : selectedLeadLinkedProperties.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-novian-muted/30 px-4 py-5 text-sm text-novian-text/45">
+                            Nenhum imovel vinculado a este contato ainda.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {selectedLeadLinkedProperties.map((link) => (
+                              <div
+                                key={link.id}
+                                className="rounded-2xl border border-novian-muted/30 bg-novian-surface/20 p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="inline-flex items-center rounded-full border border-novian-accent/20 bg-novian-accent/10 px-2.5 py-1 text-[11px] font-medium text-novian-text">
+                                        {link.relationshipType === "owner" ? "Proprietario" : "Interessado"}
+                                      </span>
+                                      {link.property ? (
+                                        <span
+                                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${getLinkedPropertyStatusTone(link.property.status)}`}
+                                        >
+                                          {getLinkedPropertyStatusLabel(link.property.status)}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-2 text-sm font-semibold text-novian-text">
+                                      {link.property?.title || "Imovel nao encontrado"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-novian-text/55">
+                                      {[
+                                        link.property?.address || null,
+                                        link.property ? formatCurrencyValue(link.property.price) : null,
+                                        link.source || null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </p>
+                                  </div>
+
+                                  {link.property?.slug ? (
+                                    <Link
+                                      href={`/imoveis/${link.property.slug}`}
+                                      target="_blank"
+                                      className="inline-flex items-center gap-2 rounded-full border border-novian-muted/30 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/30 hover:text-novian-text"
+                                    >
+                                      Ver pagina
+                                      <ArrowRight size={12} />
+                                    </Link>
+                                  ) : null}
+                                </div>
+
+                                {link.notes ? (
+                                  <p className="mt-3 rounded-xl border border-novian-muted/20 bg-novian-primary/20 px-3 py-3 text-sm leading-6 text-novian-text/80">
+                                    {link.notes}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       {getLeadCustomEntries(selectedLead.customData).length > 0 && (
                         <div className="space-y-4">

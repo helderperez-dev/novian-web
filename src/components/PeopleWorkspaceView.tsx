@@ -59,6 +59,36 @@ type PersonLead = {
   updatedAt: string;
 };
 
+type LinkedPropertyItem = {
+  id: string;
+  propertyId: string;
+  relationshipType: "interested" | "owner";
+  source: string;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  property: {
+    id: string;
+    title: string;
+    slug: string | null;
+    address: string | null;
+    price: number;
+    status: "active" | "inactive" | "sold";
+    coverImage: string | null;
+  } | null;
+};
+
+type PropertyListItem = {
+  id: string;
+  title: string;
+  slug?: string | null;
+  address?: string | null;
+  price: number;
+  status: "active" | "inactive" | "sold";
+  coverImage?: string | null;
+};
+
 type PersonItem = {
   id: string;
   fullName: string;
@@ -74,6 +104,7 @@ type PersonItem = {
   updatedAt: string;
   lead: PersonLead | null;
   leadCount: number;
+  linkedProperties: LinkedPropertyItem[];
 };
 
 type DuplicateGroup = {
@@ -123,6 +154,15 @@ const formatRelativeDateTime = (value: string | null | undefined) => {
   });
 };
 
+const formatCurrency = (value: number | null | undefined) =>
+  typeof value === "number"
+    ? new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        maximumFractionDigits: 0,
+      }).format(value)
+    : "-";
+
 const parseTagInput = (value: string) =>
   Array.from(
     new Set(
@@ -144,6 +184,8 @@ const parseTagInput = (value: string) =>
 const BUSINESS_ROLE_ORDER: PersonRole[] = ["buyer", "seller"];
 
 const getRoleLabel = (role: PersonRole) => ROLE_OPTIONS.find((item) => item.value === role)?.label || role;
+const getPropertyRelationshipLabel = (value: "interested" | "owner") =>
+  value === "owner" ? "Proprietário" : "Interessado";
 
 const getBusinessRoles = (roles: PersonRole[]) =>
   BUSINESS_ROLE_ORDER.filter((role) => roles.includes(role));
@@ -275,6 +317,191 @@ function DuplicateCard({
   );
 }
 
+type LinkedPropertyDraft = {
+  localId: string;
+  propertyId: string;
+  relationshipType: "interested" | "owner";
+  source: string;
+  notes: string;
+};
+
+function LinkedPropertiesEditor({
+  value,
+  onChange,
+  properties,
+}: {
+  value: LinkedPropertyDraft[];
+  onChange: (next: LinkedPropertyDraft[]) => void;
+  properties: PropertyListItem[];
+}) {
+  const [propertyIdToAdd, setPropertyIdToAdd] = useState("");
+  const [relationshipToAdd, setRelationshipToAdd] = useState<"interested" | "owner">("interested");
+  const [notesToAdd, setNotesToAdd] = useState("");
+  const [sourceToAdd, setSourceToAdd] = useState("manual");
+
+  const propertyOptions = properties.map((property) => ({
+    value: property.id,
+    label: property.title,
+    description: [property.address, formatCurrency(property.price), property.status].filter(Boolean).join(" · "),
+  }));
+
+  const addLink = () => {
+    if (!propertyIdToAdd) return;
+
+    onChange([
+      ...value,
+      {
+        localId: `${propertyIdToAdd}:${relationshipToAdd}:${Date.now()}`,
+        propertyId: propertyIdToAdd,
+        relationshipType: relationshipToAdd,
+        source: sourceToAdd.trim() || "manual",
+        notes: notesToAdd.trim(),
+      },
+    ]);
+    setPropertyIdToAdd("");
+    setRelationshipToAdd("interested");
+    setNotesToAdd("");
+    setSourceToAdd("manual");
+  };
+
+  const updateLink = (localId: string, patch: Partial<LinkedPropertyDraft>) => {
+    onChange(value.map((item) => (item.localId === localId ? { ...item, ...patch } : item)));
+  };
+
+  const removeLink = (localId: string) => {
+    onChange(value.filter((item) => item.localId !== localId));
+  };
+
+  return (
+    <section className="space-y-4">
+      <div className="text-sm font-semibold uppercase tracking-[0.16em] text-novian-accent">Imóveis vinculados</div>
+      <div className="rounded-[24px] border border-novian-muted/35 bg-novian-primary/20 p-4">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div>
+            <label className="mb-1 block text-xs text-novian-text/60">Imóvel</label>
+            <PopupSelect
+              value={propertyIdToAdd}
+              onChange={setPropertyIdToAdd}
+              options={propertyOptions}
+              placeholder="Selecionar imóvel"
+              buttonClassName="bg-novian-primary/40"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-novian-text/60">Relação</label>
+            <PopupSelect
+              value={relationshipToAdd}
+              onChange={(value) => setRelationshipToAdd(value as "interested" | "owner")}
+              options={[
+                { value: "interested", label: "Interessado" },
+                { value: "owner", label: "Proprietário" },
+              ]}
+              buttonClassName="bg-novian-primary/40"
+            />
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+          <div>
+            <label className="mb-1 block text-xs text-novian-text/60">Origem</label>
+            <input
+              value={sourceToAdd}
+              onChange={(event) => setSourceToAdd(event.target.value)}
+              className="w-full rounded-2xl border border-novian-muted/40 bg-novian-primary/40 px-4 py-3 text-sm outline-none transition focus:border-novian-accent/50"
+              placeholder="manual"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-novian-text/60">Notas</label>
+            <input
+              value={notesToAdd}
+              onChange={(event) => setNotesToAdd(event.target.value)}
+              className="w-full rounded-2xl border border-novian-muted/40 bg-novian-primary/40 px-4 py-3 text-sm outline-none transition focus:border-novian-accent/50"
+              placeholder="Contexto da relação com o imóvel"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={addLink}
+              disabled={!propertyIdToAdd}
+              className="inline-flex h-[50px] items-center gap-2 rounded-2xl bg-novian-accent px-4 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-50"
+            >
+              <Plus size={15} />
+              Vincular
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {value.length === 0 ? (
+        <div className="rounded-[24px] border border-dashed border-novian-muted/35 bg-novian-primary/20 px-5 py-10 text-center text-sm text-novian-text/55">
+          Nenhum imóvel vinculado ainda.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {value.map((item) => {
+            const property = properties.find((entry) => entry.id === item.propertyId);
+            return (
+              <div key={item.localId} className="rounded-[24px] border border-novian-muted/35 bg-novian-primary/20 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-novian-text">{property?.title || "Imóvel não encontrado"}</div>
+                    <div className="mt-1 text-xs text-novian-text/55">
+                      {[property?.address, formatCurrency(property?.price), property?.status].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeLink(item.localId)}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:bg-red-500/15"
+                  >
+                    <Trash2 size={13} />
+                    Remover
+                  </button>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div>
+                    <label className="mb-1 block text-xs text-novian-text/60">Relação</label>
+                    <PopupSelect
+                      value={item.relationshipType}
+                      onChange={(value) =>
+                        updateLink(item.localId, { relationshipType: value as "interested" | "owner" })
+                      }
+                      options={[
+                        { value: "interested", label: "Interessado" },
+                        { value: "owner", label: "Proprietário" },
+                      ]}
+                      buttonClassName="bg-novian-primary/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-novian-text/60">Origem</label>
+                    <input
+                      value={item.source}
+                      onChange={(event) => updateLink(item.localId, { source: event.target.value })}
+                      className="w-full rounded-2xl border border-novian-muted/40 bg-novian-primary/40 px-4 py-3 text-sm outline-none transition focus:border-novian-accent/50"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="mb-1 block text-xs text-novian-text/60">Notas</label>
+                  <textarea
+                    value={item.notes}
+                    onChange={(event) => updateLink(item.localId, { notes: event.target.value })}
+                    className="min-h-24 w-full rounded-2xl border border-novian-muted/40 bg-novian-primary/40 px-4 py-3 text-sm outline-none transition focus:border-novian-accent/50"
+                    placeholder="Observações sobre o interesse ou vínculo do contato com este imóvel"
+                  />
+                </div>
+                <div className="mt-3 text-xs text-novian-text/45">{getPropertyRelationshipLabel(item.relationshipType)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function FilterDrawer({
   open,
   selectedRole,
@@ -402,6 +629,7 @@ function FilterDrawer({
 function PersonDrawer({
   open,
   person,
+  properties,
   funnels,
   customFields,
   mode,
@@ -410,6 +638,7 @@ function PersonDrawer({
 }: {
   open: boolean;
   person: PersonItem | null;
+  properties: PropertyListItem[];
   funnels: Funnel[];
   customFields: CustomField[];
   mode: WorkspaceMode;
@@ -429,8 +658,9 @@ function PersonDrawer({
   const [leadStatus, setLeadStatus] = useState("");
   const [leadScore, setLeadScore] = useState(0);
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({});
+  const [linkedProperties, setLinkedProperties] = useState<LinkedPropertyDraft[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"profile" | "crm" | "documents">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "crm" | "properties" | "documents">("profile");
 
   useEffect(() => {
     if (!open) return;
@@ -448,6 +678,15 @@ function PersonDrawer({
     setLeadFunnelId(person?.lead?.funnelId || funnels[0]?.id || "");
     setLeadStatus(person?.lead?.status || "");
     setLeadScore(person?.lead?.score || person?.stagePoints || 0);
+    setLinkedProperties(
+      (person?.linkedProperties || []).map((item, index) => ({
+        localId: item.id || `${item.propertyId}:${item.relationshipType}:${index}`,
+        propertyId: item.propertyId,
+        relationshipType: item.relationshipType,
+        source: item.source || "manual",
+        notes: item.notes || "",
+      })),
+    );
 
     const nextMetadata: Record<string, string> = {};
     for (const field of customFields) {
@@ -496,6 +735,12 @@ function PersonDrawer({
         tags: parseTagInput(tagsInput),
         stagePoints: Number(stagePoints || 0),
         metadata: metadataValues,
+        linkedProperties: linkedProperties.map((item) => ({
+          propertyId: item.propertyId,
+          relationshipType: item.relationshipType,
+          source: item.source,
+          notes: item.notes,
+        })),
         createLead: leadEnabled || mode === "crm",
         leadFunnelId: leadFunnelId || undefined,
         leadStatus: leadStatus || undefined,
@@ -571,6 +816,7 @@ function PersonDrawer({
             {[
               { value: "profile" as const, label: "Perfil" },
               { value: "crm" as const, label: "CRM" },
+              { value: "properties" as const, label: "Imóveis" },
               { value: "documents" as const, label: "Documentos", disabled: !person },
             ].map((tab) => {
               const active = activeTab === tab.value;
@@ -779,6 +1025,14 @@ function PersonDrawer({
               </section>
             ) : null}
 
+            {activeTab === "properties" ? (
+              <LinkedPropertiesEditor
+                value={linkedProperties}
+                onChange={setLinkedProperties}
+                properties={properties}
+              />
+            ) : null}
+
             {activeTab === "documents" ? (
               person ? (
                 <DocumentsWorkspace
@@ -832,6 +1086,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
   const [funnels, setFunnels] = useState<Funnel[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<PersonItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -902,6 +1157,13 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
     setCustomFields(Array.isArray(data.fields) ? data.fields : []);
   };
 
+  const loadProperties = async () => {
+    const res = await fetch("/api/properties", { cache: "no-store" });
+    if (!res.ok) throw new Error("Failed to load properties");
+    const data = await res.json();
+    setProperties(Array.isArray(data.properties) ? data.properties : []);
+  };
+
   const refreshAll = async () => {
     await loadPeople();
   };
@@ -912,7 +1174,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
     const run = async () => {
       setLoading(true);
       try {
-        await Promise.all([loadPeople(), loadFunnels(), loadCustomFields()]);
+        await Promise.all([loadPeople(), loadFunnels(), loadCustomFields(), loadProperties()]);
       } catch (error) {
         console.error(error);
       } finally {
@@ -1943,6 +2205,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
       <PersonDrawer
         open={drawerOpen}
         person={selectedPerson}
+        properties={properties}
         funnels={funnels}
         customFields={customFields}
         mode={mode}

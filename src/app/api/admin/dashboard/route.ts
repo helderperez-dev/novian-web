@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAppUser } from "@/lib/auth";
+import { listAllProperties } from "@/lib/properties";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getProperties } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -107,7 +107,7 @@ export async function GET() {
       clientDocumentsResponse,
       messagesResponse,
     ] = await Promise.all([
-      getProperties(),
+      listAllProperties(),
       supabase
         .from("people")
         .select("id, crm_status, crm_funnel_id")
