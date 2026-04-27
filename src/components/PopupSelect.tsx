@@ -85,7 +85,7 @@ export default function PopupSelect({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((current) => !current)}
-        className={`flex w-full items-center justify-between gap-3 rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-left text-sm text-novian-text outline-none transition hover:border-novian-accent/35 disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`}
+        className={`flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-left text-sm text-novian-text outline-none transition hover:border-novian-accent/35 disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
@@ -94,9 +94,9 @@ export default function PopupSelect({
             <Image
               src={selectedOption.avatarUrl}
               alt={selectedOption.label}
-              width={30}
-              height={30}
-              className="h-7 w-7 shrink-0 rounded-full object-cover"
+              width={24}
+              height={24}
+              className="h-6 w-6 shrink-0 rounded-full object-cover"
             />
           ) : null}
           <span className={`truncate ${selectedOption ? "text-novian-text" : "text-novian-text/45"}`}>

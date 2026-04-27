@@ -2,6 +2,7 @@ import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createAdminSupabaseClient } from "../supabase/admin";
 import { getProperties, type Property } from "../store";
+import { getPrimaryPropertyOffer } from "../property-utils";
 
 type SupportedPropertyType = "apartment" | "house" | "land" | "commercial";
 
@@ -127,6 +128,7 @@ export const searchPropertiesTool = new DynamicStructuredTool({
                 id: string;
                 title: string;
                 price: number | null;
+                offerType?: "sale" | "rent";
                 address: string;
                 bedrooms: number | null;
                 description?: string;
@@ -146,23 +148,40 @@ export const searchPropertiesTool = new DynamicStructuredTool({
                         location,
                     ),
                 )
-                .filter((property) => (minPrice ? property.price >= minPrice : true))
-                .filter((property) => (maxPrice ? property.price <= maxPrice : true))
+                .filter((property) => {
+                    const primaryOffer = getPrimaryPropertyOffer(property);
+                    const comparablePrice = primaryOffer?.price ?? property.price;
+                    return minPrice ? comparablePrice >= minPrice : true;
+                })
+                .filter((property) => {
+                    const primaryOffer = getPrimaryPropertyOffer(property);
+                    const comparablePrice = primaryOffer?.price ?? property.price;
+                    return maxPrice ? comparablePrice <= maxPrice : true;
+                })
                 .filter((property) => {
                     const bedrooms = parseNumber(property.customData?.bedrooms);
                     return minBedrooms ? bedrooms !== null && bedrooms >= minBedrooms : true;
                 })
                 .filter((property) => (requestedType ? inferOfficialPropertyType(property) === requestedType : true))
-                .map((property) => ({
+                .map((property) => {
+                    const primaryOffer = getPrimaryPropertyOffer(property);
+                    return {
                     id: property.id,
                     title: property.title,
-                    price: property.price,
+                    price: primaryOffer?.price ?? property.price,
+                    offerType: primaryOffer?.offerType,
+                    propertyOffers: property.offers?.length
+                        ? property.offers
+                        : primaryOffer
+                          ? [primaryOffer]
+                          : [],
                     address: property.address,
                     bedrooms: parseNumber(property.customData?.bedrooms),
                     description: property.description?.substring(0, 150),
                     source: "Official Portfolio",
                     url: buildOfficialPropertyUrl(property),
-                }));
+                    };
+                });
 
             const filteredData = combinedData.slice(0, 5);
 

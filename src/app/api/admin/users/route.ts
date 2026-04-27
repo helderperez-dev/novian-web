@@ -64,6 +64,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const email = String(body.email ?? "").trim().toLowerCase();
     const fullName = String(body.fullName ?? "").trim();
+    const avatarUrl = typeof body.avatarUrl === "string" && body.avatarUrl.trim() ? body.avatarUrl.trim() : null;
+    const creci = String(body.creci ?? "").trim() || null;
     const userType = (body.userType === "client" ? "client" : "internal") as AppUserType;
     const role = normalizeRole(userType, (body.role === "admin" ? "admin" : body.role === "client" ? "client" : "broker") as AppRole);
     const permissions = parsePermissions(body.permissions);
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: {
         full_name: fullName,
+        avatar_url: avatarUrl,
         user_type: userType,
         role,
       },
@@ -94,8 +97,10 @@ export async function POST(req: Request) {
         id: inviteData.user.id,
         email,
         full_name: fullName,
+        avatar_url: avatarUrl,
         user_type: userType,
         role,
+        creci,
         permissions,
         is_active: true,
         invited_by: adminUser.id,

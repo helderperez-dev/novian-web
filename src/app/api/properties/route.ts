@@ -4,10 +4,15 @@ import { deletePropertyAdmin, listAllProperties, createPropertyAdmin, updateProp
 import { getProperties, getPropertyFields } from "@/lib/store";
 
 export async function GET() {
-    const [appUser, fields] = await Promise.all([requireInternalApiUser(), getPropertyFields()]);
-    const properties = appUser ? await listAllProperties() : (await getProperties()).filter((property) => property.status === "active");
+    try {
+        const [appUser, fields] = await Promise.all([requireInternalApiUser(), getPropertyFields()]);
+        const properties = appUser ? await listAllProperties() : (await getProperties()).filter((property) => property.status === "active");
 
-    return NextResponse.json({ properties, fields });
+        return NextResponse.json({ properties, fields });
+    } catch (error) {
+        console.error("Error loading properties:", error);
+        return NextResponse.json({ properties: [], fields: [], error: "Failed to load properties" }, { status: 500 });
+    }
 }
 
 export async function POST(req: Request) {

@@ -65,6 +65,11 @@ function normalizeEmail(value: unknown) {
   return email || null;
 }
 
+function normalizeBrokerUserId(value: unknown) {
+  const brokerUserId = String(value ?? "").trim();
+  return brokerUserId || null;
+}
+
 function normalizeRelationshipType(value: unknown) {
   if (value === "interested" || value === "owner") {
     return value as PersonPropertyRelationshipType;
@@ -180,6 +185,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             : null,
         leadCount: person.crm_status || person.crm_funnel_id || (person.crm_score ?? 0) > 0 || person.crm_unread ? 1 : 0,
         linkedProperties,
+        brokerUserId: person.broker_user_id,
       },
     });
   } catch (error) {
@@ -218,6 +224,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.fullName !== undefined) updatePayload.full_name = String(body.fullName ?? "").trim();
     if (body.primaryPhone !== undefined) updatePayload.primary_phone = normalizePhone(body.primaryPhone);
     if (body.email !== undefined) updatePayload.email = normalizeEmail(body.email);
+    if (body.brokerUserId !== undefined) updatePayload.broker_user_id = normalizeBrokerUserId(body.brokerUserId);
     if (body.roles !== undefined) updatePayload.roles = normalizeRoleList(body.roles);
     if (body.tags !== undefined) updatePayload.tags = normalizeTagList(body.tags);
     if (body.origin !== undefined) updatePayload.origin = String(body.origin ?? "").trim() || "manual";
@@ -328,6 +335,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             : null,
         leadCount: person.crm_status || person.crm_funnel_id || (person.crm_score ?? 0) > 0 || person.crm_unread ? 1 : 0,
         linkedProperties: savedLinkedProperties,
+        brokerUserId: person.broker_user_id,
       },
     });
   } catch (error) {

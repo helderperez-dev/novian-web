@@ -42,6 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const body = await req.json();
     const userType = (body.userType === "client" ? "client" : "internal") as AppUserType;
+    const avatarUrl = typeof body.avatarUrl === "string" && body.avatarUrl.trim() ? body.avatarUrl.trim() : null;
     const role = normalizeRole(
       userType,
       (body.role === "admin" ? "admin" : body.role === "client" ? "client" : "broker") as AppRole,
@@ -49,8 +50,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const updates: Database["public"]["Tables"]["app_users"]["Update"] = {
       full_name: typeof body.fullName === "string" ? body.fullName.trim() : undefined,
+      avatar_url: avatarUrl,
       user_type: userType,
       role,
+      creci: typeof body.creci === "string" ? body.creci.trim() || null : undefined,
       permissions: parsePermissions(body.permissions),
       is_active: typeof body.isActive === "boolean" ? body.isActive : true,
     };
@@ -68,7 +71,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, user: data });
+    const { error: authError } = await supabase.auth.admin.updateUserById(id, {
+      user_metadata: {
+        full_name: data.full_name,
+        avatar_url: data.avatar_url,
+        user_type: data.user_type,
+        role: data.role,
+      },
+    });
+
+    if (authError) {
+      console.error(authError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      user: data,
+      warning: authError ? "User updated, but auth metadata sync failed" : null,
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

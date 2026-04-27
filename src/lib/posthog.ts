@@ -1,5 +1,6 @@
 "use client";
 
+import { getPropertyOfferSummary } from "@/lib/property-utils";
 import type { Property } from "@/lib/store";
 
 type PropertyAnalyticsInput = Pick<Property, "id" | "slug" | "title" | "price" | "address"> & {
@@ -33,11 +34,16 @@ function getCityFromAddress(address: string | null | undefined) {
 }
 
 export function getPropertyAnalyticsProps(property: PropertyAnalyticsInput) {
+  const { primaryOffer, saleOffer, rentOffer } = getPropertyOfferSummary(property);
+
   return {
     property_id: property.id,
     property_slug: property.slug,
     property_title: property.title,
-    property_price: property.price,
+    property_price: primaryOffer?.price ?? property.price,
+    property_primary_offer_type: primaryOffer?.offerType || null,
+    property_sale_price: saleOffer?.price ?? null,
+    property_rent_price: rentOffer?.price ?? null,
     property_city: getCityFromAddress(property.address),
     property_address: property.address || null,
     lead_magnet_enabled: Boolean(property.showLeadMagnet),

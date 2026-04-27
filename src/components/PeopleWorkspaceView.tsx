@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { formatPropertyOfferLabel, getPrimaryPropertyOffer } from "@/lib/property-utils";
 import {
   AlertTriangle,
   Check,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import DocumentsWorkspace from "@/components/DocumentsWorkspace";
 import PopupSelect from "@/components/PopupSelect";
+import { LeadNotesPanel } from "@/components/AdminComponents";
 
 type FunnelColumn = {
   id: string;
@@ -74,6 +76,14 @@ type LinkedPropertyItem = {
     slug: string | null;
     address: string | null;
     price: number;
+    offers?: Array<{
+      id?: string;
+      offerType: "sale" | "rent";
+      price: number;
+      ownerPrice?: number | null;
+      commissionRate?: number | null;
+      isPrimary?: boolean;
+    }>;
     status: "active" | "inactive" | "sold";
     coverImage: string | null;
   } | null;
@@ -85,6 +95,14 @@ type PropertyListItem = {
   slug?: string | null;
   address?: string | null;
   price: number;
+  offers?: Array<{
+    id?: string;
+    offerType: "sale" | "rent";
+    price: number;
+    ownerPrice?: number | null;
+    commissionRate?: number | null;
+    isPrimary?: boolean;
+  }>;
   status: "active" | "inactive" | "sold";
   coverImage?: string | null;
 };
@@ -105,6 +123,15 @@ type PersonItem = {
   lead: PersonLead | null;
   leadCount: number;
   linkedProperties: LinkedPropertyItem[];
+  brokerUserId?: string | null;
+};
+
+type BrokerOption = {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+  creci: string | null;
 };
 
 type DuplicateGroup = {
@@ -154,14 +181,8 @@ const formatRelativeDateTime = (value: string | null | undefined) => {
   });
 };
 
-const formatCurrency = (value: number | null | undefined) =>
-  typeof value === "number"
-    ? new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-        maximumFractionDigits: 0,
-      }).format(value)
-    : "-";
+const formatPropertyPriceLabel = (property: Pick<PropertyListItem, "price" | "offers"> | null | undefined) =>
+  property ? formatPropertyOfferLabel(getPrimaryPropertyOffer(property)) : "-";
 
 const parseTagInput = (value: string) =>
   Array.from(
@@ -342,7 +363,7 @@ function LinkedPropertiesEditor({
   const propertyOptions = properties.map((property) => ({
     value: property.id,
     label: property.title,
-    description: [property.address, formatCurrency(property.price), property.status].filter(Boolean).join(" · "),
+    description: [property.address, formatPropertyPriceLabel(property), property.status].filter(Boolean).join(" · "),
   }));
 
   const addLink = () => {
@@ -447,7 +468,7 @@ function LinkedPropertiesEditor({
                   <div>
                     <div className="text-sm font-semibold text-novian-text">{property?.title || "Imóvel não encontrado"}</div>
                     <div className="mt-1 text-xs text-novian-text/55">
-                      {[property?.address, formatCurrency(property?.price), property?.status].filter(Boolean).join(" · ")}
+                      {[property?.address, formatPropertyPriceLabel(property), property?.status].filter(Boolean).join(" · ")}
                     </div>
                   </div>
                   <button
@@ -630,6 +651,7 @@ function PersonDrawer({
   open,
   person,
   properties,
+  brokers,
   funnels,
   customFields,
   mode,
@@ -639,6 +661,7 @@ function PersonDrawer({
   open: boolean;
   person: PersonItem | null;
   properties: PropertyListItem[];
+  brokers: BrokerOption[];
   funnels: Funnel[];
   customFields: CustomField[];
   mode: WorkspaceMode;
@@ -659,8 +682,9 @@ function PersonDrawer({
   const [leadScore, setLeadScore] = useState(0);
   const [metadataValues, setMetadataValues] = useState<Record<string, string>>({});
   const [linkedProperties, setLinkedProperties] = useState<LinkedPropertyDraft[]>([]);
+  const [brokerUserId, setBrokerUserId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"profile" | "crm" | "properties" | "documents">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "crm" | "properties" | "documents" | "notes">("profile");
 
   useEffect(() => {
     if (!open) return;
@@ -678,6 +702,7 @@ function PersonDrawer({
     setLeadFunnelId(person?.lead?.funnelId || funnels[0]?.id || "");
     setLeadStatus(person?.lead?.status || "");
     setLeadScore(person?.lead?.score || person?.stagePoints || 0);
+    setBrokerUserId(person?.brokerUserId || "");
     setLinkedProperties(
       (person?.linkedProperties || []).map((item, index) => ({
         localId: item.id || `${item.propertyId}:${item.relationshipType}:${index}`,
@@ -705,6 +730,15 @@ function PersonDrawer({
     .map((part) => part[0]?.toUpperCase() || "")
     .join("")
     .slice(0, 2) || "P";
+  const brokerOptions = [
+    { value: "", label: "Sem corretor" },
+    ...brokers.map((broker) => ({
+      value: broker.id,
+      label: broker.fullName || broker.email,
+      description: broker.creci ? `CRECI ${broker.creci}` : broker.email,
+      avatarUrl: broker.avatarUrl || undefined,
+    })),
+  ];
 
   useEffect(() => {
     if (!selectedFunnel) return;
@@ -734,7 +768,7 @@ function PersonDrawer({
         roles: normalizedRoles,
         tags: parseTagInput(tagsInput),
         stagePoints: Number(stagePoints || 0),
-        metadata: metadataValues,
+        brokerUserId: brokerUserId || null,
         linkedProperties: linkedProperties.map((item) => ({
           propertyId: item.propertyId,
           relationshipType: item.relationshipType,
@@ -817,6 +851,7 @@ function PersonDrawer({
               { value: "profile" as const, label: "Perfil" },
               { value: "crm" as const, label: "CRM" },
               { value: "properties" as const, label: "Imóveis" },
+              { value: "notes" as const, label: "Notas", disabled: !person },
               { value: "documents" as const, label: "Documentos", disabled: !person },
             ].map((tab) => {
               const active = activeTab === tab.value;
@@ -878,6 +913,16 @@ function PersonDrawer({
                         value={origin}
                         onChange={(event) => setOrigin(event.target.value)}
                         className="w-full rounded-2xl border border-novian-muted/40 bg-novian-primary/40 px-4 py-3 text-sm outline-none transition focus:border-novian-accent/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-novian-text/60">Corretor responsavel</label>
+                      <PopupSelect
+                        value={brokerUserId}
+                        onChange={setBrokerUserId}
+                        options={brokerOptions}
+                        placeholder="Selecione um corretor"
+                        buttonClassName="bg-novian-primary/40"
                       />
                     </div>
                     <div>
@@ -1033,6 +1078,20 @@ function PersonDrawer({
               />
             ) : null}
 
+            {activeTab === "notes" ? (
+              person ? (
+                <LeadNotesPanel
+                  leadId={person.id}
+                  customData={person.metadata}
+                  onSaved={onSaved}
+                />
+              ) : (
+                <section className="rounded-[24px] border border-dashed border-novian-muted/35 bg-novian-primary/20 px-5 py-12 text-center text-sm text-novian-text/55">
+                  Salve a pessoa primeiro para começar a registrar notas.
+                </section>
+              )
+            ) : null}
+
             {activeTab === "documents" ? (
               person ? (
                 <DocumentsWorkspace
@@ -1087,6 +1146,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
   const [funnels, setFunnels] = useState<Funnel[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
+  const [brokers, setBrokers] = useState<BrokerOption[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<PersonItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1164,6 +1224,13 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
     setProperties(Array.isArray(data.properties) ? data.properties : []);
   };
 
+  const loadBrokers = async () => {
+    const res = await fetch("/api/brokers", { cache: "no-store" });
+    if (!res.ok) throw new Error("Failed to load brokers");
+    const data = await res.json();
+    setBrokers(Array.isArray(data.brokers) ? data.brokers : []);
+  };
+
   const refreshAll = async () => {
     await loadPeople();
   };
@@ -1175,6 +1242,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
       setLoading(true);
       try {
         await Promise.all([loadPeople(), loadFunnels(), loadCustomFields(), loadProperties()]);
+        await loadBrokers();
       } catch (error) {
         console.error(error);
       } finally {
@@ -2206,6 +2274,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
         open={drawerOpen}
         person={selectedPerson}
         properties={properties}
+        brokers={brokers}
         funnels={funnels}
         customFields={customFields}
         mode={mode}

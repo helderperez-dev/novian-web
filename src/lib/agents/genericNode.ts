@@ -4,6 +4,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { addMessage, setTyping } from "../chatStore";
 import { searchPropertiesTool, searchLeadsTool } from "./tools";
 import { findAgentConfig, listAgentConfigs } from "./configStore";
+import { getPropertyOfferSummary } from "../property-utils";
 
 // We can reuse the LLM config or instantiate a new one
 const genericLlm = new ChatOpenAI({
@@ -53,11 +54,13 @@ function buildLeadContextPrompt(state: AgentState) {
     state.leadInfo.linkedProperties && state.leadInfo.linkedProperties.length > 0
       ? `Imoveis vinculados:\n- ${state.leadInfo.linkedProperties
           .map((link) => {
+            const { saleOffer, rentOffer } = getPropertyOfferSummary(link.property);
             const propertyParts = [
               link.property.title,
               link.relationshipType === "owner" ? "proprietario" : "interessado",
               link.property.status,
-              typeof link.property.price === "number" ? `preco final ${link.property.price}` : null,
+              saleOffer ? `venda ${saleOffer.price}` : null,
+              rentOffer ? `locacao ${rentOffer.price}` : null,
               link.property.address || null,
               link.notes || null,
             ].filter(Boolean);

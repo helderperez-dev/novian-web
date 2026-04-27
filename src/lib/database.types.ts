@@ -17,6 +17,7 @@ export type Database = {
       app_users: {
         Row: {
           avatar_url: string | null
+          creci: string | null
           created_at: string
           email: string
           full_name: string | null
@@ -30,6 +31,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          creci?: string | null
           created_at?: string
           email: string
           full_name?: string | null
@@ -43,6 +45,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          creci?: string | null
           created_at?: string
           email?: string
           full_name?: string | null
@@ -261,30 +264,45 @@ export type Database = {
       custom_fields: {
         Row: {
           created_at: string
+          field_key: string | null
           id: string
           name: string
           options: string[] | null
           required: boolean | null
+          show_on_property_card: boolean
+          show_on_property_page: boolean
+          sort_order: number
           target_entity: string
           type: Database["public"]["Enums"]["custom_field_type"]
+          unit: string | null
         }
         Insert: {
           created_at?: string
+          field_key?: string | null
           id?: string
           name: string
           options?: string[] | null
           required?: boolean | null
+          show_on_property_card?: boolean
+          show_on_property_page?: boolean
+          sort_order?: number
           target_entity: string
           type: Database["public"]["Enums"]["custom_field_type"]
+          unit?: string | null
         }
         Update: {
           created_at?: string
+          field_key?: string | null
           id?: string
           name?: string
           options?: string[] | null
           required?: boolean | null
+          show_on_property_card?: boolean
+          show_on_property_page?: boolean
+          sort_order?: number
           target_entity?: string
           type?: Database["public"]["Enums"]["custom_field_type"]
+          unit?: string | null
         }
         Relationships: []
       }
@@ -607,12 +625,14 @@ export type Database = {
       properties: {
         Row: {
           address: string
+          broker_user_id: string | null
           cover_image: string | null
           created_at: string
           custom_data: Json | null
           description: string
           id: string
           images: string[] | null
+          is_exclusive_novian: boolean
           landing_page: Json | null
           map_embed_url: string | null
           price: number
@@ -623,12 +643,14 @@ export type Database = {
         }
         Insert: {
           address: string
+          broker_user_id?: string | null
           cover_image?: string | null
           created_at?: string
           custom_data?: Json | null
           description: string
           id?: string
           images?: string[] | null
+          is_exclusive_novian?: boolean
           landing_page?: Json | null
           map_embed_url?: string | null
           price: number
@@ -639,12 +661,14 @@ export type Database = {
         }
         Update: {
           address?: string
+          broker_user_id?: string | null
           cover_image?: string | null
           created_at?: string
           custom_data?: Json | null
           description?: string
           id?: string
           images?: string[] | null
+          is_exclusive_novian?: boolean
           landing_page?: Json | null
           map_embed_url?: string | null
           price?: number
@@ -653,10 +677,63 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_broker_user_id_fkey"
+            columns: ["broker_user_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_offers: {
+        Row: {
+          commission_rate: number | null
+          created_at: string
+          id: string
+          is_primary: boolean
+          offer_type: Database["public"]["Enums"]["property_offer_type"]
+          owner_price: number | null
+          price: number
+          property_id: string
+          updated_at: string
+        }
+        Insert: {
+          commission_rate?: number | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          offer_type: Database["public"]["Enums"]["property_offer_type"]
+          owner_price?: number | null
+          price: number
+          property_id: string
+          updated_at?: string
+        }
+        Update: {
+          commission_rate?: number | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          offer_type?: Database["public"]["Enums"]["property_offer_type"]
+          owner_price?: number | null
+          price?: number
+          property_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_offers_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       people: {
         Row: {
+          broker_user_id: string | null
           crm_funnel_id: string | null
           crm_score: number
           crm_status: string | null
@@ -675,6 +752,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          broker_user_id?: string | null
           crm_funnel_id?: string | null
           crm_score?: number
           crm_status?: string | null
@@ -693,6 +771,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          broker_user_id?: string | null
           crm_funnel_id?: string | null
           crm_score?: number
           crm_status?: string | null
@@ -711,6 +790,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "people_broker_user_id_fkey"
+            columns: ["broker_user_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "people_crm_funnel_id_fkey"
             columns: ["crm_funnel_id"]
@@ -790,6 +876,7 @@ export type Database = {
       app_user_type: "internal" | "client"
       custom_field_type: "text" | "number" | "dropdown" | "date"
       person_role: "lead" | "client" | "buyer" | "seller"
+      property_offer_type: "sale" | "rent"
       property_status: "active" | "inactive" | "sold"
     }
     CompositeTypes: {

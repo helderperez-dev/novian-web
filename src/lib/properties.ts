@@ -1,27 +1,124 @@
 import "server-only";
 
 import type { Database } from "@/lib/database.types";
-import type { LandingPageConfig, Property } from "@/lib/store";
+import type { LandingPageConfig, Property, PropertyCustomDataValue, PropertyOffer } from "@/lib/store";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { listBrokerSummariesByIds } from "@/lib/brokers";
 
 type PropertyInsert = Database["public"]["Tables"]["properties"]["Insert"];
 type PropertyUpdate = Database["public"]["Tables"]["properties"]["Update"];
 type PropertyRow = Database["public"]["Tables"]["properties"]["Row"];
+type PropertyOfferInsert = Database["public"]["Tables"]["property_offers"]["Insert"];
+type PropertyOfferRow = Database["public"]["Tables"]["property_offers"]["Row"];
+type PropertyRowWithOffers = PropertyRow & { property_offers?: PropertyOfferRow[] | null };
+type PropertyOfferDraft = Omit<PropertyOfferInsert, "property_id">;
 
-function mapPropertyRow(row: PropertyRow): Property {
+function isMissingPropertyOffersTableError(error: unknown) {
+  const message =
+    error && typeof error === "object" && "message" in error && typeof error.message === "string"
+      ? error.message
+      : "";
+
+  return (
+    Boolean(error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "PGRST205") &&
+    message.includes("property_offers")
+  );
+}
+
+async function loadPropertyRowsWithOffers(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  rows: PropertyRow[],
+): Promise<PropertyRowWithOffers[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const propertyIds = rows.map((row) => row.id);
+  const { data: offers, error: offersError } = await supabase
+    .from("property_offers")
+    .select("*")
+    .in("property_id", propertyIds);
+
+  if (offersError) {
+    if (isMissingPropertyOffersTableError(offersError)) {
+      return rows.map((row) => ({ ...row, property_offers: [] }));
+    }
+    throw offersError;
+  }
+
+  const offersByPropertyId = new Map<string, PropertyOfferRow[]>();
+  for (const offer of offers || []) {
+    const propertyOffers = offersByPropertyId.get(offer.property_id) || [];
+    propertyOffers.push(offer);
+    offersByPropertyId.set(offer.property_id, propertyOffers);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    property_offers: offersByPropertyId.get(row.id) || [],
+  }));
+}
+
+function mapFallbackOffers(row: PropertyRow): PropertyOffer[] {
+  if (!Number.isFinite(row.price)) {
+    return [];
+  }
+
+  const customData = (row.custom_data as Record<string, unknown> | null) || {};
+
+  return [
+    {
+      offerType: "sale",
+      price: row.price,
+      ownerPrice: typeof customData.owner_price === "number" ? customData.owner_price : null,
+      commissionRate: typeof customData.commission_rate === "number" ? customData.commission_rate : null,
+      isPrimary: true,
+    },
+  ];
+}
+
+function mapPropertyOffers(row: PropertyRowWithOffers): PropertyOffer[] {
+  if (!Array.isArray(row.property_offers) || row.property_offers.length === 0) {
+    return mapFallbackOffers(row);
+  }
+
+  return row.property_offers
+    .map((offer) => ({
+      id: offer.id,
+      offerType: offer.offer_type,
+      price: offer.price,
+      ownerPrice: offer.owner_price,
+      commissionRate: offer.commission_rate,
+      isPrimary: offer.is_primary,
+    }))
+    .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || left.offerType.localeCompare(right.offerType));
+}
+
+function getPrimaryOffer(offers: PropertyOffer[]) {
+  return offers.find((offer) => offer.isPrimary) || offers[0] || null;
+}
+
+function mapPropertyRow(row: PropertyRowWithOffers): Property {
+  const offers = mapPropertyOffers(row);
+  const primaryOffer = getPrimaryOffer(offers);
+
   return {
     id: row.id,
     title: row.title,
     slug: row.slug || row.id,
     description: row.description || "",
-    price: row.price,
+    price: primaryOffer?.price ?? row.price,
     status: row.status,
+    isExclusiveNovian: Boolean(row.is_exclusive_novian),
     coverImage: row.cover_image || "",
     images: row.images || [],
     address: row.address,
     mapEmbedUrl: row.map_embed_url || undefined,
-    customData: (row.custom_data as Record<string, string | number | boolean>) || {},
+    customData: (row.custom_data as Record<string, PropertyCustomDataValue>) || {},
     landingPage: (row.landing_page as unknown as LandingPageConfig) || {},
+    offers,
+    brokerUserId: row.broker_user_id,
+    broker: null,
   };
 }
 
@@ -32,12 +129,14 @@ function toPropertyInsert(data: Omit<Property, "id">): PropertyInsert {
     description: data.description,
     price: data.price,
     status: data.status,
+    is_exclusive_novian: Boolean(data.isExclusiveNovian),
     cover_image: data.coverImage,
     images: data.images,
     address: data.address,
     map_embed_url: data.mapEmbedUrl,
     custom_data: data.customData as PropertyInsert["custom_data"],
     landing_page: data.landingPage as unknown as PropertyInsert["landing_page"],
+    broker_user_id: data.brokerUserId ?? null,
   };
 }
 
@@ -49,25 +148,114 @@ function toPropertyUpdate(data: Partial<Property>): PropertyUpdate {
   if (data.description !== undefined) next.description = data.description;
   if (data.price !== undefined) next.price = data.price;
   if (data.status !== undefined) next.status = data.status;
+  if (data.isExclusiveNovian !== undefined) next.is_exclusive_novian = data.isExclusiveNovian;
   if (data.coverImage !== undefined) next.cover_image = data.coverImage;
   if (data.images !== undefined) next.images = data.images;
   if (data.address !== undefined) next.address = data.address;
   if (data.mapEmbedUrl !== undefined) next.map_embed_url = data.mapEmbedUrl;
   if (data.customData !== undefined) next.custom_data = data.customData as PropertyUpdate["custom_data"];
   if (data.landingPage !== undefined) next.landing_page = data.landingPage as unknown as PropertyUpdate["landing_page"];
+  if (data.brokerUserId !== undefined) next.broker_user_id = data.brokerUserId ?? null;
 
   return next;
 }
 
+async function attachPropertyBrokers(properties: Property[]) {
+  const brokerIds = properties.map((property) => property.brokerUserId).filter((value): value is string => Boolean(value));
+  const brokersById = await listBrokerSummariesByIds(brokerIds);
+
+  return properties.map((property) => ({
+    ...property,
+    broker: property.brokerUserId ? brokersById.get(property.brokerUserId) || null : null,
+  }));
+}
+
+function normalizeOffers(data: Pick<Property, "price" | "offers" | "customData">): PropertyOfferDraft[] {
+  const offers = (data.offers || [])
+    .filter((offer) => Number.isFinite(offer.price) && offer.price >= 0)
+    .map((offer, index) => ({
+      offer_type: offer.offerType,
+      price: offer.price,
+      owner_price: offer.ownerPrice ?? null,
+      commission_rate: offer.commissionRate ?? null,
+      is_primary: Boolean(offer.isPrimary) || index === 0,
+    }));
+
+  if (offers.length > 0) {
+    return offers;
+  }
+
+  return [
+    {
+      offer_type: "sale",
+      price: data.price,
+      owner_price: typeof data.customData?.owner_price === "number" ? data.customData.owner_price : null,
+      commission_rate: typeof data.customData?.commission_rate === "number" ? data.customData.commission_rate : null,
+      is_primary: true,
+    },
+  ];
+}
+
+async function replacePropertyOffers(propertyId: string, offers: PropertyOfferDraft[]) {
+  const supabase = createAdminSupabaseClient();
+  const { error: deleteError } = await supabase.from("property_offers").delete().eq("property_id", propertyId);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  if (offers.length === 0) {
+    return;
+  }
+
+  const payload = offers.map((offer, index) => ({
+    ...offer,
+    property_id: propertyId,
+    is_primary: Boolean(offer.is_primary) || index === 0,
+  }));
+
+  const { error: insertError } = await supabase.from("property_offers").insert(payload);
+
+  if (insertError) {
+    throw insertError;
+  }
+}
+
 export async function listAllProperties() {
   const supabase = createAdminSupabaseClient();
-  const { data, error } = await supabase.from("properties").select("*").order("updated_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("properties")
+    .select("*")
+    .order("updated_at", { ascending: false });
 
   if (error) {
     throw error;
   }
 
-  return (data || []).map((row) => mapPropertyRow(row as PropertyRow));
+  const rowsWithOffers = await loadPropertyRowsWithOffers(supabase, data || []);
+  return attachPropertyBrokers(rowsWithOffers.map((row) => mapPropertyRow(row)));
+}
+
+export async function getActivePropertyBySlug(slug: string) {
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("properties")
+    .select("*")
+    .eq("slug", slug)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const [propertyWithOffers] = await loadPropertyRowsWithOffers(supabase, [data]);
+  const [property] = await attachPropertyBrokers([mapPropertyRow(propertyWithOffers)]);
+  return property || null;
 }
 
 export async function createPropertyAdmin(data: Omit<Property, "id">) {
@@ -82,7 +270,21 @@ export async function createPropertyAdmin(data: Omit<Property, "id">) {
     throw error;
   }
 
-  return mapPropertyRow(result as PropertyRow);
+  await replacePropertyOffers(result.id, normalizeOffers(data));
+
+  const { data: propertyRow, error: reloadError } = await supabase
+    .from("properties")
+    .select("*")
+    .eq("id", result.id)
+    .single();
+
+  if (reloadError) {
+    throw reloadError;
+  }
+
+  const [propertyWithOffers] = await loadPropertyRowsWithOffers(supabase, [propertyRow]);
+  const [property] = await attachPropertyBrokers([mapPropertyRow(propertyWithOffers)]);
+  return property;
 }
 
 export async function updatePropertyAdmin(id: string, data: Partial<Property>) {
@@ -98,7 +300,28 @@ export async function updatePropertyAdmin(id: string, data: Partial<Property>) {
     throw error;
   }
 
-  return mapPropertyRow(result as PropertyRow);
+  if (data.offers !== undefined) {
+    const currentProperty = mapPropertyRow(result as PropertyRow);
+    await replacePropertyOffers(result.id, normalizeOffers({
+      price: data.price ?? currentProperty.price,
+      customData: data.customData ?? currentProperty.customData,
+      offers: data.offers,
+    }));
+  }
+
+  const { data: propertyRow, error: reloadError } = await supabase
+    .from("properties")
+    .select("*")
+    .eq("id", result.id)
+    .single();
+
+  if (reloadError) {
+    throw reloadError;
+  }
+
+  const [propertyWithOffers] = await loadPropertyRowsWithOffers(supabase, [propertyRow]);
+  const [property] = await attachPropertyBrokers([mapPropertyRow(propertyWithOffers)]);
+  return property;
 }
 
 export async function deletePropertyAdmin(id: string) {

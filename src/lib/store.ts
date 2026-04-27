@@ -1,6 +1,9 @@
 import { supabase } from "./supabase";
 import { Database } from "./database.types";
 
+type PropertyRow = Database["public"]["Tables"]["properties"]["Row"];
+type PropertyOfferRow = Database["public"]["Tables"]["property_offers"]["Row"];
+
 export interface ChatMessage {
     id: string;
     threadId: string;
@@ -17,6 +20,12 @@ export interface CustomField {
     type: 'text' | 'number' | 'dropdown' | 'date';
     options?: string[]; // For dropdowns
     required: boolean;
+    dbId?: string;
+    unit?: string;
+    sortOrder?: number;
+    showOnPropertyCard?: boolean;
+    showOnPropertyPage?: boolean;
+    targetEntity?: string;
 }
 
 export interface FunnelColumn {
@@ -72,6 +81,26 @@ export interface LandingPageConfig {
     leadMagnetFileUrl?: string;
 }
 
+export type PropertyCustomDataValue = string | number | boolean;
+export type PropertyOfferType = "sale" | "rent";
+
+export interface PropertyOffer {
+    id?: string;
+    offerType: PropertyOfferType;
+    price: number;
+    ownerPrice?: number | null;
+    commissionRate?: number | null;
+    isPrimary?: boolean;
+}
+
+export interface BrokerSummary {
+    id: string;
+    fullName: string;
+    email: string;
+    avatarUrl: string | null;
+    creci: string | null;
+}
+
 export interface Property {
     id: string;
     title: string;
@@ -79,12 +108,16 @@ export interface Property {
     description: string;
     price: number;
     status: 'active' | 'inactive' | 'sold';
+    isExclusiveNovian?: boolean;
     coverImage: string;
     images: string[];
     address: string;
     mapEmbedUrl?: string;
-    customData: Record<string, string | number | boolean>;
+    customData: Record<string, PropertyCustomDataValue>;
     landingPage: LandingPageConfig;
+    offers?: PropertyOffer[];
+    brokerUserId?: string | null;
+    broker?: BrokerSummary | null;
 }
 
 const globalForStore = globalThis as unknown as {
@@ -106,6 +139,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Exclusividade e luxo no coração de São Paulo. Ambientes integrados com vista panorâmica da cidade, projeto assinado por arquiteto renomado e acabamentos em mármore italiano.",
         price: 15000000,
         status: 'active',
+        isExclusiveNovian: true,
         address: "Rua Amauri, 123 - Itaim Bibi, São Paulo - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3656.762963162063!2d-46.68537502444315!3d-23.576921378789512!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94ce5771804f58c7%3A0x6b4fb6c172d1d053!2sR.%20Amauri%20-%20Itaim%20Bibi%2C%20S%C3%A3o%20Paulo%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713364448552!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=1200",
@@ -136,6 +170,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Cobertura recém-reformada, com piscina privativa, espaço gourmet e vista livre para o Parque Ibirapuera. Suíte master com closet sr e sra.",
         price: 8500000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Av. Sabiá, 456 - Moema, São Paulo - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3656.326210345638!2d-46.66685162444265!3d-23.592618978778643!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94ce5a183577d483%3A0xcb1dbec4c51b72a6!2sAv.%20Sabi%C3%A1%20-%20Indian%C3%B3polis%2C%20S%C3%A3o%20Paulo%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713364660341!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&q=80&w=1200",
@@ -164,6 +199,7 @@ const defaultProperties = new Map<string, Property>([
         description: "O refúgio perfeito no interior paulista. Casa térrea contemporânea, assinada por Marcio Kogan. Conta com piscina com borda infinita, lago privativo e automação completa.",
         price: 25000000,
         status: 'active',
+        isExclusiveNovian: true,
         address: "Rodovia Castello Branco, km 102 - Porto Feliz - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3663.784534129532!2d-47.50201862445107!3d-23.32354427896431!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94c5f94b15093951%3A0xcf82c40c8d17ddcc!2sFazenda%20Boa%20Vista!5e0!3m2!1spt-BR!2sbr!4v1713364746483!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1510798831971-661eb04b3739?auto=format&fit=crop&q=80&w=1200",
@@ -193,6 +229,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Um oásis particular no meio de Pinheiros. Apartamento estilo garden com 150m² de área externa privativa, paisagismo impecável e varanda gourmet integrada ao living.",
         price: 4200000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Rua dos Pinheiros, 1000 - Pinheiros, São Paulo - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3657.197541604907!2d-46.69234852444367!3d-23.561348078800164!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94ce579cf021bb55%3A0xcb1dbec4c51b72a6!2sR.%20dos%20Pinheiros%2C%201000%20-%20Pinheiros%2C%20S%C3%A3o%20Paulo%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713364800000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&q=80&w=1200",
@@ -220,6 +257,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Penthouse espetacular nos Jardins com vista 360º. Possui piscina aquecida de borda infinita no rooftop, área de convivência completa e suíte master de 100m².",
         price: 22000000,
         status: 'active',
+        isExclusiveNovian: true,
         address: "Rua Oscar Freire, 500 - Cerqueira César, São Paulo - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3657.197541604907!2d-46.66685162444265!3d-23.561348078800164!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94ce59cd38a20999%3A0xcb1dbec4c51b72a6!2sR.%20Oscar%20Freire%2C%20500%20-%20Cerqueira%20C%C3%A9sar%2C%20S%C3%A3o%20Paulo%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713364900000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1613490900233-141c5560d75d?auto=format&fit=crop&q=80&w=1200",
@@ -249,6 +287,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Projeto contemporâneo impecável no Residencial 1. Ambientes em conceito aberto, esquadrias do chão ao teto, piscina com borda infinita e fire pit.",
         price: 18500000,
         status: 'active',
+        isExclusiveNovian: true,
         address: "Alphaville Residencial 1, Barueri - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3658.261957545638!2d-46.852234!3d-23.498421!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94cf023472d42bb7%3A0xc485121404128f11!2sAlphaville%2C%20Barueri%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713365000000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=1200",
@@ -277,6 +316,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Excelente oportunidade de investimento. Flat totalmente mobiliado e decorado, pronto para morar ou rentabilizar no polo financeiro de São Paulo.",
         price: 1250000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Rua Funchal, 200 - Vila Olímpia, São Paulo - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3656.402488478442!2d-46.68747442444274!3d-23.58988637878021!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94ce574f76203d93%3A0xcb1dbec4c51b72a6!2sR.%20Funchal%2C%20200%20-%20Vila%20Ol%C3%ADmpia%2C%20S%C3%A3o%20Paulo%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713365100000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1502672260266-1c1de2422008?auto=format&fit=crop&q=80&w=1200",
@@ -305,6 +345,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Loft espetacular de frente para a praia do Leblon. Ambientes integrados, vista livre para o mar, acabamentos em madeira de demolição e automação.",
         price: 9800000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Av. Delfim Moreira, 500 - Leblon, Rio de Janeiro - RJ",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3672.63753545638!2d-43.225567!3d-22.985421!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x9bd5012472d42bb7%3A0xc485121404128f11!2sAv.%20Delfim%20Moreira%2C%20500%20-%20Leblon%2C%20Rio%20de%20Janeiro%20-%20RJ!5e0!3m2!1spt-BR!2sbr!4v1713365200000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&q=80&w=1200",
@@ -332,6 +373,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Descubra o conforto e a praticidade de viver no Condomínio Vista Centrale, localizado no cobiçado bairro da Malota. Este belíssimo apartamento de 71m², situado no 1º andar, oferece uma planta inteligente com 3 dormitórios, sendo 1 suíte aconchegante.\n\nA cozinha já vem mobiliada, equipada com pia e cooktop, pronta para inspirar suas melhores receitas. Os banheiros também estão completos, com móveis planejados e box de vidro.\n\nUma oportunidade rara com excelente custo-benefício: condomínio econômico (R$ 550,00 com água e gás inclusos) e IPTU acessível (R$ 1.300/ano). Inclui 1 vaga de garagem coberta. Perfeito para quem busca qualidade de vida e um excelente investimento.",
         price: 700000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Condomínio Vista Centrale - Bairro Malota, Jundiaí - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3667.404285814529!2d-46.9100146!3d-23.191838!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x94cf26922982d6b3%3A0xc3e652ec0b633018!2sMalota%2C%20Jundia%C3%AD%20-%20SP!5e0!3m2!1spt-BR!2sbr!4v1713365300000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80&w=1200",
@@ -360,6 +402,7 @@ const defaultProperties = new Map<string, Property>([
         description: "Excelente oportunidade na Vila Hortolândia! Apartamento térreo com 64m², oferecendo praticidade e conforto. \n\nO imóvel conta com 2 dormitórios, sala aconchegante, e já vem equipado com móveis planejados de excelente qualidade nos quartos, cozinha e banheiro. \n\nInclui 1 vaga de garagem coberta. Ideal para quem busca um lar pronto para morar com ótimo custo-benefício.",
         price: 375000,
         status: 'active',
+        isExclusiveNovian: false,
         address: "Vila Hortolândia, Jundiaí - SP",
         mapEmbedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3667.653457!2d-46.89!3d-23.18!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zVmlsYSBIb3J0b2zDom5kaWEsIEp1bmRpYcOtIC0gU1A!5e0!3m2!1spt-BR!2sbr!4v1713365400000!5m2!1spt-BR!2sbr",
         coverImage: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&q=80&w=1200",
@@ -388,9 +431,9 @@ export const messagesStore = globalForStore.messages ?? [];
 export const threadsStore = globalForStore.threads ?? new Map<string, Thread>();
 export const propertiesStore = globalForStore.properties;
 export const propertyFieldsStore = globalForStore.propertyFields ?? [
-    { id: "area", name: "Área (m²)", type: "number", required: true },
-    { id: "bedrooms", name: "Quartos", type: "number", required: true },
-    { id: "parking", name: "Vagas", type: "number", required: true },
+    { id: "area", name: "Área", type: "number", required: true, unit: "m²", sortOrder: 10, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "bedrooms", name: "Quartos", type: "number", required: true, sortOrder: 20, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "parking", name: "Vagas", type: "number", required: true, sortOrder: 30, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
 ];
 
 export const customFieldsStore = globalForStore.customFields ?? [
@@ -488,29 +531,175 @@ export function updateLead(threadId: string, data: Partial<Thread>) {
     return null;
 }
 
+function slugifyFieldKey(value: string) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "campo_personalizado";
+}
+
+function getFallbackPropertyOffers(row: Record<string, unknown>) {
+    const price = Number(row.price || 0);
+    if (!Number.isFinite(price) || price <= 0) {
+        return [];
+    }
+
+    const customData = (row.custom_data as Record<string, unknown> | null) || {};
+    const ownerPrice = typeof customData.owner_price === "number" ? customData.owner_price : null;
+    const commissionRate = typeof customData.commission_rate === "number" ? customData.commission_rate : null;
+
+    return [
+        {
+            offerType: "sale" as const,
+            price,
+            ownerPrice,
+            commissionRate,
+            isPrimary: true,
+        },
+    ];
+}
+
+function mapPropertyOffers(row: Record<string, unknown>): PropertyOffer[] {
+    const rawOffers = row.property_offers;
+    if (!Array.isArray(rawOffers) || rawOffers.length === 0) {
+        return getFallbackPropertyOffers(row);
+    }
+
+    const offers: PropertyOffer[] = [];
+    for (const offer of rawOffers) {
+        if (!offer || typeof offer !== "object") {
+            continue;
+        }
+
+        const raw = offer as Record<string, unknown>;
+        const price = Number(raw.price || 0);
+        if (!Number.isFinite(price)) {
+            continue;
+        }
+
+        offers.push({
+            id: typeof raw.id === "string" ? raw.id : undefined,
+            offerType: raw.offer_type === "rent" ? "rent" : "sale",
+            price,
+            ownerPrice: typeof raw.owner_price === "number" ? raw.owner_price : null,
+            commissionRate: typeof raw.commission_rate === "number" ? raw.commission_rate : null,
+            isPrimary: Boolean(raw.is_primary),
+        });
+    }
+
+    return offers;
+}
+
+function mapPropertyFieldRow(row: Record<string, unknown>): CustomField {
+    return {
+        id: typeof row.field_key === "string" && row.field_key ? row.field_key : String(row.id),
+        dbId: typeof row.id === "string" ? row.id : undefined,
+        name: String(row.name || ""),
+        type: (row.type as CustomField["type"]) || "text",
+        options: Array.isArray(row.options) ? row.options.map((option) => String(option)) : undefined,
+        required: Boolean(row.required),
+        unit: typeof row.unit === "string" && row.unit ? row.unit : undefined,
+        sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
+        showOnPropertyCard: Boolean(row.show_on_property_card),
+        showOnPropertyPage: Boolean(row.show_on_property_page),
+        targetEntity: typeof row.target_entity === "string" ? row.target_entity : "properties",
+    };
+}
+
+async function loadPropertyRowsWithOffers(rows: PropertyRow[]) {
+    if (rows.length === 0) {
+        return [] as Array<PropertyRow & { property_offers: PropertyOfferRow[] }>;
+    }
+
+    const propertyIds = rows.map((row) => row.id);
+    const { data: offerRows, error: offersError } = await supabase
+        .from("property_offers")
+        .select("*")
+        .in("property_id", propertyIds);
+
+    if (offersError) {
+        if (isMissingPropertyOffersTableError(offersError)) {
+            return rows.map((row) => ({ ...row, property_offers: [] }));
+        }
+        console.error("Error fetching property offers from Supabase:", offersError);
+        return rows.map((row) => ({ ...row, property_offers: [] }));
+    }
+
+    const offersByPropertyId = new Map<string, PropertyOfferRow[]>();
+    for (const offer of offerRows || []) {
+        const propertyOffers = offersByPropertyId.get(offer.property_id) || [];
+        propertyOffers.push(offer);
+        offersByPropertyId.set(offer.property_id, propertyOffers);
+    }
+
+    return rows.map((row) => ({
+        ...row,
+        property_offers: offersByPropertyId.get(row.id) || [],
+    }));
+}
+
+function isMissingSortOrderColumnError(error: unknown) {
+    return Boolean(
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code?: string }).code === "42703",
+    );
+}
+
+function isMissingPropertyOffersTableError(error: unknown) {
+    const message =
+        error && typeof error === "object" && "message" in error && typeof error.message === "string"
+            ? error.message
+            : "";
+
+    return Boolean(
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code?: string }).code === "PGRST205" &&
+        message.includes("property_offers"),
+    );
+}
+
 export async function getProperties() {
-    const { data, error } = await supabase.from('properties').select('*');
+    const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .order('updated_at', { ascending: false });
     if (error) {
         console.error('Error fetching properties from Supabase:', error);
         // Fallback to local store if Supabase fails (e.g., during migration or network issue)
         return Array.from(propertiesStore.values());
     }
+
+    const rowsWithOffers = await loadPropertyRowsWithOffers((data || []) as PropertyRow[]);
     
-    // Convert snake_case to camelCase
-    return data.map((row: Record<string, unknown>) => ({
-        id: row.id,
-        title: row.title,
-        slug: row.slug,
-        description: row.description,
-        price: row.price,
-        status: row.status,
-        coverImage: row.cover_image,
-        images: row.images,
-        address: row.address,
-        mapEmbedUrl: row.map_embed_url,
-        customData: (row.custom_data as unknown as Record<string, string | number | boolean>) || {},
-        landingPage: (row.landing_page as unknown as LandingPageConfig) || {}
-    })) as Property[];
+    // Convert snake_case to camelCase while keeping a primary offer price fallback.
+    return rowsWithOffers.map((row: Record<string, unknown>) => {
+        const offers = mapPropertyOffers(row);
+        const primaryOffer = offers.find((offer) => offer.isPrimary) || offers[0];
+
+        return {
+            id: row.id,
+            title: row.title,
+            slug: row.slug,
+            description: row.description,
+            price: primaryOffer?.price ?? Number(row.price || 0),
+            status: row.status,
+            isExclusiveNovian: Boolean(row.is_exclusive_novian),
+            coverImage: row.cover_image,
+            images: row.images,
+            address: row.address,
+            mapEmbedUrl: row.map_embed_url,
+            customData: (row.custom_data as unknown as Record<string, PropertyCustomDataValue>) || {},
+            landingPage: (row.landing_page as unknown as LandingPageConfig) || {},
+            offers,
+            brokerUserId: typeof row.broker_user_id === "string" ? row.broker_user_id : null,
+            broker: null,
+        };
+    }) as Property[];
 }
 
 export async function createProperty(data: Omit<Property, "id">) {
@@ -520,6 +709,7 @@ export async function createProperty(data: Omit<Property, "id">) {
         description: data.description,
         price: data.price,
         status: data.status,
+        is_exclusive_novian: Boolean(data.isExclusiveNovian),
         cover_image: data.coverImage,
         images: data.images,
         address: data.address,
@@ -538,6 +728,7 @@ export async function createProperty(data: Omit<Property, "id">) {
     return {
         ...data,
         id: result.id,
+        offers: data.offers,
     } as Property;
 }
 
@@ -548,6 +739,7 @@ export async function updateProperty(id: string, data: Partial<Property>) {
     if (data.description !== undefined) snakeCaseData.description = data.description;
     if (data.price !== undefined) snakeCaseData.price = data.price;
     if (data.status !== undefined) snakeCaseData.status = data.status;
+    if (data.isExclusiveNovian !== undefined) snakeCaseData.is_exclusive_novian = data.isExclusiveNovian;
     if (data.coverImage !== undefined) snakeCaseData.cover_image = data.coverImage;
     if (data.images !== undefined) snakeCaseData.images = data.images;
     if (data.address !== undefined) snakeCaseData.address = data.address;
@@ -569,12 +761,14 @@ export async function updateProperty(id: string, data: Partial<Property>) {
         description: result.description,
         price: result.price,
         status: result.status,
+        isExclusiveNovian: Boolean(result.is_exclusive_novian),
         coverImage: result.cover_image,
         images: result.images,
         address: result.address,
         mapEmbedUrl: result.map_embed_url,
-        customData: result.custom_data as unknown as Record<string, string | number | boolean>,
-        landingPage: result.landing_page as unknown as LandingPageConfig
+        customData: result.custom_data as unknown as Record<string, PropertyCustomDataValue>,
+        landingPage: result.landing_page as unknown as LandingPageConfig,
+        offers: data.offers,
     } as Property;
 }
 
@@ -587,14 +781,80 @@ export async function deleteProperty(id: string) {
 }
 
 export async function getPropertyFields() {
-    return propertyFieldsStore;
+    const query = supabase
+        .from("custom_fields")
+        .select("*")
+        .eq("target_entity", "properties")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+
+    let { data, error } = await query;
+
+    if (isMissingSortOrderColumnError(error)) {
+        const fallback = await supabase
+            .from("custom_fields")
+            .select("*")
+            .eq("target_entity", "properties")
+            .order("created_at", { ascending: true });
+        data = fallback.data;
+        error = fallback.error;
+    }
+
+    if (error) {
+        console.error("Error fetching property fields from Supabase:", error);
+        return propertyFieldsStore;
+    }
+
+    return (data || []).map(mapPropertyFieldRow);
 }
 
 export async function createPropertyField(field: Omit<CustomField, "id">) {
-    const newId = field.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const newField = { ...field, id: newId };
-    propertyFieldsStore.push(newField);
-    return newField;
+    const fieldKey = slugifyFieldKey(field.name);
+    const payload: Database["public"]["Tables"]["custom_fields"]["Insert"] = {
+        name: field.name,
+        target_entity: "properties",
+        type: field.type,
+        required: field.required,
+        options: field.options && field.options.length > 0 ? field.options : null,
+        field_key: fieldKey,
+        unit: field.unit ?? null,
+        sort_order: field.sortOrder ?? propertyFieldsStore.length * 10,
+        show_on_property_card: Boolean(field.showOnPropertyCard),
+        show_on_property_page: field.showOnPropertyPage ?? true,
+    };
+
+    let { data, error } = await supabase
+        .from("custom_fields")
+        .insert(payload)
+        .select("*")
+        .single();
+
+    if (isMissingSortOrderColumnError(error)) {
+        const fallbackPayload = { ...payload };
+        delete fallbackPayload.sort_order;
+        const fallback = await supabase
+            .from("custom_fields")
+            .insert(fallbackPayload)
+            .select("*")
+            .single();
+        data = fallback.data;
+        error = fallback.error;
+    }
+
+    if (error) {
+        console.error("Error creating property field in Supabase:", error);
+        const newField = { ...field, id: fieldKey, targetEntity: "properties" };
+        propertyFieldsStore.push(newField);
+        return newField;
+    }
+
+    if (!data) {
+        const newField = { ...field, id: fieldKey, targetEntity: "properties" };
+        propertyFieldsStore.push(newField);
+        return newField;
+    }
+
+    return mapPropertyFieldRow(data);
 }
 
 export async function deleteLead(threadId: string) {

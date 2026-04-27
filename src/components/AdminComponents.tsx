@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type } from "lucide-react";
+import { ArrowRight, MessageSquare, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
-import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField } from "@/lib/store";
+import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField, PropertyOfferType } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
+import { formatPropertyOfferLabel, getPrimaryPropertyOffer } from "@/lib/property-utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DocumentsWorkspace from "@/components/DocumentsWorkspace";
@@ -23,9 +24,23 @@ import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, Respon
 type ManagedAppUser = Database["public"]["Tables"]["app_users"]["Row"];
 type ManagedUserRole = Database["public"]["Enums"]["app_role"];
 type ManagedUserType = Database["public"]["Enums"]["app_user_type"];
+type BrokerOption = {
+  id: string;
+  fullName: string;
+  email: string;
+  avatarUrl: string | null;
+  creci: string | null;
+};
 type DashboardBreakdownItem = { label: string; count: number; color?: string | null };
 type DashboardRecentCaptacaoItem = { id: string; title: string; status: string; source: string; createdAt: string };
-type DashboardRecentPropertyItem = { id: string; title: string; status: string; price: number; address: string };
+type DashboardRecentPropertyItem = {
+  id: string;
+  title: string;
+  status: string;
+  price: number;
+  offers?: Property["offers"];
+  address: string;
+};
 type DashboardRecentClientProcessItem = { id: string; title: string; status: string; updated_at: string };
 type DashboardPayload = {
   overview: {
@@ -59,6 +74,17 @@ const getUserInitials = (user: ManagedAppUser | null) => {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "NV";
+};
+
+const sanitizeFileName = (fileName: string) => {
+  const normalized = fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .toLowerCase();
+
+  return normalized || "avatar";
 };
 
 const getUserRoleLabel = (user: ManagedAppUser | null) => {
@@ -303,6 +329,49 @@ const formatCurrencyValue = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const formatPropertyPriceSummary = (property: Pick<Property, "price" | "offers"> | null | undefined) =>
+  formatPropertyOfferLabel(getPrimaryPropertyOffer(property ?? { price: 0, offers: [] }));
+
+const PROPERTY_OFFER_TYPES: PropertyOfferType[] = ["sale", "rent"];
+
+const getPropertyCardMetricIcon = (field: Pick<CustomField, "id" | "name" | "unit">) => {
+  const normalizedId = field.id.trim().toLowerCase();
+  const normalizedName = field.name.trim().toLowerCase();
+
+  if (normalizedId === "area" || normalizedName.includes("area") || field.unit === "m²") {
+    return Square;
+  }
+
+  if (normalizedId === "bedrooms" || normalizedName.includes("quarto") || normalizedName.includes("dorm")) {
+    return BedDouble;
+  }
+
+  if (normalizedId === "bathrooms" || normalizedName.includes("banh")) {
+    return Bath;
+  }
+
+  if (normalizedId === "parking" || normalizedName.includes("vaga") || normalizedName.includes("garag")) {
+    return CarFront;
+  }
+
+  return null;
+};
+
+const formatPropertyCardMetricValue = (field: Pick<CustomField, "unit">, value: unknown) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const suffix = field.unit ? ` ${field.unit}` : "";
+  return `${value}${suffix}`;
+};
+
+type OfferDraft = {
+  ownerPrice: number;
+  commissionRate: number;
+  finalPrice: number;
+};
+
 function LeadContextTabs({
   value,
   onChange,
@@ -343,13 +412,13 @@ function LeadContextTabs({
   );
 }
 
-function LeadNotesPanel({
+export function LeadNotesPanel({
   leadId,
   customData,
   onSaved,
 }: {
   leadId?: string;
-  customData?: Thread["customData"];
+  customData?: Record<string, unknown> | null | undefined;
   onSaved?: () => Promise<void> | void;
 }) {
   const [draft, setDraft] = useState("");
@@ -1272,7 +1341,7 @@ export function DashboardLayout() {
                   id: item.id,
                   title: item.title,
                   meta: `${getDashboardLabel(item.status)} · ${item.address}`,
-                  trailing: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(item.price),
+                  trailing: formatPropertyPriceSummary(item),
                 }))}
                 emptyMessage="Ainda não existem imóveis."
               />
@@ -2113,7 +2182,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                                     <p className="mt-1 text-xs text-novian-text/55">
                                       {[
                                         link.property?.address || null,
-                                        link.property ? formatCurrencyValue(link.property.price) : null,
+                                        formatPropertyPriceSummary(link.property),
                                         link.source || null,
                                       ]
                                         .filter(Boolean)
@@ -2246,6 +2315,40 @@ const getNumericCustomDataValue = (customData: Property["customData"] | undefine
   }
 
   return null;
+};
+
+const getPropertyOfferTypeLabel = (offerType: PropertyOfferType) => (offerType === "rent" ? "Locacao" : "Venda");
+
+const createOfferEnabledState = (property: Property | null): Record<PropertyOfferType, boolean> => ({
+  sale: Boolean(getPrimaryPropertyOffer(property ?? { price: 0, offers: [] }, "sale")) || !property,
+  rent: Boolean(getPrimaryPropertyOffer(property ?? { price: 0, offers: [] }, "rent")),
+});
+
+const createEmptyOfferDraft = (): OfferDraft => ({
+  ownerPrice: 0,
+  commissionRate: DEFAULT_PROPERTY_COMMISSION_RATE,
+  finalPrice: 0,
+});
+
+const createOfferDraft = (property: Property | null, offerType: PropertyOfferType): OfferDraft => {
+  const offer = getPrimaryPropertyOffer(property ?? { price: 0, offers: [] }, offerType);
+  const fallbackPrice = offerType === "sale" ? property?.price ?? 0 : 0;
+  const draftFinalPrice = roundCurrencyValue(offer?.price ?? fallbackPrice);
+  const storedCommissionRate =
+    offerType === "sale" ? getNumericCustomDataValue(property?.customData, PROPERTY_COMMISSION_RATE_KEY) : null;
+  const draftCommissionRate = roundPercentageValue(
+    offer?.commissionRate ?? storedCommissionRate ?? DEFAULT_PROPERTY_COMMISSION_RATE,
+  );
+  const storedOwnerPrice =
+    offerType === "sale" ? getNumericCustomDataValue(property?.customData, PROPERTY_OWNER_PRICE_KEY) : null;
+  const derivedOwnerPrice =
+    draftCommissionRate > 0 ? draftFinalPrice * (1 - draftCommissionRate / 100) : draftFinalPrice;
+
+  return {
+    ownerPrice: roundCurrencyValue(offer?.ownerPrice ?? storedOwnerPrice ?? derivedOwnerPrice),
+    commissionRate: draftCommissionRate,
+    finalPrice: draftFinalPrice,
+  };
 };
 
 const getImageDescriptionsFromCustomData = (customData: Property["customData"] | undefined) => {
@@ -2411,10 +2514,20 @@ export function PropertiesLayout() {
   const [mapEmbedUrl, setMapEmbedUrl] = useState<string>("");
   const [isMapEditedManually, setIsMapEditedManually] = useState(false);
   const [isMapAdvancedOpen, setIsMapAdvancedOpen] = useState(false);
+  const [editableOfferType, setEditableOfferType] = useState<PropertyOfferType>("sale");
+  const [primaryOfferType, setPrimaryOfferType] = useState<PropertyOfferType>("sale");
+  const [offerEnabled, setOfferEnabled] = useState<Record<PropertyOfferType, boolean>>(createOfferEnabledState(null));
+  const [offerDrafts, setOfferDrafts] = useState<Record<PropertyOfferType, OfferDraft>>({
+    sale: createOfferDraft(null, "sale"),
+    rent: createOfferDraft(null, "rent"),
+  });
   const [ownerPrice, setOwnerPrice] = useState<number>(0);
   const [commissionRate, setCommissionRate] = useState<number>(DEFAULT_PROPERTY_COMMISSION_RATE);
   const [finalPrice, setFinalPrice] = useState<number>(0);
   const [propertyStatus, setPropertyStatus] = useState<Property["status"]>("active");
+  const [isExclusiveNovian, setIsExclusiveNovian] = useState(false);
+  const [brokerUserId, setBrokerUserId] = useState("");
+  const [brokers, setBrokers] = useState<BrokerOption[]>([]);
   const [propertyDropdownValues, setPropertyDropdownValues] = useState<Record<string, string>>({});
   const [heroTitle, setHeroTitle] = useState<string>("Descubra seu novo lar");
   const [heroSubtitle, setHeroSubtitle] = useState<string>("Cadastre-se para receber mais informações exclusivas.");
@@ -2433,18 +2546,39 @@ export function PropertiesLayout() {
   const fetchProps = async () => {
     try {
       const res = await fetch('/api/properties');
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+
+      if (!res.ok) {
+        throw new Error(typeof data?.error === "string" ? data.error : "Failed to load properties");
+      }
+
       setProperties(data.properties || []);
       setFields(data.fields || []);
     } catch (err) {
       console.error(err);
+      setProperties([]);
+      setFields([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const fetchBrokers = async () => {
+    try {
+      const res = await fetch("/api/brokers", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setBrokers(Array.isArray(data.brokers) ? data.brokers : []);
+    } catch (error) {
+      console.error(error);
+      setBrokers([]);
+    }
+  };
+
   useEffect(() => {
     fetchProps();
+    fetchBrokers();
   }, []);
 
   useEffect(() => {
@@ -2456,19 +2590,27 @@ export function PropertiesLayout() {
       setTitle(selectedProperty.title || "");
       setDescription(selectedProperty.description || "");
       setAddress(selectedProperty.address || "");
-      const storedCommissionRate = getNumericCustomDataValue(selectedProperty.customData, PROPERTY_COMMISSION_RATE_KEY);
-      const nextCommissionRate = storedCommissionRate ?? DEFAULT_PROPERTY_COMMISSION_RATE;
-      const storedOwnerPrice = getNumericCustomDataValue(selectedProperty.customData, PROPERTY_OWNER_PRICE_KEY);
-      const derivedOwnerPrice =
-        nextCommissionRate > 0
-          ? selectedProperty.price * (1 - nextCommissionRate / 100)
-          : selectedProperty.price;
-      const nextOwnerPrice = roundCurrencyValue(storedOwnerPrice ?? derivedOwnerPrice);
-      const nextFinalPrice = roundCurrencyValue(selectedProperty.price);
-      setCommissionRate(roundPercentageValue(nextCommissionRate));
-      setOwnerPrice(nextOwnerPrice);
-      setFinalPrice(nextFinalPrice);
+      const nextSaleDraft = createOfferDraft(selectedProperty, "sale");
+      const nextRentDraft = createOfferDraft(selectedProperty, "rent");
+      const nextOfferEnabled = createOfferEnabledState(selectedProperty);
+      const nextEditableOfferType =
+        getPrimaryPropertyOffer(selectedProperty, "sale")
+          ? "sale"
+          : getPrimaryPropertyOffer(selectedProperty, "rent")
+            ? "rent"
+            : "sale";
+      const nextEditableDraft = nextEditableOfferType === "sale" ? nextSaleDraft : nextRentDraft;
+      const nextPrimaryOfferType = getPrimaryPropertyOffer(selectedProperty)?.offerType ?? nextEditableOfferType;
+      setOfferEnabled(nextOfferEnabled);
+      setOfferDrafts({ sale: nextSaleDraft, rent: nextRentDraft });
+      setEditableOfferType(nextEditableOfferType);
+      setPrimaryOfferType(nextPrimaryOfferType);
+      setCommissionRate(nextEditableDraft.commissionRate);
+      setOwnerPrice(nextEditableDraft.ownerPrice);
+      setFinalPrice(nextEditableDraft.finalPrice);
       setPropertyStatus(selectedProperty.status || "active");
+      setIsExclusiveNovian(Boolean(selectedProperty.isExclusiveNovian));
+      setBrokerUserId(selectedProperty.brokerUserId || "");
       setPropertyDropdownValues(
         fields.reduce<Record<string, string>>((acc, field) => {
           if (field.type === "dropdown") {
@@ -2500,10 +2642,18 @@ export function PropertiesLayout() {
       setMapEmbedUrl("");
       setIsMapEditedManually(false);
       setIsMapAdvancedOpen(false);
-      setOwnerPrice(0);
-      setCommissionRate(DEFAULT_PROPERTY_COMMISSION_RATE);
-      setFinalPrice(0);
+      const nextSaleDraft = createOfferDraft(null, "sale");
+      const nextRentDraft = createOfferDraft(null, "rent");
+      setEditableOfferType("sale");
+      setPrimaryOfferType("sale");
+      setOfferEnabled(createOfferEnabledState(null));
+      setOfferDrafts({ sale: nextSaleDraft, rent: nextRentDraft });
+      setOwnerPrice(nextSaleDraft.ownerPrice);
+      setCommissionRate(nextSaleDraft.commissionRate);
+      setFinalPrice(nextSaleDraft.finalPrice);
       setPropertyStatus("active");
+      setIsExclusiveNovian(false);
+      setBrokerUserId("");
       setPropertyDropdownValues({});
       setHeroTitle("Descubra seu novo lar");
       setHeroSubtitle("Cadastre-se para receber mais informações exclusivas.");
@@ -2512,6 +2662,23 @@ export function PropertiesLayout() {
       setLeadMagnetFileUrl("");
     }
   }, [selectedProperty, isDrawerOpen]);
+
+  const updateOfferDraft = (offerType: PropertyOfferType, partial: Partial<OfferDraft>) => {
+    setOfferDrafts((current) => ({
+      ...current,
+      [offerType]: {
+        ...current[offerType],
+        ...partial,
+      },
+    }));
+  };
+
+  useEffect(() => {
+    const nextDraft = offerDrafts[editableOfferType];
+    setOwnerPrice(nextDraft.ownerPrice);
+    setCommissionRate(nextDraft.commissionRate);
+    setFinalPrice(nextDraft.finalPrice);
+  }, [editableOfferType, offerDrafts]);
 
   useEffect(() => {
     if (isMapEditedManually) {
@@ -2583,6 +2750,7 @@ export function PropertiesLayout() {
       callToActionText,
       leadMagnetTitle,
       leadMagnetFileUrl,
+      exclusividadeNovian: isExclusiveNovian ? "Sim" : "Nao",
       corPrincipal: String(formData?.get("primaryColor") || ""),
       exibirLeadMagnet: formData?.get("showLeadMagnet") === "on",
       imagens: {
@@ -2639,25 +2807,36 @@ export function PropertiesLayout() {
 
   const handleOwnerPriceChange = (rawValue: string) => {
     const nextOwnerPrice = roundCurrencyValue(Number(rawValue || 0));
-    setOwnerPrice(nextOwnerPrice);
     const suggestedFinal = commissionRate >= 100
       ? nextOwnerPrice
       : roundCurrencyValue(nextOwnerPrice / (1 - commissionRate / 100));
+    setOwnerPrice(nextOwnerPrice);
     setFinalPrice(suggestedFinal);
+    updateOfferDraft(editableOfferType, {
+      ownerPrice: nextOwnerPrice,
+      finalPrice: suggestedFinal,
+    });
   };
 
   const handleCommissionRateChange = (rawValue: string) => {
     const nextCommissionRate = Math.max(0, roundPercentageValue(Number(rawValue || 0)));
-    setCommissionRate(nextCommissionRate);
     const suggestedFinal = nextCommissionRate >= 100
       ? ownerPrice
       : roundCurrencyValue(ownerPrice / (1 - nextCommissionRate / 100));
+    setCommissionRate(nextCommissionRate);
     setFinalPrice(suggestedFinal);
+    updateOfferDraft(editableOfferType, {
+      commissionRate: nextCommissionRate,
+      finalPrice: suggestedFinal,
+    });
   };
 
   const handleFinalPriceChange = (rawValue: string) => {
     const nextFinalPrice = roundCurrencyValue(Number(rawValue || 0));
     setFinalPrice(nextFinalPrice);
+    updateOfferDraft(editableOfferType, {
+      finalPrice: nextFinalPrice,
+    });
   };
 
   const suggestedFinalPrice =
@@ -2665,6 +2844,56 @@ export function PropertiesLayout() {
   const commissionAmount = roundCurrencyValue(finalPrice * (commissionRate / 100));
   const ownerReceives = roundCurrencyValue(finalPrice - commissionAmount);
   const ownerAdjustment = roundCurrencyValue(ownerReceives - ownerPrice);
+  const existingOffers = selectedProperty?.offers || [];
+  const visibleOfferTypes = PROPERTY_OFFER_TYPES.filter((offerType) => offerEnabled[offerType]);
+  const hiddenOfferTypes = PROPERTY_OFFER_TYPES.filter((offerType) => !offerEnabled[offerType]);
+  const primaryOfferDraft = primaryOfferType === editableOfferType
+    ? { ownerPrice, commissionRate, finalPrice }
+    : offerDrafts[primaryOfferType];
+
+  const handleAddOfferType = (offerType: PropertyOfferType) => {
+    const nextDraft =
+      offerDrafts[offerType].finalPrice > 0 || offerDrafts[offerType].ownerPrice > 0
+        ? offerDrafts[offerType]
+        : createEmptyOfferDraft();
+
+    setOfferEnabled((current) => ({
+      ...current,
+      [offerType]: true,
+    }));
+    updateOfferDraft(offerType, nextDraft);
+    setEditableOfferType(offerType);
+    setOwnerPrice(nextDraft.ownerPrice);
+    setCommissionRate(nextDraft.commissionRate);
+    setFinalPrice(nextDraft.finalPrice);
+  };
+
+  const handleRemoveOfferType = (offerType: PropertyOfferType) => {
+    if (visibleOfferTypes.length <= 1) {
+      return;
+    }
+
+    const nextVisibleOfferTypes = visibleOfferTypes.filter((value) => value !== offerType);
+    const fallbackOfferType = nextVisibleOfferTypes[0];
+
+    setOfferEnabled((current) => ({
+      ...current,
+      [offerType]: false,
+    }));
+    updateOfferDraft(offerType, createEmptyOfferDraft());
+
+    if (editableOfferType === offerType) {
+      const fallbackDraft = offerDrafts[fallbackOfferType];
+      setEditableOfferType(fallbackOfferType);
+      setOwnerPrice(fallbackDraft.ownerPrice);
+      setCommissionRate(fallbackDraft.commissionRate);
+      setFinalPrice(fallbackDraft.finalPrice);
+    }
+
+    if (primaryOfferType === offerType) {
+      setPrimaryOfferType(fallbackOfferType);
+    }
+  };
 
   useEffect(() => {
     didAutoOpenPropertyFromQueryRef.current = false;
@@ -2711,13 +2940,48 @@ export function PropertiesLayout() {
       }
     }
 
+    const nextOffers = PROPERTY_OFFER_TYPES.flatMap((offerType) => {
+      if (!offerEnabled[offerType]) {
+        return [];
+      }
+
+      const existingOffer = existingOffers.find((offer) => offer.offerType === offerType);
+      const draft = offerType === editableOfferType
+        ? { ownerPrice, commissionRate, finalPrice }
+        : offerDrafts[offerType];
+      const shouldPersist = Boolean(existingOffer) || draft.finalPrice > 0 || draft.ownerPrice > 0;
+
+      if (!shouldPersist) {
+        return [];
+      }
+
+      return [{
+        id: existingOffer?.id,
+        offerType,
+        price: draft.finalPrice,
+        ownerPrice: draft.ownerPrice,
+        commissionRate: draft.commissionRate,
+        isPrimary: offerType === primaryOfferType,
+      }];
+    }).map((offer) => ({
+      ...offer,
+      isPrimary: Boolean(offer.isPrimary),
+    }));
+    if (!nextOffers.some((offer) => offer.isPrimary) && nextOffers[0]) {
+      nextOffers[0].isPrimary = true;
+    }
+    const publicPrimaryOffer = nextOffers.find((offer) => offer.isPrimary) || nextOffers[0];
+
     const propertyData = {
       ...(selectedProperty ? { id: selectedProperty.id, slug: selectedProperty.slug } : {}),
       title,
       description,
       address,
+      brokerUserId: brokerUserId || null,
+      isExclusiveNovian,
       mapEmbedUrl: mapUrl,
-      price: finalPrice,
+      price: publicPrimaryOffer?.price ?? finalPrice,
+      offers: nextOffers,
       status: formData.get("status"),
       coverImage: currentCover,
       images: currentImages,
@@ -2763,6 +3027,16 @@ export function PropertiesLayout() {
       setIsDeleting(false);
     }
   };
+
+  const brokerOptions = [
+    { value: "", label: "Sem corretor" },
+    ...brokers.map((broker) => ({
+      value: broker.id,
+      label: broker.fullName || broker.email,
+      description: broker.creci ? `CRECI ${broker.creci}` : broker.email,
+      avatarUrl: broker.avatarUrl || undefined,
+    })),
+  ];
 
   return (
     <div className="flex flex-col flex-1 h-full p-6" onClick={() => { setOpenDropdownId(null); setOpenAiMenuField(null); }}>
@@ -2835,16 +3109,32 @@ export function PropertiesLayout() {
               </div>
               <div className="p-4 cursor-pointer" onClick={() => { setSelectedProperty(prop); setIsDrawerOpen(true); }}>
                 <h3 className="font-semibold text-lg text-novian-text truncate">{prop.title}</h3>
-                <p className="text-novian-accent font-medium mt-1">R$ {prop.price.toLocaleString('pt-BR')}</p>
+                <p className="text-novian-accent font-medium mt-1">{formatPropertyPriceSummary(prop)}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {Object.entries(prop.customData).slice(0,3).map(([key, value]) => {
-                    const field = fields.find(f => f.id === key);
-                    return field ? (
-                      <span key={key} className="text-xs bg-novian-surface border border-novian-muted px-2 py-1 rounded-md text-novian-text/70">
-                        {value} {field.name.includes('m²') ? 'm²' : ''}
-                      </span>
-                    ) : null;
-                  })}
+                  {fields
+                    .filter((field) => field.showOnPropertyCard)
+                    .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+                    .slice(0, 4)
+                    .map((field) => {
+                      const value = prop.customData[field.id];
+                      const formattedValue = formatPropertyCardMetricValue(field, value);
+                      if (!formattedValue) {
+                        return null;
+                      }
+
+                      const Icon = getPropertyCardMetricIcon(field);
+
+                      return (
+                        <span
+                          key={field.id}
+                          className="inline-flex items-center gap-2 rounded-xl border border-novian-muted/45 bg-novian-primary/35 px-3 py-1.5 text-xs font-medium text-novian-text/80 shadow-[0_10px_24px_rgba(0,0,0,0.12)]"
+                          title={field.name}
+                        >
+                          {Icon ? <Icon size={13} className="shrink-0 text-novian-accent/85" /> : null}
+                          <span>{formattedValue}</span>
+                        </span>
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -2878,7 +3168,7 @@ export function PropertiesLayout() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              <div className="flex flex-wrap gap-2 border-b border-novian-muted/35 pb-4">
+              <div className="flex flex-wrap items-end gap-6 border-b border-novian-muted/35">
                 {[
                   { value: "details" as const, label: "Detalhes" },
                   { value: "media" as const, label: "Midia" },
@@ -2892,11 +3182,11 @@ export function PropertiesLayout() {
                       type="button"
                       disabled={tab.disabled}
                       onClick={() => setActivePropertyTab(tab.value)}
-                      className={`rounded-full px-4 py-2 text-xs font-medium uppercase tracking-[0.14em] transition ${
+                      className={`border-b-2 px-1 pb-3 pt-1 text-xs font-medium uppercase tracking-[0.18em] transition ${
                         active
-                          ? "bg-novian-accent text-novian-primary"
-                          : "border border-novian-muted/40 bg-novian-primary/25 text-novian-text/60 hover:text-novian-text"
-                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                          ? "border-novian-accent text-novian-accent"
+                          : "border-transparent text-novian-text/58 hover:border-novian-muted/45 hover:text-novian-text/88"
+                      } disabled:cursor-not-allowed disabled:text-novian-text/30`}
                     >
                       {tab.label}
                     </button>
@@ -3057,18 +3347,112 @@ export function PropertiesLayout() {
                       <div>
                         <p className="text-xs font-medium uppercase tracking-[0.18em] text-novian-text/45">Precificacao</p>
                         <p className="mt-1 text-xs text-novian-text/50">
-                          Informe quanto o proprietario quer receber, defina a comissao e ajuste o preco final com arredondamento simples.
+                          Edite uma oferta por vez. Adicione venda ou locacao somente quando fizer sentido para este imovel.
                         </p>
                       </div>
                       <div className="rounded-2xl border border-novian-accent/25 bg-novian-accent/10 px-4 py-3 text-right">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Preco final</p>
-                        <p className="mt-1 text-lg font-semibold text-novian-text">{formatCurrency(finalPrice)}</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Oferta principal</p>
+                        <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-novian-accent">
+                          {getPropertyOfferTypeLabel(primaryOfferType)}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold text-novian-text">
+                          {formatCurrency(primaryOfferDraft.finalPrice)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {visibleOfferTypes.map((offerType) => {
+                        const isActive = editableOfferType === offerType;
+                        const isPrimary = primaryOfferType === offerType;
+
+                        return (
+                          <button
+                            key={offerType}
+                            type="button"
+                            onClick={() => setEditableOfferType(offerType)}
+                            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
+                              isActive
+                                ? "border-novian-accent/45 bg-novian-accent/12 text-novian-text"
+                                : "border-novian-muted/35 bg-novian-surface/10 text-novian-text/65 hover:border-novian-accent/20"
+                            }`}
+                          >
+                            <span>{getPropertyOfferTypeLabel(offerType)}</span>
+                            {isPrimary ? (
+                              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-emerald-200">
+                                Principal
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                      {hiddenOfferTypes.map((offerType) => (
+                        <button
+                          key={offerType}
+                          type="button"
+                          onClick={() => handleAddOfferType(offerType)}
+                          className="inline-flex items-center gap-2 rounded-full border border-dashed border-novian-muted/35 px-4 py-2 text-sm font-medium text-novian-text/60 transition hover:border-novian-accent/25 hover:text-novian-text"
+                        >
+                          <Plus size={14} />
+                          {getPropertyOfferTypeLabel(offerType)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-novian-muted/30 bg-novian-surface/10 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">
+                            Editando {getPropertyOfferTypeLabel(editableOfferType)}
+                          </p>
+                          <p className="mt-1 text-lg font-semibold text-novian-text">
+                            {finalPrice > 0 ? formatCurrency(finalPrice) : "Defina os valores da oferta"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {primaryOfferType !== editableOfferType ? (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryOfferType(editableOfferType)}
+                              className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200 transition hover:border-emerald-300/40 hover:text-emerald-100"
+                            >
+                              Definir como principal
+                            </button>
+                          ) : (
+                            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200">
+                              Oferta principal
+                            </span>
+                          )}
+                          {visibleOfferTypes.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOfferType(editableOfferType)}
+                              className="rounded-full border border-red-400/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:border-red-300/35 hover:text-red-100"
+                            >
+                              Remover {getPropertyOfferTypeLabel(editableOfferType)}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Valor do proprietario</p>
+                          <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerPrice)}</p>
+                        </div>
+                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Comissao</p>
+                          <p className="mt-1 text-sm font-medium text-novian-text/85">{commissionRate}%</p>
+                        </div>
+                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Liquido estimado</p>
+                          <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerReceives)}</p>
+                        </div>
                       </div>
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>
-                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Valor do proprietario (R$)</label>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">
+                          Valor do proprietario ({getPropertyOfferTypeLabel(editableOfferType)})
+                        </label>
                         <input
                           name="ownerPrice"
                           required
@@ -3094,7 +3478,9 @@ export function PropertiesLayout() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Preco final de venda</label>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">
+                          Preco final de {getPropertyOfferTypeLabel(editableOfferType).toLowerCase()}
+                        </label>
                         <input
                           name="finalPrice"
                           required
@@ -3110,35 +3496,54 @@ export function PropertiesLayout() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => setFinalPrice(suggestedFinalPrice)}
+                        onClick={() => {
+                          setFinalPrice(suggestedFinalPrice);
+                          updateOfferDraft(editableOfferType, { finalPrice: suggestedFinalPrice });
+                        }}
                         className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
                       >
                         Usar sugerido
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFinalPrice(roundUpToStep(suggestedFinalPrice, 1000))}
+                        onClick={() => {
+                          const nextValue = roundUpToStep(suggestedFinalPrice, 1000);
+                          setFinalPrice(nextValue);
+                          updateOfferDraft(editableOfferType, { finalPrice: nextValue });
+                        }}
                         className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
                       >
                         Arredondar 1 mil
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFinalPrice(roundUpToStep(suggestedFinalPrice, 5000))}
+                        onClick={() => {
+                          const nextValue = roundUpToStep(suggestedFinalPrice, 5000);
+                          setFinalPrice(nextValue);
+                          updateOfferDraft(editableOfferType, { finalPrice: nextValue });
+                        }}
                         className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
                       >
                         Arredondar 5 mil
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFinalPrice((current) => Math.max(0, roundCurrencyValue(current - 1000)))}
+                        onClick={() => {
+                          const nextValue = Math.max(0, roundCurrencyValue(finalPrice - 1000));
+                          setFinalPrice(nextValue);
+                          updateOfferDraft(editableOfferType, { finalPrice: nextValue });
+                        }}
                         className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
                       >
                         -1 mil
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFinalPrice((current) => roundCurrencyValue(current + 1000))}
+                        onClick={() => {
+                          const nextValue = roundCurrencyValue(finalPrice + 1000);
+                          setFinalPrice(nextValue);
+                          updateOfferDraft(editableOfferType, { finalPrice: nextValue });
+                        }}
                         className="rounded-full border border-novian-muted/35 px-3 py-1.5 text-xs font-medium text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
                       >
                         +1 mil
@@ -3170,6 +3575,16 @@ export function PropertiesLayout() {
                         </p>
                       </div>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-novian-text/70 mb-1">Corretor responsavel</label>
+                    <PopupSelect
+                      value={brokerUserId}
+                      onChange={setBrokerUserId}
+                      options={brokerOptions}
+                      placeholder="Selecione um corretor"
+                      buttonClassName="bg-novian-primary"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Status</label>
@@ -3255,6 +3670,21 @@ export function PropertiesLayout() {
                 </div>
                 
                 <div className="bg-novian-primary/50 border border-novian-accent/20 rounded-xl p-4 space-y-4">
+                  <label className="group flex cursor-pointer items-center gap-3 rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-4 py-3 text-sm text-novian-text/85 transition-colors hover:border-novian-accent/25 hover:bg-novian-surface/25">
+                    <input
+                      type="checkbox"
+                      checked={isExclusiveNovian}
+                      onChange={(event) => setIsExclusiveNovian(event.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-novian-muted/60 bg-novian-primary/80 transition-all duration-200 peer-checked:border-novian-accent/80 peer-checked:bg-novian-accent/18 peer-focus-visible:ring-2 peer-focus-visible:ring-novian-accent/35 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[#0f1716] group-hover:border-novian-accent/40">
+                      <span className={`h-2.5 w-2.5 rounded-sm bg-novian-accent transition-all duration-200 ${isExclusiveNovian ? "scale-100 opacity-100" : "scale-0 opacity-0"}`} />
+                    </span>
+                    <div className="space-y-1">
+                      <span className="block">Exibir selo de exclusividade Novian</span>
+                      <span className="block text-xs text-novian-text/55">Mostra o badge no topo da landing page do imovel.</span>
+                    </div>
+                  </label>
                   <AiInputField
                     label="Título Principal (Hero)"
                     name="heroTitle"
@@ -3472,10 +3902,14 @@ export function SettingsLayout() {
   const [managedUsers, setManagedUsers] = useState<ManagedAppUser[]>([]);
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isUploadingUserAvatar, setIsUploadingUserAvatar] = useState(false);
   const [editingManagedUserId, setEditingManagedUserId] = useState<string | null>(null);
+  const userAvatarInputRef = useRef<HTMLInputElement | null>(null);
   const [userForm, setUserForm] = useState({
     email: "",
     fullName: "",
+    avatarUrl: "",
+    creci: "",
     userType: "internal" as ManagedUserType,
     role: "broker" as ManagedUserRole,
     permissions: "crm.access, properties.manage",
@@ -3557,6 +3991,8 @@ export function SettingsLayout() {
     setUserForm({
       email: "",
       fullName: "",
+      avatarUrl: "",
+      creci: "",
       userType: "internal",
       role: "broker",
       permissions: "crm.access, properties.manage",
@@ -3569,12 +4005,39 @@ export function SettingsLayout() {
     setUserForm({
       email: user.email,
       fullName: user.full_name || "",
+      avatarUrl: user.avatar_url || "",
+      creci: user.creci || "",
       userType: user.user_type,
       role: user.role,
       permissions: (user.permissions || []).join(", "),
       isActive: user.is_active,
     });
     setIsUserFormOpen(true);
+  };
+
+  const handleManagedUserAvatarUpload = async (file: File) => {
+    setIsUploadingUserAvatar(true);
+    try {
+      const storageFolder = editingManagedUserId || userForm.email.trim().toLowerCase().replace(/[^a-z0-9]/g, "-") || "pending-user";
+      const filePath = `avatars/${storageFolder}/${Date.now()}-${sanitizeFileName(file.name)}`;
+      const { error: uploadError } = await supabase.storage.from("assets").upload(filePath, file, {
+        upsert: false,
+      });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
+      setUserForm((prev) => ({ ...prev, avatarUrl: data.publicUrl }));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsUploadingUserAvatar(false);
+      if (userAvatarInputRef.current) {
+        userAvatarInputRef.current.value = "";
+      }
+    }
   };
 
   const handleSaveManagedUser = async () => {
@@ -3585,6 +4048,8 @@ export function SettingsLayout() {
       const payload = {
         email: userForm.email,
         fullName: userForm.fullName,
+        avatarUrl: userForm.avatarUrl || null,
+        creci: userForm.userType === "internal" ? userForm.creci : "",
         userType: userForm.userType,
         role: userForm.userType === "client" ? "client" : userForm.role,
         permissions: userForm.permissions,
@@ -4129,6 +4594,60 @@ export function SettingsLayout() {
 
               {isUserFormOpen && (
                 <div className="bg-novian-surface border border-novian-muted rounded-2xl p-6 space-y-5">
+                  <input
+                    ref={userAvatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/jpg"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void handleManagedUserAvatarUpload(file);
+                      }
+                    }}
+                  />
+                  <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-novian-muted/40 bg-novian-primary/35 px-4 py-4">
+                    <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border border-novian-muted/50 bg-novian-primary text-lg font-semibold text-novian-text">
+                      {userForm.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={userForm.avatarUrl} alt={userForm.fullName || userForm.email || "User avatar"} className="h-full w-full object-cover" />
+                      ) : (
+                        (userForm.fullName || userForm.email || "NU")
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() || "")
+                          .join("")
+                          .slice(0, 2) || "NU"
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-novian-text">Foto do usuário</div>
+                      <p className="mt-1 text-xs text-novian-text/50">
+                        Envie a imagem do perfil em nome do usuário para exibir no portal e nas associações.
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => userAvatarInputRef.current?.click()}
+                          disabled={isUploadingUserAvatar}
+                          className="rounded-full border border-novian-muted/50 px-3 py-1.5 text-xs font-medium text-novian-text transition hover:border-novian-accent/50 hover:text-novian-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isUploadingUserAvatar ? "Enviando imagem..." : userForm.avatarUrl ? "Trocar imagem" : "Enviar imagem"}
+                        </button>
+                        {userForm.avatarUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setUserForm((prev) => ({ ...prev, avatarUrl: "" }))}
+                            disabled={isUploadingUserAvatar}
+                            className="rounded-full border border-rose-500/30 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-400/50 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Remover imagem
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-novian-text/60 mb-1">Nome completo</label>
@@ -4149,6 +4668,17 @@ export function SettingsLayout() {
                         onChange={(e) => setUserForm((prev) => ({ ...prev, email: e.target.value }))}
                         className="w-full bg-novian-primary border border-novian-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-novian-accent disabled:opacity-60"
                         placeholder="nome@empresa.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-novian-text/60 mb-1">CRECI</label>
+                      <input
+                        type="text"
+                        value={userForm.creci}
+                        disabled={userForm.userType === "client"}
+                        onChange={(e) => setUserForm((prev) => ({ ...prev, creci: e.target.value }))}
+                        className="w-full bg-novian-primary border border-novian-muted rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-novian-accent disabled:opacity-60"
+                        placeholder="Ex: 123456-F"
                       />
                     </div>
                     <div>
@@ -4229,7 +4759,7 @@ export function SettingsLayout() {
                     </button>
                     <button
                       onClick={handleSaveManagedUser}
-                      disabled={isSavingUser}
+                      disabled={isSavingUser || isUploadingUserAvatar}
                       className="bg-novian-accent text-novian-primary px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white transition-colors disabled:opacity-60"
                     >
                       {isSavingUser ? "Salvando..." : editingManagedUserId ? "Salvar Usuário" : "Enviar Convite"}

@@ -253,6 +253,7 @@ export async function getLeadInfoForThread(threadId: string) {
             slug: link.property.slug || undefined,
             address: link.property.address || undefined,
             price: link.property.price,
+            offers: link.property.offers,
             status: link.property.status,
           },
         },

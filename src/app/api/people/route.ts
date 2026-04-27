@@ -34,6 +34,11 @@ function normalizeEmail(value: unknown) {
   return email || null;
 }
 
+function normalizeBrokerUserId(value: unknown) {
+  const brokerUserId = String(value ?? "").trim();
+  return brokerUserId || null;
+}
+
 function normalizeRoleList(value: unknown) {
   const roles = Array.isArray(value)
     ? value
@@ -213,6 +218,7 @@ function mapPeopleForResponse(
       lead: leadSummary,
       leadCount: leadSummary ? 1 : 0,
       linkedProperties: linkedPropertiesByPersonId.get(person.id) || [],
+      brokerUserId: person.broker_user_id,
     };
   });
 }
@@ -276,6 +282,7 @@ export async function POST(req: Request) {
     const tags = normalizeTagList(body.tags);
     const origin = String(body.origin ?? "manual").trim() || "manual";
     const metadata = asJsonObject(body.metadata);
+    const brokerUserId = normalizeBrokerUserId(body.brokerUserId);
 
     if (!fullName) {
       return NextResponse.json({ error: "Full name is required" }, { status: 400 });
@@ -291,6 +298,7 @@ export async function POST(req: Request) {
         roles,
         tags,
         origin,
+        broker_user_id: brokerUserId,
         stage_points: Number(body.stagePoints || 0),
         metadata,
         last_interaction_preview: String(body.lastInteractionPreview ?? "").trim() || null,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAppUser } from "@/lib/auth";
+import { getPrimaryPropertyOffer } from "@/lib/property-utils";
 import { listAllProperties } from "@/lib/properties";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
@@ -213,14 +214,18 @@ export async function GET() {
 
     const recentProperties = [...properties]
       .slice(0, 5)
-      .map((property) => ({
-        id: property.id,
-        title: property.title,
-        status: property.status,
-        price: property.price,
-        address: property.address,
-        image: property.images?.[0] || "",
-      }));
+      .map((property) => {
+        const primaryOffer = getPrimaryPropertyOffer(property);
+        return {
+          id: property.id,
+          title: property.title,
+          status: property.status,
+          price: primaryOffer?.price ?? property.price,
+          offers: property.offers || [],
+          address: property.address,
+          image: property.images?.[0] || "",
+        };
+      });
 
     return NextResponse.json({
       overview: {

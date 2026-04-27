@@ -1,13 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatPropertyOfferLabel, getPrimaryPropertyOffer } from "@/lib/property-utils";
 import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, ResponsiveContainer } from "recharts";
 import Link from "next/link";
 import Image from "next/image";
 
 type DashboardBreakdownItem = { label: string; count: number; color?: string | null };
 type DashboardRecentCaptacaoItem = { id: string; title: string; status: string; source: string; createdAt: string; image: string };
-type DashboardRecentPropertyItem = { id: string; title: string; status: string; price: number; address: string; image: string };
+type DashboardRecentPropertyItem = {
+  id: string;
+  title: string;
+  status: string;
+  price: number;
+  offers?: Array<{
+    id?: string;
+    offerType: "sale" | "rent";
+    price: number;
+    ownerPrice?: number | null;
+    commissionRate?: number | null;
+    isPrimary?: boolean;
+  }>;
+  address: string;
+  image: string;
+};
 type DashboardRecentClientProcessItem = { id: string; title: string; status: string; updated_at: string };
 type DashboardPayload = {
   overview: {
@@ -41,6 +57,9 @@ const getDashboardLabel = (label: string) => {
   if (normalized === "pending") return "Pendente";
   return label;
 };
+
+const formatPropertyPriceSummary = (property: Pick<DashboardRecentPropertyItem, "price" | "offers">) =>
+  formatPropertyOfferLabel(getPrimaryPropertyOffer(property));
 
 const getStageTheme = (color?: string | null) => {
   const normalized = String(color || "").toLowerCase();
@@ -492,7 +511,7 @@ export default function DashboardPage() {
                 id: item.id,
                 title: item.title,
                 meta: `${getDashboardLabel(item.status)} · ${item.address}`,
-                trailing: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(item.price),
+                trailing: formatPropertyPriceSummary(item),
                 image: item.image,
                 href: `/admin/properties?id=${item.id}`,
               }))}

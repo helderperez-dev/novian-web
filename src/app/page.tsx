@@ -1,13 +1,18 @@
-import { getProperties } from "@/lib/store";
+import { getProperties, getPropertyFields } from "@/lib/store";
+import { formatPropertyFieldValue, formatPropertyOfferLabel, getPropertyOfferSummary, getVisiblePropertyFieldEntries } from "@/lib/property-utils";
 import { connection } from "next/server";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, MapPin, Bed, Car, Maximize } from "lucide-react";
+import { ArrowRight, MapPin } from "lucide-react";
 import PropertyListingTracker from "./PropertyListingTracker";
 
 export default async function PropertiesListingPage() {
   await connection();
-  const properties = (await getProperties()).filter((property) => property.status === "active");
+  const [properties, propertyFields] = await Promise.all([
+    getProperties(),
+    getPropertyFields(),
+  ]);
+  const activeProperties = properties.filter((property) => property.status === "active");
 
   return (
     <div className="min-h-screen bg-[#0d1514] text-white font-sans selection:bg-[#DEC0A6]/30">
@@ -71,17 +76,17 @@ export default async function PropertiesListingPage() {
           </div>
           
           <div className="lg:col-span-5 relative hidden lg:block">
-            {properties[0] && (
+            {activeProperties[0] && (
               <div className="relative aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl">
                 <img 
-                  src={properties[0].coverImage} 
+                  src={activeProperties[0].coverImage} 
                   alt="Destaque" 
                   className="w-full h-full object-cover opacity-80"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0d1514] via-transparent to-transparent" />
                 <div className="absolute bottom-8 left-8 right-8">
                   <p className="text-xs text-[#DEC0A6] font-bold tracking-widest uppercase mb-2">Imóvel Destaque</p>
-                  <h3 className="text-2xl font-serif text-white">{properties[0].title}</h3>
+                  <h3 className="text-2xl font-serif text-white">{activeProperties[0].title}</h3>
                 </div>
               </div>
             )}
@@ -98,22 +103,26 @@ export default async function PropertiesListingPage() {
               <p className="text-white/50 text-lg max-w-md">Descubra propriedades únicas, pensadas para quem não abre mão do melhor.</p>
             </div>
             <div className="text-white/40 text-sm font-medium tracking-widest uppercase">
-              {properties.length} {properties.length === 1 ? 'Imóvel Encontrado' : 'Imóveis Encontrados'}
+              {activeProperties.length} {activeProperties.length === 1 ? 'Imóvel Encontrado' : 'Imóveis Encontrados'}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16">
-            {properties.map((property) => (
-              <PropertyListingTracker
-                key={property.id}
-                property={{
-                  id: property.id,
-                  slug: property.slug,
-                  title: property.title,
-                  price: property.price,
-                  address: property.address,
-                }}
-              >
+            {activeProperties.map((property) => {
+              const { primaryOffer, saleOffer, rentOffer } = getPropertyOfferSummary(property);
+              const cardFields = getVisiblePropertyFieldEntries(property, propertyFields, "card", 3);
+
+              return (
+                <PropertyListingTracker
+                  key={property.id}
+                  property={{
+                    id: property.id,
+                    slug: property.slug,
+                    title: property.title,
+                    price: primaryOffer?.price ?? property.price,
+                    address: property.address,
+                  }}
+                >
                 <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-white/5 mb-6 relative">
                   <img 
                     src={property.coverImage} 
@@ -139,38 +148,33 @@ export default async function PropertiesListingPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-6 py-4 border-y border-white/5 text-white/70">
-                    {property.customData.area && (
-                      <div className="flex items-center gap-2">
-                        <Maximize size={16} className="text-white/40" />
-                        <span className="text-sm font-medium">{property.customData.area} m²</span>
+                  <div className="flex flex-wrap items-center gap-3 py-4 border-y border-white/5 text-white/70">
+                    {cardFields.map(({ field, value }) => (
+                      <div key={field.id} className="rounded-full border border-white/10 px-3 py-1.5 text-sm font-medium">
+                        {field.name}: {formatPropertyFieldValue(value!, field)}
                       </div>
-                    )}
-                    {property.customData.bedrooms && (
-                      <div className="flex items-center gap-2">
-                        <Bed size={16} className="text-white/40" />
-                        <span className="text-sm font-medium">{property.customData.bedrooms} Qts</span>
-                      </div>
-                    )}
-                    {property.customData.parking && (
-                      <div className="flex items-center gap-2">
-                        <Car size={16} className="text-white/40" />
-                        <span className="text-sm font-medium">{property.customData.parking} Vgs</span>
-                      </div>
-                    )}
+                    ))}
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
-                    <p className="text-xl font-light">
-                      R$ {property.price.toLocaleString('pt-BR')}
-                    </p>
+                    <div>
+                      <p className="text-xl font-light">{formatPropertyOfferLabel(primaryOffer)}</p>
+                      {saleOffer && rentOffer ? (
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/40">Venda e locação</p>
+                      ) : rentOffer ? (
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/40">Locação</p>
+                      ) : (
+                        <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/40">Venda</p>
+                      )}
+                    </div>
                     <span className="text-xs font-bold tracking-widest text-[#DEC0A6] uppercase group-hover:underline underline-offset-4">
                       Ver Detalhes
                     </span>
                   </div>
                 </div>
-              </PropertyListingTracker>
-            ))}
+                </PropertyListingTracker>
+              );
+            })}
           </div>
         </div>
       </section>
