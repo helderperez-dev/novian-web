@@ -30,7 +30,12 @@ export async function getCurrentSessionUser(): Promise<User | null> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
 
   return user;
 }
@@ -39,15 +44,24 @@ export async function getCurrentAppUser(): Promise<AppUser | null> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+
+  if (authError) {
+    throw authError;
+  }
 
   if (!user) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("app_users")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
 
   return data;
 }

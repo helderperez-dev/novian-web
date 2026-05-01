@@ -2,11 +2,17 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-novian-primary: #0D1D1D;
-  --color-novian-accent: #DEC0A6;
-  --color-novian-surface: #132727;
-  --color-novian-text: #F3EBE3;
-  --color-novian-muted: #244141;
+  --color-novian-primary: #faf8f3;
+  --color-novian-accent: #2f4a3a;
+  --color-novian-surface: #ffffff;
+  --color-novian-surface-soft: #f3ede3;
+  --color-novian-surface-muted: #ede6dc;
+  --color-novian-text: #1a1a1a;
+  --color-novian-muted: #d8d0c5;
+  --color-novian-line: #d6cec4;
+  --color-novian-line-strong: #b8ab9a;
+  --color-novian-success: #4d7a58;
+  --color-novian-danger: #a95454;
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-playfair), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -16,6 +22,8 @@
   :root {
     --background: var(--color-novian-primary);
     --foreground: var(--color-novian-text);
+    --novian-shadow: 0 22px 70px rgba(47, 74, 58, 0.1);
+    --novian-shadow-soft: 0 14px 40px rgba(47, 74, 58, 0.08);
   }
 
   html {
@@ -29,6 +37,68 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    background:
+      radial-gradient(circle at top left, rgba(237, 230, 220, 0.85), transparent 24rem),
+      radial-gradient(circle at top right, rgba(47, 74, 58, 0.08), transparent 20rem),
+      linear-gradient(180deg, #fffdfa 0%, #faf8f3 48%, #f5efe5 100%);
+  }
+
+  * {
+    border-color: var(--color-novian-line);
+  }
+
+  *::selection {
+    background: rgba(47, 74, 58, 0.18);
+    color: var(--color-novian-text);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .novian-panel {
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(214, 206, 196, 0.92);
+    box-shadow: var(--novian-shadow);
+    backdrop-filter: blur(20px);
+  }
+
+  .novian-panel-soft {
+    background: rgba(250, 248, 243, 0.86);
+    border: 1px solid rgba(214, 206, 196, 0.8);
+    box-shadow: var(--novian-shadow-soft);
+    backdrop-filter: blur(14px);
+  }
+
+  .novian-input {
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(214, 206, 196, 0.92);
+    color: var(--color-novian-text);
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  }
+
+  .novian-input::placeholder {
+    color: rgba(26, 26, 26, 0.38);
+  }
+
+  .novian-input:focus {
+    outline: none;
+    border-color: rgba(47, 74, 58, 0.45);
+    box-shadow: 0 0 0 4px rgba(47, 74, 58, 0.08);
   }
 }
 
@@ -39,11 +109,11 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(214, 206, 196, 0.2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-novian-muted);
+  background: rgba(47, 74, 58, 0.32);
   border-radius: 10px;
 }
 

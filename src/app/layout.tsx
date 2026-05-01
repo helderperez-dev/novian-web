@@ -20,8 +20,11 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Novian Real Estate CRM",
-  description: "AI-first Real Estate CRM",
+  title: {
+    default: "Novian Living Brasil",
+    template: "%s | Novian Living Brasil",
+  },
+  description: "Imóveis especiais para compra, venda e locação no Brasil.",
 };
 
 export default function RootLayout({
@@ -31,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} h-full antialiased`}
     >
       <head>

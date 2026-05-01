@@ -1,0 +1,1016 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para localizar uma pessoa/lead especifica pelo nome, telefone, email, id ou ultimo contexto conhecido. Retorna apenas dados operacionais e seguros para atendimento interno.",
+        "operation": "executeQuery",
+        "query": "{{\n  (() => {\n    const raw = String($fromAI('search_term', 'Nome, telefone, email ou id da pessoa/lead que deve ser pesquisado', 'string') || '').trim();\n    if (!raw) {\n      return \"SELECT 'search_term obrigatorio' AS error;\";\n    }\n\n    const term = raw.replace(/'/g, \"''\");\n    const digits = raw.replace(/\\D/g, '');\n    const phoneCondition = digits ? ` OR COALESCE(p.primary_phone, '') ILIKE '%${digits}%'` : '';\n\n    return `\nWITH matched_people AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE\n    p.id::text = '${term}'\n    OR p.full_name ILIKE '%${term}%'\n    OR COALESCE(p.email, '') ILIKE '%${term}%'\n    ${phoneCondition}\n    OR COALESCE(p.last_interaction_preview, '') ILIKE '%${term}%'\n  ORDER BY\n    CASE\n      WHEN p.id::text = '${term}' THEN 0\n      WHEN COALESCE(p.email, '') ILIKE '${term}' THEN 1\n      WHEN COALESCE(p.full_name, '') ILIKE '${term}' THEN 2\n      ELSE 3\n    END,\n    p.updated_at DESC\n  LIMIT 10\n)\nSELECT\n  p.id,\n  p.full_name,\n  p.primary_phone,\n  p.email,\n  p.crm_status,\n  p.crm_score,\n  p.crm_unread,\n  p.origin,\n  p.tags,\n  p.last_interaction_preview,\n  COALESCE(p.metadata->>'latest_real_estate_intent', p.metadata->'lead_profile'->>'intent') AS intent,\n  p.metadata->'lead_profile' AS lead_profile,\n  COALESCE((\n    SELECT jsonb_agg(note->>'content')\n    FROM jsonb_array_elements(COALESCE(p.metadata->'lead_notes', '[]'::jsonb)) AS note\n    WHERE COALESCE(note->>'visibility', '') = 'ai'\n  ), '[]'::jsonb) AS notes_ai,\n  (\n    SELECT COUNT(*)\n    FROM public.person_properties pp\n    WHERE pp.person_id = p.id\n  ) AS linked_properties_count,\n  p.updated_at\nFROM matched_people p\nORDER BY p.updated_at DESC;\n    `;\n  })()\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        7824,
+        2528
+      ],
+      "id": "26ddb67a-be5f-4560-b236-f7e610cb4c42",
+      "name": "buscar_pessoa_especifica",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT column_name, data_type, is_nullable\nFROM information_schema.columns\nWHERE table_schema = 'public'\n  AND table_name = 'people'\nORDER BY ordinal_position;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        7168,
+        2752
+      ],
+      "id": "f3279af8-56ce-4104-aa08-ea0b2883db2e",
+      "name": "ver_estrutura_people",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.channel + ':' + ($json.thread_ts || $json.ts || $json.user) }}",
+        "tableName": "agent_chat_histories",
+        "contextWindowLength": 12
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        7072,
+        2560
+      ],
+      "id": "b008318b-a75d-4bb2-b855-e6876e3b4e2c",
+      "name": "Postgres Chat Memory",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        7072,
+        2352
+      ],
+      "id": "c96c5e57-9472-4055-bf41-f0858ce55ed3",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "gpPO0FA1QhoMGl7t",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=CONTEXTO DO EVENTO:\n- Origem: Slack interno da Novian\n- Modo: {{ $json.execution_mode }}\n- Usuário: {{ $json.user }}\n- Canal: {{ $json.channel }}\n- Thread: {{ $json.thread_ts }}\n- Timestamp: {{ $json.ts }}\n- Mariana no Slack: {{ $json.mariana_mention }}\n- Lucas no Slack: {{ $json.lucas_mention }}\n- Pessoas mencionadas: {{ $json.mentioned_people_summary }}\n- Ano atual em São Paulo: {{ $now.setZone('America/Sao_Paulo').format('yyyy') }}\n\nMENSAGEM ORIGINAL DO SLACK:\n{{ $json.raw_text }}\n\nMENSAGEM RECEBIDA:\n{{ $json.message }}\n\nRESUMO OPERACIONAL DE PESSOAS/LEADS:\nQuantidade no snapshot: {{ $json.people_count }}\nStatus mais comuns: {{ $json.people_status_summary }}\nIntenções mais comuns: {{ $json.people_intent_summary }}\n\nPESSOAS/LEADS NO SNAPSHOT:\n{{ $json.people_context }}\n\nCATÁLOGO RESUMIDO DE IMÓVEIS ATIVOS:\nQuantidade no snapshot: {{ $json.properties_count }}\n\nIMÓVEIS NO SNAPSHOT:\n{{ $json.properties_context }}\n\nTAREFA:\nAtue como Mariana para o time interno da Novian.\nUse primeiro o snapshot acima e use as ferramentas quando precisar consultar, confirmar, aprofundar, atualizar ou agir.\n\nREGRAS DE EXECUÇÃO:\n- O Slack é exclusivamente para comunicação com o time interno da Novian.\n- O WhatsApp é exclusivamente para comunicação com leads e só deve ser usado pela ferramenta send_whatsapp_message.\n- Nunca escreva mensagem de lead no Slack como se estivesse falando com o cliente.\n- Nunca escreva mensagem interna do time no WhatsApp.\n- Nunca misture dados de um lead com outro lead.\n- Antes de usar send_whatsapp_message, confirme qual é a pessoa correta e use apenas o contexto daquela pessoa.\n- Se houver qualquer ambiguidade sobre quem é o lead, qual é o telefone, qual é o contexto ou qual é o objetivo do follow-up, não envie WhatsApp ainda; faça 1 pergunta objetiva no Slack para o time.\n- Se a pergunta for sobre um lead específico, use buscar_pessoa_especifica quando o snapshot não bastar.\n- Antes de montar um follow-up por WhatsApp, use buscar_pessoa_especifica e get_person_history sempre que isso ajudar a personalizar com segurança.\n- Se precisarem do histórico, interações antigas, mensagens anteriores ou notas de contexto, use get_person_history.\n- Se precisarem ver imóveis vinculados a uma pessoa, use get_person_linked_properties.\n- Se pedirem atualização segura de cadastro, use update_person_safe_fields.\n- Se a dúvida for sobre imóveis, busca de imóveis ou detalhes completos, use search_active_properties_public e get_property_public_details.\n- Se a dúvida for sobre campos das tabelas, use ver_estrutura_people ou ver_estrutura_properties apenas quando necessário.\n- Se a pergunta envolver agenda, disponibilidade, remarcação, cancelamento ou busca de visitas, use as ferramentas de Google Calendar.\n- Se o melhor próximo passo for responder o time, use Send a message in Slack.\n- Se o melhor próximo passo for contatar o lead, use send_whatsapp_message.\n- Você pode chamar Send a message in Slack mais de uma vez na mesma execução quando isso melhorar a clareza.\n- Você pode chamar send_whatsapp_message mais de uma vez na mesma execução quando uma quebra em 2 mensagens curtas ficar mais natural, mas prefira poucos envios.\n- Ao escrever para leads no WhatsApp, adapte a abordagem ao contexto real: comprador, vendedor, locação, visita, retorno de interesse, follow-up solicitado pelo Lucas ou pelo time.\n- A mensagem de WhatsApp deve ser estratégica, amigável, natural e personalizada, sem parecer robótica.\n- A mensagem de WhatsApp nunca deve citar classificações internas, score, pipeline, SQL, banco, automação, thread, Slack ou discussões internas.\n- Não diga que não consegue acessar se as ferramentas ou o contexto já permitem responder.\n- Não cole JSON bruto no Slack.\n- Resuma em linguagem operacional e fácil de compartilhar com o time.\n- Se faltar contexto, faça 1 pergunta objetiva antes de assumir algo.\n\nSAÍDA FINAL:\n- A comunicação real com o time deve acontecer via ferramenta de Slack.\n- A comunicação real com leads deve acontecer via ferramenta de WhatsApp.\n- Depois de usar as ferramentas necessárias, responda apenas com um resumo interno curto do que foi feito.",
+        "options": {
+          "systemMessage": "Você é Mariana, SDR interna da Novian.\n\nVocê atua em dois canais com papéis totalmente diferentes:\n- Slack: comunicação exclusiva com o time interno da Novian.\n- WhatsApp: comunicação exclusiva com leads.\n\nVocê nunca deve confundir esses contextos.\n\nPERSONALIDADE:\n- muito amigável\n- prestativa\n- gentil\n- clara\n- colaborativa\n- segura ao lidar com dados\n- estratégica na comunicação com leads\n\nSEU PAPEL NO TIME:\n- responder dúvidas sobre leads, pessoas e imóveis\n- recuperar contexto real antes de concluir algo\n- sugerir próximos passos comerciais\n- ajudar com agenda e visitas quando fizer sentido\n- orientar o time com visão prática, humana e objetiva\n- escrever follow-ups inteligentes e humanos para leads quando o time pedir\n- colaborar com o Lucas e com outras pessoas do time no Slack\n\nSEU PAPEL COM LEADS NO WHATSAPP:\n- escrever mensagens acolhedoras, estratégicas e personalizadas\n- adaptar o tom ao contexto do lead, sem soar robótica\n- conduzir follow-ups com tato comercial e clareza\n- considerar se o lead é comprador, vendedor, locatário, proprietário ou outro perfil relacionado ao contexto imobiliário\n- usar apenas o contexto do lead correto antes de enviar qualquer mensagem\n\nFERRAMENTAS DISPONÍVEIS:\n- buscar_pessoa_especifica: localizar uma pessoa/lead por nome, telefone, email, id ou contexto recente\n- get_person_linked_properties: listar imóveis vinculados a uma pessoa\n- get_person_history: recuperar histórico e notas seguras de uma pessoa\n- update_person_safe_fields: atualizar campos seguros de uma pessoa quando o time pedir\n- search_active_properties_public: buscar imóveis ativos com filtros comerciais\n- get_property_public_details: detalhar um imóvel especifico\n- ver_estrutura_people: entender os campos da tabela people\n- ver_estrutura_properties: entender os campos da tabela properties\n- get_google_calendar_events, check_google_calendar_availability, find_duplicate_visit_candidates, create_google_calendar_event, update_google_calendar_event, delete_google_calendar_event: consultar e operar agenda de visitas\n- Get members of a channel in Slack: listar membros de um canal do Slack\n- Get the history of a channel in Slack: recuperar o histórico real do canal ou da thread atual\n- Send a message in Slack: enviar mensagens para o time interno no Slack\n- send_whatsapp_message: enviar mensagem para o lead correto no WhatsApp\n\nREGRAS IMPORTANTES:\n- Responda sempre em português do Brasil.\n- Seja gentil e acolhedora com o time, mas mantenha foco operacional.\n- Não invente dados.\n- Não exponha SQL, banco de dados, Supabase, Postgres, automação ou detalhes internos de implementação.\n- Use dados reais do snapshot, da memória e das ferramentas antes de concluir.\n- Slack é interno. WhatsApp é externo para leads. Nunca misture os dois contextos.\n- Nunca envie para o lead algo que pertença ao contexto de outro lead.\n- Nunca use send_whatsapp_message sem ter clareza sobre quem é o lead e qual telefone deve ser usado.\n- Se existir mais de um lead plausível ou qualquer dúvida sobre a pessoa certa, não envie WhatsApp; peça esclarecimento no Slack.\n- Antes de escrever um follow-up por WhatsApp, confirme o lead correto e recupere histórico/contexto quando isso aumentar a segurança da personalização.\n- Quando o Lucas ou alguém do time pedir follow-up, escreva como Mariana falando diretamente com o lead, não como se estivesse respondendo no Slack.\n- Mensagens de WhatsApp devem soar humanas, estratégicas, calorosas e úteis.\n- Mensagens de WhatsApp não devem mencionar classificação interna, score, estágio, pipeline, IA, automação ou qualquer discussão interna.\n- Se o contexto indicar comprador, fale como consultora comercial ajudando na decisão.\n- Se o contexto indicar vendedor ou proprietário, fale com postura consultiva, clara e profissional.\n- Evite mensagens longas demais; prefira clareza, contexto correto e um próximo passo objetivo.\n- Use Send a message in Slack quando precisar responder o time, pedir confirmação, compartilhar análise ou orientar próximos passos.\n- Use Get the history of a channel in Slack quando o contexto da conversa interna fizer diferença.\n- Use Get members of a channel in Slack quando precisar entender quem está no canal ou coordenar com alguém.\n- Use send_whatsapp_message apenas quando a ação correta for realmente falar com o lead.\n- Você pode chamar Send a message in Slack múltiplas vezes na mesma execução.\n- Você pode chamar send_whatsapp_message múltiplas vezes na mesma execução se necessário, mas prefira poucos envios e boa cadência.\n- Não cole JSON bruto na resposta final.\n- Prefira respostas enxutas, mas completas o suficiente para o time agir.\n- Quando faltar contexto crítico, faça apenas 1 pergunta objetiva.\n\nREGRAS DE AGENDA:\n- Trate a faixa de horário como exclusiva na agenda da Barbara Camargo.\n- Se check_google_calendar_availability retornar qualquer evento na faixa consultada, considere o horário indisponível.\n- Antes de criar visita, verifique disponibilidade.\n- Para remarcação, localize o evento correto e use update_google_calendar_event.\n- Se houver duplicidade plausível, use find_duplicate_visit_candidates e só confirme depois da limpeza ou confirmação.\n\nESTILO:\n- português do Brasil\n- humano\n- gentil\n- direto\n- operacional no Slack\n- caloroso e estratégico no WhatsApp\n- sem emojis\n- sem marketing exagerado\n- sem resposta longa desnecessária\n\nGUIA DE MENSAGEM PARA LEADS NO WHATSAPP:\n- sempre contextualize a abordagem com base no histórico real ou no pedido do time\n- reconheça o momento do lead com naturalidade\n- convide para a próxima ação com leveza\n- evite pressão excessiva\n- nunca reutilize detalhes de outra pessoa\n- quando não houver personalização suficiente, faça o time esclarecer antes do envio\n\nFORMATO PARA RESUMO INTERNO:\nResumo curto do que você validou, quais ferramentas usou, se respondeu o time no Slack, se enviou WhatsApp para o lead e qual próximo passo ficou recomendado.",
+          "maxIterations": 15
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        7248,
+        2080
+      ],
+      "id": "60931463-e24c-43ad-9345-45c94e0e8eb8",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Normalize Slack Event').first().json;\nconst people = $items('Buscar pessoas atuais').map((item) => item.json);\nconst properties = $items('Buscar imóveis ativos').map((item) => item.json);\n\nfunction compact(value) {\n  if (Array.isArray(value)) {\n    return value\n      .map((item) => compact(item))\n      .filter((item) => item !== null && item !== undefined && item !== '' && !(Array.isArray(item) && item.length === 0));\n  }\n\n  if (value && typeof value === 'object') {\n    const result = {};\n    for (const [key, item] of Object.entries(value)) {\n      if (item === null || item === undefined || item === '') continue;\n      const normalized = compact(item);\n      if (normalized === null || normalized === undefined || normalized === '') continue;\n      if (Array.isArray(normalized) && normalized.length === 0) continue;\n      if (normalized && typeof normalized === 'object' && !Array.isArray(normalized) && Object.keys(normalized).length === 0) continue;\n      result[key] = normalized;\n    }\n    return result;\n  }\n\n  return value;\n}\n\nfunction summarizeCounts(items, key) {\n  const counts = new Map();\n  for (const item of items) {\n    const value = String(item?.[key] || 'sem_' + key).trim() || 'sem_' + key;\n    counts.set(value, (counts.get(value) || 0) + 1);\n  }\n\n  return Array.from(counts.entries())\n    .sort((a, b) => b[1] - a[1])\n    .slice(0, 6)\n    .map(([label, count]) => `${label}: ${count}`)\n    .join(' | ') || 'Sem dados suficientes';\n}\n\nconst simplifiedPeople = people.map((person) => compact(person));\nconst simplifiedProperties = properties.map((property) => compact(property));\n\nreturn [{\n  json: {\n    ...original,\n    people_count: simplifiedPeople.length,\n    properties_count: simplifiedProperties.length,\n    people_status_summary: summarizeCounts(simplifiedPeople, 'crm_status'),\n    people_intent_summary: summarizeCounts(simplifiedPeople, 'intent'),\n    people_context: simplifiedPeople.length\n      ? JSON.stringify(simplifiedPeople, null, 2)\n      : 'Nenhuma pessoa/lead encontrada no snapshot atual da tabela people.',\n    properties_context: simplifiedProperties.length\n      ? JSON.stringify(simplifiedProperties, null, 2)\n      : 'Nenhum imóvel ativo encontrado no snapshot atual da tabela properties.'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7024,
+        2080
+      ],
+      "id": "76c6432a-60cf-4eb8-ab9b-98b7c1807b85",
+      "name": "Preparar contexto operacional"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  p.id,\n  p.full_name,\n  p.primary_phone,\n  p.email,\n  p.crm_status,\n  p.crm_score,\n  p.crm_unread,\n  p.origin,\n  p.tags,\n  p.last_interaction_preview,\n  COALESCE(p.metadata->>'latest_real_estate_intent', p.metadata->'lead_profile'->>'intent') AS intent,\n  p.metadata->'lead_profile' AS lead_profile,\n  p.updated_at\nFROM public.people p\nORDER BY p.updated_at DESC\nLIMIT 40;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        6624,
+        2032
+      ],
+      "id": "ff27e2c1-4310-490d-be61-e1b2e5f4eb1a",
+      "name": "Buscar pessoas atuais",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  p.id,\n  p.title,\n  p.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text) AS public_url,\n  p.address,\n  p.price,\n  p.status,\n  CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END AS cover_image,\n  LEFT(NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(p.description, ''), '<[^>]+>', ' ', 'g'), '\\s+', ' ', 'g'), ''), 220) AS description_plain,\n  COALESCE(p.custom_data->>'property_type', '') AS property_type,\n  COALESCE(p.custom_data->>'city', '') AS city,\n  COALESCE(p.custom_data->>'neighborhood', '') AS neighborhood,\n  COALESCE(p.custom_data->>'bedrooms', '') AS bedrooms,\n  COALESCE(p.custom_data->>'bathrooms', '') AS bathrooms,\n  COALESCE(p.custom_data->>'parking', '') AS parking,\n  COALESCE(p.custom_data->>'built_area', p.custom_data->>'area', '') AS built_area,\n  p.updated_at\nFROM public.properties p\nWHERE p.status = 'active'\nORDER BY p.updated_at DESC\nLIMIT 30;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        6832,
+        2032
+      ],
+      "id": "e52399bb-ef2c-45f1-b381-004440088420",
+      "name": "Buscar imóveis ativos",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json;\n\nconst marianaMention = '<@U0AV78P1486>';\nconst lucasMention = '<@U0AV9GJS8F4>';\nconst knownMentions = {\n  U0AV78P1486: 'Mariana Silva',\n  U0AV9GJS8F4: 'Lucas Andrade',\n};\n\nfunction extractSlackText(payload) {\n  const raw = typeof payload.text === 'string' ? payload.text : '';\n  if (raw.trim()) {\n    return raw.replace(/<@[A-Z0-9]+>/g, '').replace(/\\s+/g, ' ').trim();\n  }\n\n  const parts = [];\n  for (const block of payload.blocks || []) {\n    for (const element of block.elements || []) {\n      for (const item of element.elements || []) {\n        if (item.type === 'text' && item.text) {\n          parts.push(item.text);\n        }\n      }\n    }\n  }\n\n  return parts.join(' ').replace(/\\s+/g, ' ').trim();\n}\n\nfunction extractMentionedUserIds(text) {\n  return Array.from(new Set(String(text || '').match(/<@([A-Z0-9]+)>/g)?.map((token) => token.slice(2, -1)) || []));\n}\n\nconst message = extractSlackText(event);\nconst ts = event.ts || event.event_ts || '';\nconst threadTs = event.thread_ts || ts;\nconst mentionedUserIds = extractMentionedUserIds(event.text || '');\nconst mentionedPeopleSummary = mentionedUserIds.length\n  ? mentionedUserIds.map((id) => knownMentions[id] ? `${knownMentions[id]} (<@${id}>)` : `<@${id}>`).join(' | ')\n  : 'Nenhuma pessoa mencionada explicitamente';\n\nreturn [{\n  json: {\n    message,\n    raw_text: event.text || '',\n    channel: event.channel,\n    ts,\n    thread_ts: threadTs,\n    user: event.user,\n    type: event.type,\n    is_thread: !!event.thread_ts,\n    execution_mode: 'slack',\n    conversation_key: `${event.channel || 'unknown'}:${threadTs || ts || event.user || 'unknown'}`,\n    source: 'slack_internal_novian',\n    mariana_mention: marianaMention,\n    lucas_mention: lucasMention,\n    mentioned_user_ids: mentionedUserIds,\n    mentioned_people_summary: mentionedPeopleSummary,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6416,
+        2080
+      ],
+      "id": "ea5e1518-ab03-47af-9930-6165882d1d8e",
+      "name": "Normalize Slack Event"
+    },
+    {
+      "parameters": {
+        "trigger": [
+          "app_mention"
+        ],
+        "watchWorkspace": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        6208,
+        2080
+      ],
+      "id": "c7c388f5-1d2e-4e53-861d-4b35b608d7e1",
+      "name": "Slack Trigger",
+      "webhookId": "dbaf9f1d-e438-43ba-8bd2-20b737d5a403",
+      "credentials": {
+        "slackApi": {
+          "id": "cWqjMuFcOcuKI2Ex",
+          "name": "Mariana Silva"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para listar os imóveis ativos já vinculados a uma pessoa/lead específica. Útil quando o time quiser entender interesse, carteira vinculada ou contexto comercial de um contato.",
+        "operation": "executeQuery",
+        "query": "WITH target AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujos imóveis vinculados devem ser consultados\", \"string\") }}'), '') IS NOT NULL\n    AND (\n      p.id::text = NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujos imóveis vinculados devem ser consultados\", \"string\") }}'), '')\n      OR p.full_name ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujos imóveis vinculados devem ser consultados\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.email, '') ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujos imóveis vinculados devem ser consultados\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.primary_phone, '') ILIKE '%' || REGEXP_REPLACE(NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujos imóveis vinculados devem ser consultados\", \"string\") }}'), ''), '\\D', '', 'g') || '%'\n    )\n  )\n  ORDER BY p.updated_at DESC\n  LIMIT 1\n)\nSELECT\n  t.id AS person_id,\n  t.full_name,\n  t.primary_phone,\n  t.email,\n  pr.id AS property_id,\n  pr.title,\n  pr.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(pr.slug, ''), pr.id::text) AS public_url,\n  pr.address,\n  pr.price,\n  pr.status,\n  CASE WHEN COALESCE(pr.cover_image, '') ~* '^https?://' THEN pr.cover_image ELSE NULL END AS cover_image,\n  pr.custom_data->>'property_type' AS property_type,\n  pr.custom_data->>'city' AS city,\n  pr.custom_data->>'neighborhood' AS neighborhood,\n  pp.relationship_type,\n  pp.notes,\n  pp.source,\n  pp.updated_at\nFROM target t\nJOIN public.person_properties pp ON pp.person_id = t.id\nJOIN public.properties pr ON pr.id = pp.property_id\nWHERE pr.status = 'active'\nORDER BY pp.updated_at DESC\nLIMIT 10;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        7984,
+        2560
+      ],
+      "id": "75be4192-0867-4c19-bc55-d13d35947a8d",
+      "name": "get_person_linked_properties",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para recuperar histórico, threads recentes, mensagens antigas e notas seguras de uma pessoa/lead específica. Use antes de repetir pergunta ou quando o time pedir contexto mais profundo.",
+        "operation": "executeQuery",
+        "query": "WITH target AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujo histórico deve ser consultado\", \"string\") }}'), '') IS NOT NULL\n    AND (\n      p.id::text = NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujo histórico deve ser consultado\", \"string\") }}'), '')\n      OR p.full_name ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujo histórico deve ser consultado\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.email, '') ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujo histórico deve ser consultado\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.primary_phone, '') ILIKE '%' || REGEXP_REPLACE(NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa cujo histórico deve ser consultado\", \"string\") }}'), ''), '\\D', '', 'g') || '%'\n    )\n  )\n  ORDER BY p.updated_at DESC\n  LIMIT 1\n), params AS (\n  SELECT\n    NULLIF(BTRIM('{{ $fromAI(\"search_text\", \"Termo opcional para filtrar um assunto específico no histórico\", \"string\") }}'), '') AS search_text,\n    LEAST(\n      GREATEST(\n        COALESCE(\n          CASE\n            WHEN NULLIF(BTRIM('{{ $fromAI(\"message_limit\", \"Quantidade de mensagens a retornar; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n              THEN NULLIF(BTRIM('{{ $fromAI(\"message_limit\", \"Quantidade de mensagens a retornar; opcional\", \"string\") }}'), '')::int\n            ELSE NULL\n          END,\n          12\n        ),\n        1\n      ),\n      30\n    ) AS message_limit\n), threads AS (\n  SELECT\n    ct.thread_id,\n    ct.title,\n    ct.preview,\n    ct.status,\n    ct.last_message_at,\n    ct.updated_at,\n    ct.thread_kind\n  FROM public.chat_threads ct\n  JOIN target t ON t.id = ct.person_id\n  ORDER BY ct.updated_at DESC NULLS LAST\n  LIMIT 5\n), messages AS (\n  SELECT\n    cm.thread_id,\n    cm.role,\n    cm.agent,\n    cm.content,\n    cm.created_at\n  FROM public.chat_messages cm\n  JOIN threads th ON th.thread_id = cm.thread_id\n  CROSS JOIN params p\n  WHERE cm.is_system = false\n    AND (p.search_text IS NULL OR cm.content ILIKE '%' || p.search_text || '%')\n  ORDER BY cm.created_at DESC\n  LIMIT (SELECT message_limit FROM params)\n)\nSELECT\n  t.id,\n  t.full_name,\n  t.primary_phone,\n  t.email,\n  t.crm_status,\n  t.crm_score,\n  t.last_interaction_preview,\n  COALESCE(t.metadata->>'latest_real_estate_intent', t.metadata->'lead_profile'->>'intent') AS intent,\n  t.metadata->'lead_profile' AS lead_profile,\n  COALESCE((\n    SELECT jsonb_agg(jsonb_build_object(\n      'thread_id', th.thread_id,\n      'title', th.title,\n      'preview', th.preview,\n      'status', th.status,\n      'last_message_at', th.last_message_at,\n      'updated_at', th.updated_at,\n      'thread_kind', th.thread_kind\n    ) ORDER BY th.updated_at DESC)\n    FROM threads th\n  ), '[]'::jsonb) AS threads,\n  COALESCE((\n    SELECT jsonb_agg(jsonb_build_object(\n      'thread_id', m.thread_id,\n      'role', m.role,\n      'agent', m.agent,\n      'content', m.content,\n      'created_at', m.created_at\n    ) ORDER BY m.created_at DESC)\n    FROM messages m\n  ), '[]'::jsonb) AS messages,\n  COALESCE((\n    SELECT jsonb_agg(note->>'content')\n    FROM jsonb_array_elements(COALESCE(t.metadata->'lead_notes', '[]'::jsonb)) AS note\n    WHERE COALESCE(note->>'visibility', '') = 'ai'\n  ), '[]'::jsonb) AS notes_ai\nFROM target t;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        8192,
+        2560
+      ],
+      "id": "ae9d8260-7e8d-4d19-a6f4-b043f5fc8dbd",
+      "name": "get_person_history",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para atualizar imediatamente campos seguros de uma pessoa/lead quando o time pedir uma correção ou ajuste operacional. Não use para inventar dados.",
+        "operation": "executeQuery",
+        "query": "WITH target AS (\n  SELECT p.*\n  FROM public.people p\n  WHERE (\n    NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa que deve ser atualizada\", \"string\") }}'), '') IS NOT NULL\n    AND (\n      p.id::text = NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa que deve ser atualizada\", \"string\") }}'), '')\n      OR p.full_name ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa que deve ser atualizada\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.email, '') ILIKE '%' || NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa que deve ser atualizada\", \"string\") }}'), '') || '%'\n      OR COALESCE(p.primary_phone, '') ILIKE '%' || REGEXP_REPLACE(NULLIF(BTRIM('{{ $fromAI(\"person_query\", \"Nome, telefone, email ou id da pessoa que deve ser atualizada\", \"string\") }}'), ''), '\\D', '', 'g') || '%'\n    )\n  )\n  ORDER BY p.updated_at DESC\n  LIMIT 1\n), payload AS (\n  SELECT\n    NULLIF(BTRIM('{{ $fromAI(\"full_name\", \"Nome completo corrigido; opcional\", \"string\") }}'), '') AS full_name,\n    NULLIF(LOWER(BTRIM('{{ $fromAI(\"email\", \"Email valido; opcional\", \"string\") }}')), '') AS email,\n    NULLIF(BTRIM('{{ $fromAI(\"crm_status\", \"Novo status comercial; opcional\", \"string\") }}'), '') AS crm_status,\n    CASE LOWER(NULLIF(BTRIM('{{ $fromAI(\"intent\", \"buy, sell, rent ou unknown; opcional\", \"string\") }}'), ''))\n      WHEN 'buy' THEN 'buy'\n      WHEN 'sell' THEN 'sell'\n      WHEN 'rent' THEN 'rent'\n      WHEN 'unknown' THEN 'unknown'\n      ELSE NULL\n    END AS intent\n), updated AS (\n  UPDATE public.people p\n  SET\n    full_name = COALESCE(payload.full_name, p.full_name),\n    email = COALESCE(payload.email, p.email),\n    crm_status = COALESCE(payload.crm_status, p.crm_status),\n    metadata = CASE\n      WHEN payload.intent IS NOT NULL THEN jsonb_set(COALESCE(p.metadata, '{}'::jsonb), '{latest_real_estate_intent}', to_jsonb(payload.intent), true)\n      ELSE COALESCE(p.metadata, '{}'::jsonb)\n    END,\n    updated_at = now()\n  FROM target t, payload\n  WHERE p.id = t.id\n  RETURNING p.id, p.full_name, p.primary_phone, p.email, p.crm_status, p.crm_score, p.updated_at, p.metadata\n)\nSELECT\n  id,\n  full_name,\n  primary_phone,\n  email,\n  crm_status,\n  crm_score,\n  updated_at,\n  COALESCE(metadata->>'latest_real_estate_intent', metadata->'lead_profile'->>'intent') AS intent\nFROM updated;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        8400,
+        2560
+      ],
+      "id": "b640fafd-a95a-4ea0-a869-e5a242ebc026",
+      "name": "update_person_safe_fields",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para buscar imóveis ativos com filtros comerciais seguros. Retorna dados públicos e úteis para o time interno comparar opções e responder rápido.",
+        "operation": "executeQuery",
+        "query": "WITH filters AS (\n  SELECT\n    NULLIF(BTRIM('{{ $fromAI(\"query_text\", \"Termo geral para busca livre, como bairro, nome do imóvel ou preferência do cliente\", \"string\") }}'), '') AS query_text,\n    NULLIF(BTRIM('{{ $fromAI(\"city\", \"Cidade desejada; opcional\", \"string\") }}'), '') AS city,\n    NULLIF(BTRIM('{{ $fromAI(\"neighborhood\", \"Bairro ou região desejada; opcional\", \"string\") }}'), '') AS neighborhood,\n    NULLIF(BTRIM('{{ $fromAI(\"property_type\", \"Tipo do imóvel; opcional\", \"string\") }}'), '') AS property_type,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"min_price\", \"Preço mínimo em número inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n        THEN NULLIF(BTRIM('{{ $fromAI(\"min_price\", \"Preço mínimo em número inteiro; opcional\", \"string\") }}'), '')::numeric\n      ELSE NULL\n    END AS min_price,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"max_price\", \"Preço máximo em número inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n        THEN NULLIF(BTRIM('{{ $fromAI(\"max_price\", \"Preço máximo em número inteiro; opcional\", \"string\") }}'), '')::numeric\n      ELSE NULL\n    END AS max_price,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"bedrooms_min\", \"Mínimo de quartos em número inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n        THEN NULLIF(BTRIM('{{ $fromAI(\"bedrooms_min\", \"Mínimo de quartos em número inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS bedrooms_min,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"bathrooms_min\", \"Mínimo de banheiros em número inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n        THEN NULLIF(BTRIM('{{ $fromAI(\"bathrooms_min\", \"Mínimo de banheiros em número inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS bathrooms_min,\n    CASE\n      WHEN NULLIF(BTRIM('{{ $fromAI(\"parking_min\", \"Mínimo de vagas em número inteiro; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n        THEN NULLIF(BTRIM('{{ $fromAI(\"parking_min\", \"Mínimo de vagas em número inteiro; opcional\", \"string\") }}'), '')::int\n      ELSE NULL\n    END AS parking_min,\n    LEAST(\n      GREATEST(\n        COALESCE(\n          CASE\n            WHEN NULLIF(BTRIM('{{ $fromAI(\"limit\", \"Quantidade de imóveis a retornar; opcional\", \"string\") }}'), '') ~ '^[0-9]+$'\n              THEN NULLIF(BTRIM('{{ $fromAI(\"limit\", \"Quantidade de imóveis a retornar; opcional\", \"string\") }}'), '')::int\n            ELSE NULL\n          END,\n          10\n        ),\n        1\n      ),\n      20\n    ) AS result_limit\n), matched AS (\n  SELECT\n    p.*,\n    COALESCE(p.custom_data, '{}'::jsonb) AS custom_data_safe_source,\n    NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(p.description, ''), '<[^>]+>', ' ', 'g'), '\\s+', ' ', 'g'), '') AS description_plain_source\n  FROM public.properties p\n  CROSS JOIN filters f\n  WHERE p.status = 'active'\n    AND (f.query_text IS NULL OR p.title ILIKE '%' || f.query_text || '%' OR p.address ILIKE '%' || f.query_text || '%' OR COALESCE(p.slug, '') ILIKE '%' || f.query_text || '%' OR COALESCE(p.description, '') ILIKE '%' || f.query_text || '%')\n    AND (f.city IS NULL OR COALESCE(p.custom_data->>'city', '') ILIKE '%' || f.city || '%')\n    AND (f.neighborhood IS NULL OR COALESCE(p.custom_data->>'neighborhood', '') ILIKE '%' || f.neighborhood || '%')\n    AND (f.property_type IS NULL OR COALESCE(p.custom_data->>'property_type', '') ILIKE '%' || f.property_type || '%')\n    AND (f.min_price IS NULL OR p.price >= f.min_price)\n    AND (f.max_price IS NULL OR p.price <= f.max_price)\n    AND (f.bedrooms_min IS NULL OR COALESCE(NULLIF(p.custom_data->>'bedrooms', ''), '0')::int >= f.bedrooms_min)\n    AND (f.bathrooms_min IS NULL OR COALESCE(NULLIF(p.custom_data->>'bathrooms', ''), '0')::int >= f.bathrooms_min)\n    AND (f.parking_min IS NULL OR COALESCE(NULLIF(p.custom_data->>'parking', ''), '0')::int >= f.parking_min)\n)\nSELECT\n  id,\n  title,\n  slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(slug, ''), id::text) AS public_url,\n  address,\n  price,\n  status,\n  CASE WHEN COALESCE(cover_image, '') ~* '^https?://' THEN cover_image ELSE NULL END AS cover_image,\n  description_plain_source AS description_plain,\n  custom_data_safe_source->>'property_type' AS property_type,\n  custom_data_safe_source->>'city' AS city,\n  custom_data_safe_source->>'neighborhood' AS neighborhood,\n  custom_data_safe_source->>'bedrooms' AS bedrooms,\n  custom_data_safe_source->>'bathrooms' AS bathrooms,\n  custom_data_safe_source->>'parking' AS parking,\n  COALESCE(custom_data_safe_source->>'built_area', custom_data_safe_source->>'area') AS built_area,\n  updated_at\nFROM matched\nORDER BY updated_at DESC\nLIMIT (SELECT result_limit FROM filters);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        8608,
+        2560
+      ],
+      "id": "4d163d40-4e02-468e-8314-5d1094ea4862",
+      "name": "search_active_properties_public",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para obter todos os detalhes públicos e seguros de um imóvel específico citado pelo time. A referência pode ser id, slug, título ou endereço.",
+        "operation": "executeQuery",
+        "query": "WITH ref AS (\n  SELECT NULLIF(BTRIM('{{ $fromAI(\"reference\", \"Referencia do imóvel: id, slug, título ou endereço citado pelo time\", \"string\") }}'), '') AS reference\n), matched_properties AS (\n  SELECT p.*\n  FROM public.properties p\n  CROSS JOIN ref\n  WHERE p.status = 'active'\n    AND ref.reference IS NOT NULL\n    AND (\n      p.id::text = ref.reference\n      OR COALESCE(p.slug, '') ILIKE ref.reference\n      OR COALESCE(p.slug, '') ILIKE '%' || ref.reference || '%'\n      OR COALESCE(p.title, '') ILIKE '%' || ref.reference || '%'\n      OR COALESCE(p.address, '') ILIKE '%' || ref.reference || '%'\n    )\n  ORDER BY\n    CASE WHEN p.id::text = ref.reference THEN 0 ELSE 1 END,\n    p.updated_at DESC\n  LIMIT 1\n), sanitized AS (\n  SELECT\n    p.*,\n    COALESCE(p.custom_data, '{}'::jsonb) AS custom_data_safe_source,\n    COALESCE(p.landing_page, '{}'::jsonb) AS landing_page_safe_source,\n    NULLIF(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(p.description, ''), '<[^>]+>', ' ', 'g'), '\\s+', ' ', 'g'), '') AS description_plain_source\n  FROM matched_properties p\n)\nSELECT\n  p.id,\n  p.title,\n  p.slug,\n  'https://www.novian.com.br/imoveis/' || COALESCE(NULLIF(p.slug, ''), p.id::text) AS public_url,\n  p.address,\n  p.price,\n  p.status,\n  COALESCE(p.description, '') AS description,\n  p.description_plain_source AS description_plain,\n  CASE WHEN COALESCE(p.cover_image, '') ~* '^https?://' THEN p.cover_image ELSE NULL END AS cover_image,\n  COALESCE((\n    SELECT jsonb_agg(image_url)\n    FROM (\n      SELECT image_url\n      FROM unnest(COALESCE(p.images, ARRAY[]::text[])) AS image_url\n      WHERE COALESCE(image_url, '') ~* '^https?://'\n    ) visible_images\n  ), '[]'::jsonb) AS images,\n  COALESCE(array_length(p.images, 1), 0) AS image_count,\n  CASE WHEN COALESCE(p.map_embed_url, '') ~* '^https?://' THEN p.map_embed_url ELSE NULL END AS map_embed_url,\n  COALESCE(NULLIF(p.custom_data_safe_source->>'built_area', ''), NULLIF(p.custom_data_safe_source->>'area', '')) AS built_area,\n  NULLIF(p.custom_data_safe_source->>'land_area', '') AS land_area,\n  NULLIF(p.custom_data_safe_source->>'bedrooms', '') AS bedrooms,\n  NULLIF(p.custom_data_safe_source->>'bathrooms', '') AS bathrooms,\n  NULLIF(p.custom_data_safe_source->>'suites', '') AS suites,\n  NULLIF(p.custom_data_safe_source->>'parking', '') AS parking,\n  NULLIF(p.custom_data_safe_source->>'property_type', '') AS property_type,\n  NULLIF(p.custom_data_safe_source->>'neighborhood', '') AS neighborhood,\n  NULLIF(p.custom_data_safe_source->>'city', '') AS city,\n  NULLIF(p.custom_data_safe_source->>'condominium_fee', '') AS condominium_fee,\n  NULLIF(p.custom_data_safe_source->>'iptu', '') AS iptu,\n  NULLIF(p.custom_data_safe_source->>'floor', '') AS floor,\n  NULLIF(p.custom_data_safe_source->>'furnished', '') AS furnished,\n  p.landing_page_safe_source AS landing_page\nFROM sanitized p;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        8816,
+        2560
+      ],
+      "id": "60898e4b-05fc-4738-9312-17d74e24f15b",
+      "name": "get_property_public_details",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT column_name, data_type, is_nullable\nFROM information_schema.columns\nWHERE table_schema = 'public'\n  AND table_name = 'properties'\nORDER BY ordinal_position;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        9008,
+        2560
+      ],
+      "id": "d501c437-5645-466c-bc9d-0faa06c7e6a9",
+      "name": "ver_estrutura_properties",
+      "credentials": {
+        "postgres": {
+          "id": "ITQySylcff0eZFzA",
+          "name": "Novian Supabase DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para listar, resumir ou localizar eventos já existentes na agenda da Barbara Camargo. Também use para encontrar o eventId antes de remarcar ou cancelar uma visita.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "returnAll": true,
+        "timeMin": "={{ (() => { const raw = String($fromAI('timeMin', 'Data e hora inicial em ISO 8601 para consultar a agenda', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "timeMax": "={{ (() => { const raw = String($fromAI('timeMax', 'Data e hora final em ISO 8601 para consultar a agenda', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "options": {
+          "query": "={{ (() => { const raw = $fromAI('query', 'Texto curto opcional para filtrar eventos por nome, telefone, email, imóvel ou endereço', 'string') || ''; return String(raw).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\r\\n\\t]+/g, ' ').replace(/[^a-zA-Z0-9@._,:\\-/ ]+/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 160); })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        9232,
+        2560
+      ],
+      "id": "c2182645-aa37-492f-858a-b4930810fef2",
+      "name": "get_google_calendar_events",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use antes de criar ou revisar visitas para detectar possíveis duplicidades na agenda da Barbara Camargo. Se houver candidato plausível, confirme antes de seguir.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "returnAll": true,
+        "timeMin": "={{ (() => { const raw = String($fromAI('timeMin', 'Data e hora inicial em ISO 8601 para procurar visitas duplicadas', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "timeMax": "={{ (() => { const raw = String($fromAI('timeMax', 'Data e hora final em ISO 8601 para procurar visitas duplicadas', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "options": {
+          "query": "={{ (() => { const raw = $fromAI('query', 'Texto curto opcional para filtrar eventos por nome, telefone, email, imóvel ou endereço', 'string') || ''; return String(raw).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\r\\n\\t]+/g, ' ').replace(/[^a-zA-Z0-9@._,:\\-/ ]+/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 160); })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        9440,
+        2560
+      ],
+      "id": "b5d561cc-5c66-4f76-810f-2fa96d4ee27f",
+      "name": "find_duplicate_visit_candidates",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para verificar se uma faixa de horário está ocupada na agenda da Barbara Camargo. Se retornar qualquer evento na faixa, considere o horário indisponível.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "returnAll": true,
+        "timeMin": "={{ (() => { const raw = String($fromAI('timeMin', 'Data e hora inicial em ISO 8601 para verificar indisponibilidade da agenda', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "timeMax": "={{ (() => { const raw = String($fromAI('timeMax', 'Data e hora final em ISO 8601 para verificar indisponibilidade da agenda', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        9648,
+        2560
+      ],
+      "id": "7ee94093-d7bd-4ba5-8e35-dc6898f9e0d2",
+      "name": "check_google_calendar_availability",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para criar uma nova visita na agenda da Barbara Camargo depois de confirmar data, hora, duração, imóvel/endereço e pelo menos um email válido do participante.",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "start": "={{ (() => { const raw = String($fromAI('start', 'Data e hora de inicio do evento em ISO 8601 completo com offset explicito', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "end": "={{ (() => { const raw = String($fromAI('end', 'Data e hora de fim do evento em ISO 8601 completo com offset explicito', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+        "additionalFields": {
+          "attendees": "={{ (() => { const raw = $fromAI('attendees', 'Emails validos separados por virgula para incluir no evento', 'string') || ''; const emails = raw.split(',').map((email) => email.trim().toLowerCase()).filter((email) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)); if (!emails.length) { throw new Error('Pelo menos um e-mail valido e obrigatorio para criar visita'); } return emails; })() }}",
+          "description": "={{ (() => { const raw = $fromAI('description', 'Descricao padronizada, visivel ao cliente e com URL publica do imovel quando existir', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').replace(/\\r\\n/g, '\\n').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E\\n]/g, '').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim(); })() }}",
+          "location": "={{ (() => { const raw = $fromAI('location', 'Endereco do imovel ou local da visita em ASCII simples', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E]/g, ' ').replace(/\\s+/g, ' ').trim(); })() }}",
+          "summary": "={{ (() => { const raw = $fromAI('summary', 'Titulo curto e claro do evento em ASCII simples', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E]/g, ' ').replace(/\\s+/g, ' ').trim(); })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        9856,
+        2560
+      ],
+      "id": "88718618-8c24-41a2-ae7c-9e3369fde6b8",
+      "name": "create_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para remarcar ou atualizar um evento existente da agenda da Barbara Camargo depois de localizar o eventId correto.",
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "eventId": "={{ $fromAI('eventId', 'ID exato do evento do Google Calendar que deve ser atualizado', 'string') }}",
+        "updateFields": {
+          "description": "={{ (() => { const raw = $fromAI('description', 'Descricao padronizada e visivel ao cliente', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').replace(/\\r\\n/g, '\\n').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E\\n]/g, '').replace(/[ \\t]+\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim(); })() }}",
+          "end": "={{ (() => { const raw = String($fromAI('end', 'Nova data e hora de fim em ISO 8601 completo com offset explicito', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+          "location": "={{ (() => { const raw = $fromAI('location', 'Endereco do imovel ou local da visita em ASCII simples', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E]/g, ' ').replace(/\\s+/g, ' ').trim(); })() }}",
+          "start": "={{ (() => { const raw = String($fromAI('start', 'Nova data e hora de inicio em ISO 8601 completo com offset explicito', 'string') || ''); return raw.replace(/^[\\s'\\\"`]+|[\\s'\\\"`]+$/g, '').replace(/[;,]+$/g, '').replace(/\\u00A0/g, ' ').replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})\\s+([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2}))$/, '$1T$2').trim(); })() }}",
+          "summary": "={{ (() => { const raw = $fromAI('summary', 'Titulo curto e claro do evento em ASCII simples', 'string') || ''; return String(raw).replace(/\\u00A0/g, ' ').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\uFFFD/g, '').replace(/[^\\x20-\\x7E]/g, ' ').replace(/\\s+/g, ' ').trim(); })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        10064,
+        2560
+      ],
+      "id": "cfa1e7a5-2408-4133-aeb1-66fb8e4a5424",
+      "name": "update_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para cancelar ou excluir um evento existente da agenda da Barbara Camargo quando o eventId correto estiver confirmado.",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "barbara.camargo@novian.com.br",
+          "mode": "list",
+          "cachedResultName": "Barbara Camargo"
+        },
+        "eventId": "={{ $fromAI('eventId', 'ID exato do evento do Google Calendar que deve ser cancelado', 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        10272,
+        2560
+      ],
+      "id": "00f33633-eadc-4aa7-ba8d-adb066ce574f",
+      "name": "delete_google_calendar_event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Pjbx8c7uXRmoDalm",
+          "name": "Helder Perez - GC"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para listar os membros de um canal do Slack interno da Novian. Pode consultar o canal atual por padrão ou outro canal quando channel_id for informado.",
+        "resource": "channel",
+        "operation": "member",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ (() => { const requested = String($fromAI('channel_id', 'ID do canal do Slack; opcional. Quando vazio, use o canal do contexto atual.', 'string') || '').trim(); return requested || $('Normalize Slack Event').first().json.channel || ''; })() }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "resolveData": true
+      },
+      "type": "n8n-nodes-base.slackTool",
+      "typeVersion": 2.4,
+      "position": [
+        7328,
+        2880
+      ],
+      "id": "4d4458c7-b2c3-485e-a83a-5e19f64ffaa3",
+      "name": "Get members of a channel in Slack",
+      "webhookId": "a3e5ae52-e364-45b6-90f1-89826b2ff6aa",
+      "credentials": {
+        "slackApi": {
+          "id": "cWqjMuFcOcuKI2Ex",
+          "name": "Mariana Silva"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para recuperar o histórico real de mensagens do Slack interno da Novian. Por padrão usa o canal do contexto atual e limita para a thread atual quando houver thread_ts.",
+        "resource": "channel",
+        "operation": "history",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ (() => { const requested = String($fromAI('channel_id', 'ID do canal do Slack; opcional. Quando vazio, use o canal do contexto atual.', 'string') || '').trim(); return requested || $('Normalize Slack Event').first().json.channel || ''; })() }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filters": {
+          "latest": "={{ (() => { const requested = String($fromAI('latest', 'Timestamp latest opcional para limitar o histórico; quando vazio, use o timestamp atual se existir.', 'string') || '').trim(); return requested || $('Normalize Slack Event').first().json.ts || ''; })() }}",
+          "oldest": "={{ (() => { const requested = String($fromAI('oldest', 'Timestamp oldest opcional para limitar o histórico; quando vazio, use o início da thread atual se existir.', 'string') || '').trim(); return requested || $('Normalize Slack Event').first().json.thread_ts || ''; })() }}"
+        }
+      },
+      "type": "n8n-nodes-base.slackTool",
+      "typeVersion": 2.4,
+      "position": [
+        7536,
+        2896
+      ],
+      "id": "ef4c18a0-5450-4292-b8d6-6c0f1a6fde3f",
+      "name": "Get the history of a channel in Slack",
+      "webhookId": "a3e5ae52-e364-45b6-90f1-89826b2ff6aa",
+      "credentials": {
+        "slackApi": {
+          "id": "cWqjMuFcOcuKI2Ex",
+          "name": "Mariana Silva"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use para enviar mensagens ao time interno no Slack. Por padrão responde no canal e thread do contexto atual, mas pode receber outro channel_id ou thread_ts. Nunca use esta ferramenta para falar com leads.",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ (() => { const requested = String($fromAI('channel_id', 'ID do canal do Slack; opcional. Quando vazio, use o canal do contexto atual.', 'string') || '').trim(); return requested || $('Normalize Slack Event').first().json.channel || ''; })() }}",
+          "mode": "id"
+        },
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('message_text', 'Texto final que deve ser enviado ao Slack', 'string') }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ (() => { const requested = String($fromAI('thread_ts', 'Thread timestamp opcional. Use CURRENT para thread atual, CHANNEL para enviar fora de thread, ou informe um ts específico.', 'string') || 'CURRENT').trim().toUpperCase(); if (!requested || requested === 'CURRENT') { return $('Normalize Slack Event').first().json.thread_ts || ''; } if (requested === 'CHANNEL' || requested === 'NONE') { return ''; } return String($fromAI('thread_ts', 'Thread timestamp opcional. Use CURRENT para thread atual, CHANNEL para enviar fora de thread, ou informe um ts específico.', 'string') || '').trim(); })() }}"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.slackTool",
+      "typeVersion": 2.4,
+      "position": [
+        7712,
+        2912
+      ],
+      "id": "edcc63ad-8a59-43c5-b0e0-23a53bb6887f",
+      "name": "Send a message in Slack",
+      "webhookId": "a3e5ae52-e364-45b6-90f1-89826b2ff6aa",
+      "credentials": {
+        "slackApi": {
+          "id": "cWqjMuFcOcuKI2Ex",
+          "name": "Mariana Silva"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ZBVdRH82Pg8wK5sJ",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ZBVdRH82Pg8wK5sJ",
+          "cachedResultName": "WhatsApp - Enviar Mensagem"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "phone": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('phone', 'Telefone do lead em formato numerico, incluindo DDI e DDD quando aplicavel. Obrigatorio.', 'string') }}",
+            "instanceName": "={{ (() => { const requested = String($fromAI('instanceName', 'Nome da instancia do WhatsApp; opcional. Quando vazio, use mariana-sdr.', 'string') || '').trim(); return requested || 'mariana-sdr'; })() }}",
+            "messageText": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('messageText', 'Mensagem de WhatsApp em pt-BR para o lead correto, personalizada e pronta para envio.', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "instanceName",
+              "displayName": "instanceName",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "messageText",
+              "displayName": "messageText",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "descriptionType": "manual",
+        "toolDescription": "Use exclusivamente para enviar WhatsApp ao lead correto. Antes de usar, confirme a pessoa certa e baseie a mensagem apenas no contexto daquele lead. Nunca use para falar com o time interno. Se houver ambiguidade sobre o lead ou o telefone, nao use esta ferramenta; primeiro peça esclarecimento no Slack. A mensagem deve ser em portugues do Brasil, amigavel, estrategica, natural e personalizada."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        7984,
+        2960
+      ],
+      "id": "a116f4ee-7709-4312-9a98-96845ccba7bc",
+      "name": "send_whatsapp_message"
+    }
+  ],
+  "connections": {
+    "buscar_pessoa_especifica": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ver_estrutura_people": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        []
+      ]
+    },
+    "Preparar contexto operacional": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar pessoas atuais": {
+      "main": [
+        [
+          {
+            "node": "Buscar imóveis ativos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar imóveis ativos": {
+      "main": [
+        [
+          {
+            "node": "Preparar contexto operacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Slack Event": {
+      "main": [
+        [
+          {
+            "node": "Buscar pessoas atuais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Slack Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_person_linked_properties": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_person_history": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_person_safe_fields": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_active_properties_public": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_property_public_details": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ver_estrutura_properties": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_google_calendar_events": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_duplicate_visit_candidates": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_google_calendar_availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_google_calendar_event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get members of a channel in Slack": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get the history of a channel in Slack": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message in Slack": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send_whatsapp_message": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Slack Trigger": [
+      {
+        "type": "app_mention",
+        "user": "U0AV5RUJ1D3",
+        "ts": "1777346440.149969",
+        "client_msg_id": "0aa0f5b8-21dd-4adc-b121-f062c7694af7",
+        "text": "<@U0AV78P1486>, me dá o contexto do lead Helder",
+        "team": "T0B085JC04R",
+        "blocks": [
+          {
+            "type": "rich_text",
+            "block_id": "VvP05",
+            "elements": [
+              {
+                "type": "rich_text_section",
+                "elements": [
+                  {
+                    "type": "user",
+                    "user_id": "U0AV78P1486"
+                  },
+                  {
+                    "type": "text",
+                    "text": ", me dá o contexto do lead Helder"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "channel": "C0AVCULL4A0",
+        "event_ts": "1777346440.149969"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dc4f9ed8d71f80c698f718d77f28fac395a2cf4fec4f6b8304dcfe883e638148"
+  }
+}

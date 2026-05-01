@@ -180,7 +180,7 @@ export function CaptacaoLayout() {
     } finally {
       setIsLoading(false);
     }
-  }, [funnelsList]);
+  }, []);
 
   useEffect(() => {
     fetchFunnels();
@@ -417,7 +417,7 @@ export function CaptacaoLayout() {
               <PopupSelect
                 value={activeFunnelId}
                 onChange={setActiveFunnelId}
-                buttonClassName="bg-[#071615] focus:border-blue-500/50"
+                buttonClassName="bg-white/90 focus:border-novian-accent/35"
                 options={funnelsList.map((funnel) => ({
                   value: funnel.id,
                   label: funnel.name,
@@ -428,7 +428,7 @@ export function CaptacaoLayout() {
           <button 
             onClick={() => setIsApifyModalOpen(true)}
             disabled={!activeFunnel}
-            className="shrink-0 rounded-full border border-blue-500/30 bg-blue-600/20 px-4 py-2 text-sm font-semibold text-blue-400 transition-colors hover:bg-blue-600/30 cursor-pointer flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex shrink-0 cursor-pointer items-center gap-2 rounded-full border border-novian-accent/18 bg-novian-accent/8 px-4 py-2 text-sm font-semibold text-novian-accent transition-colors hover:bg-novian-accent/12 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <SlidersHorizontal size={16} /> Configurar Busca
           </button>
@@ -436,7 +436,7 @@ export function CaptacaoLayout() {
       </div>
 
       {!activeFunnel ? (
-        <div className="flex flex-1 items-center justify-center rounded-3xl border border-dashed border-novian-muted/40 bg-[#071615]/40 p-10 text-center">
+        <div className="flex flex-1 items-center justify-center rounded-3xl border border-dashed border-novian-muted/60 bg-[rgba(255,255,255,0.76)] p-10 text-center shadow-[0_18px_40px_rgba(47,74,58,0.06)]">
           <div className="max-w-md">
             <p className="text-lg font-medium text-novian-text">Nenhum funil de captação disponível.</p>
             <p className="mt-2 text-sm leading-6 text-novian-text/60">
@@ -461,10 +461,10 @@ export function CaptacaoLayout() {
             return (
               <div 
                 key={stage.id} 
-                className={`w-80 flex flex-col h-full bg-novian-surface/50 rounded-2xl border transition-colors ${
+                className={`flex h-full w-80 flex-col rounded-2xl border bg-[rgba(255,255,255,0.84)] shadow-[0_18px_42px_rgba(47,74,58,0.06)] transition-colors ${
                   dragOverColumnId === stage.title 
-                    ? "border-novian-accent/50 bg-novian-surface" 
-                    : "border-novian-muted/30"
+                    ? "border-novian-accent/38 bg-white" 
+                    : "border-novian-muted/60"
                 }`}
                 onDragOver={(e) => handleDragOver(e, stage.title)}
                 onDrop={(e) => handleDrop(e, stage.title)}
@@ -493,7 +493,7 @@ export function CaptacaoLayout() {
                           : "border-novian-muted/50 hover:border-novian-accent/50"
                       }`}
                     >
-                      <div className="mb-3 overflow-hidden rounded-xl border border-white/5 bg-white/5">
+                      <div className="mb-3 overflow-hidden rounded-xl border border-novian-muted/55 bg-white/75">
                         {coverImage ? (
                           <img
                             src={coverImage}
@@ -501,7 +501,7 @@ export function CaptacaoLayout() {
                             className="h-36 w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                           />
                         ) : (
-                          <div className="flex h-36 w-full items-center justify-center bg-[radial-gradient(circle_at_top,#12312d,transparent_60%)] text-xs uppercase tracking-[0.22em] text-novian-text/35">
+                          <div className="flex h-36 w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(47,74,58,0.18),transparent_60%)] text-xs uppercase tracking-[0.22em] text-novian-text/35">
                             Sem Foto
                           </div>
                         )}
@@ -514,13 +514,13 @@ export function CaptacaoLayout() {
                             e.stopPropagation();
                             setOpenMenuLeadId(prev => prev === lead.id ? null : lead.id);
                           }}
-                          className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-novian-text/65 transition-colors hover:bg-white/10 hover:text-novian-text"
+                          className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-novian-muted/60 bg-white/80 text-novian-text/65 transition-colors hover:bg-white hover:text-novian-accent"
                           title="Mais ações"
                         >
                           <MoreHorizontal size={14} />
                         </button>
                         {openMenuLeadId === lead.id && (
-                          <div className="absolute right-0 top-10 z-20 min-w-[150px] overflow-hidden rounded-xl border border-white/10 bg-[#0d1d1b] shadow-2xl shadow-black/30">
+                          <div className="absolute right-0 top-10 z-20 min-w-[150px] overflow-hidden rounded-xl border border-novian-muted/60 bg-[rgba(255,255,255,0.96)] shadow-[0_18px_40px_rgba(47,74,58,0.12)]">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -546,12 +546,12 @@ export function CaptacaoLayout() {
 
                       <div className="flex flex-wrap gap-2 mb-3">
                         {lead.customData?.area !== undefined && lead.customData?.area !== null && (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
+                          <span className="rounded-full border border-novian-muted/60 bg-novian-surface-soft/72 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.area)} m²
                           </span>
                         )}
                         {lead.customData?.bedrooms !== undefined && lead.customData?.bedrooms !== null && (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
+                          <span className="rounded-full border border-novian-muted/60 bg-novian-surface-soft/72 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.bedrooms)} dorm.
                           </span>
                         )}
@@ -563,14 +563,14 @@ export function CaptacaoLayout() {
                         {lead.customData?.imageCount !== undefined &&
                           lead.customData?.imageCount !== null &&
                           Number(lead.customData.imageCount) > 0 && (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-novian-text/70">
+                          <span className="rounded-full border border-novian-muted/60 bg-novian-surface-soft/72 px-2 py-1 text-[10px] text-novian-text/70">
                             {String(lead.customData.imageCount)} fotos
                           </span>
                         )}
                       </div>
 
                       {typeof lead.customData?.drafted_proposal === "string" && (
-                        <div className="bg-novian-primary/30 p-2 rounded border border-novian-muted/30 mb-3 max-h-24 overflow-y-auto">
+                        <div className="mb-3 max-h-24 overflow-y-auto rounded border border-novian-muted/55 bg-novian-surface-soft/70 p-2">
                           <p className="text-[10px] text-novian-text/80 whitespace-pre-wrap font-mono leading-relaxed">
                             {lead.customData.drafted_proposal as string}
                           </p>
@@ -580,14 +580,14 @@ export function CaptacaoLayout() {
                       <div className="flex items-center gap-2 mt-2 pt-3 border-t border-novian-muted/30">
                         <button 
                           onClick={(e) => { e.stopPropagation(); handleGenerateProposal(lead); }}
-                          className="flex-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs py-1.5 rounded-lg flex items-center justify-center gap-1 transition-colors"
+                          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-novian-accent/18 bg-novian-accent/8 py-1.5 text-xs text-novian-accent transition-colors hover:bg-novian-accent/14"
                           title="IA: Elaborar Proposta"
                         >
                           <Sparkles size={12} /> Gerar Proposta
                         </button>
                         <button 
                           onClick={(e) => e.stopPropagation()}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-novian-muted/30 hover:bg-novian-muted text-novian-text/70 hover:text-novian-text transition-colors"
+                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-novian-muted/60 bg-white/78 text-novian-text/70 transition-colors hover:bg-white hover:text-novian-accent"
                         >
                           <MessageSquare size={14} />
                         </button>
@@ -603,15 +603,15 @@ export function CaptacaoLayout() {
       )}
 
       {isApifyModalOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(26,26,26,0.14)] backdrop-blur-sm">
           <div
             className="absolute inset-0"
             onClick={() => setIsApifyModalOpen(false)}
           />
-          <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-novian-muted/40 bg-[#071615] shadow-2xl shadow-black/40">
+          <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-novian-muted/60 bg-[rgba(250,248,243,0.98)] shadow-[0_26px_70px_rgba(47,74,58,0.16)]">
             <div className="flex items-start justify-between border-b border-novian-muted/30 px-6 py-5">
               <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-novian-accent/15 bg-novian-accent/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-novian-accent">
                   <Bot size={12} />
                   Apify Config
                 </div>
@@ -623,7 +623,7 @@ export function CaptacaoLayout() {
               <button
                 type="button"
                 onClick={() => setIsApifyModalOpen(false)}
-                className="rounded-full border border-white/10 p-2 text-novian-text/70 transition-colors hover:bg-white/5 hover:text-novian-text"
+                className="rounded-full border border-novian-muted/60 bg-white/80 p-2 text-novian-text/70 transition-colors hover:bg-white hover:text-novian-accent"
               >
                 <X size={18} />
               </button>
@@ -636,7 +636,7 @@ export function CaptacaoLayout() {
                   <input
                     value={apifyConfig.city}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, city: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                     placeholder="jundiai"
                   />
                 </div>
@@ -646,7 +646,7 @@ export function CaptacaoLayout() {
                   <input
                     value={apifyConfig.state}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, state: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -655,7 +655,7 @@ export function CaptacaoLayout() {
                   <input
                     value={apifyConfig.region}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, region: e.target.value }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -664,7 +664,7 @@ export function CaptacaoLayout() {
                   <PopupSelect
                     value={apifyConfig.sources}
                     onChange={(value) => setApifyConfig(prev => ({ ...prev, sources: value }))}
-                    buttonClassName="focus:border-blue-500/50"
+                    buttonClassName="focus:border-novian-accent/35"
                     options={[
                       { value: "olx", label: "OLX" },
                       { value: "zap", label: "ZAP" },
@@ -679,7 +679,7 @@ export function CaptacaoLayout() {
                   <PopupSelect
                     value={apifyConfig.transactionType}
                     onChange={(value) => setApifyConfig(prev => ({ ...prev, transactionType: value }))}
-                    buttonClassName="focus:border-blue-500/50"
+                    buttonClassName="focus:border-novian-accent/35"
                     options={[
                       { value: "sale", label: "Venda" },
                       { value: "rent", label: "Locação" },
@@ -692,7 +692,7 @@ export function CaptacaoLayout() {
                   <PopupSelect
                     value={apifyConfig.propertyType}
                     onChange={(value) => setApifyConfig(prev => ({ ...prev, propertyType: value }))}
-                    buttonClassName="focus:border-blue-500/50"
+                    buttonClassName="focus:border-novian-accent/35"
                     options={[
                       { value: "all", label: "Todos" },
                       { value: "apartment", label: "Apartamento" },
@@ -710,7 +710,7 @@ export function CaptacaoLayout() {
                     min={1}
                     value={apifyConfig.maxListings}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, maxListings: Number(e.target.value) || 1 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -721,7 +721,7 @@ export function CaptacaoLayout() {
                     min={0}
                     value={apifyConfig.areaMin}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, areaMin: Number(e.target.value) || 0 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -732,7 +732,7 @@ export function CaptacaoLayout() {
                     min={0}
                     value={apifyConfig.bedroomsMin}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, bedroomsMin: Number(e.target.value) || 0 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -743,7 +743,7 @@ export function CaptacaoLayout() {
                     min={0}
                     value={apifyConfig.bathroomsMin}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, bathroomsMin: Number(e.target.value) || 0 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -754,7 +754,7 @@ export function CaptacaoLayout() {
                     min={0}
                     value={apifyConfig.priceMin}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, priceMin: Number(e.target.value) || 0 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
@@ -765,11 +765,11 @@ export function CaptacaoLayout() {
                     min={0}
                     value={apifyConfig.priceMax}
                     onChange={(e) => setApifyConfig(prev => ({ ...prev, priceMax: Number(e.target.value) || 0 }))}
-                    className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500/50"
+                    className="novian-input w-full rounded-xl px-4 py-3 text-sm"
                   />
                 </div>
 
-                <label className="col-span-2 flex items-center justify-between rounded-2xl border border-novian-muted/30 bg-white/2 px-4 py-4">
+                <label className="col-span-2 flex items-center justify-between rounded-2xl border border-novian-muted/55 bg-white/72 px-4 py-4">
                   <div>
                     <div className="text-sm font-medium text-novian-text">Incluir descrição</div>
                     <div className="text-xs text-novian-text/60">Melhora a qualidade do draft da IA.</div>
@@ -788,14 +788,14 @@ export function CaptacaoLayout() {
                   <button
                     type="button"
                     onClick={() => setIsApifyModalOpen(false)}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-novian-muted"
+                    className="rounded-xl px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-novian-surface-soft/70"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isScraping}
-                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-xl bg-novian-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-92 disabled:opacity-50"
                   >
                     {isScraping ? <><Loader2 size={16} className="animate-spin" /> Buscando...</> : <>Executar Busca</>}
                   </button>
@@ -807,7 +807,7 @@ export function CaptacaoLayout() {
       )}
 
       {selectedLead && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(26,26,26,0.14)] backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => {
             setSelectedLead(null);
             setIsDrawerMenuOpen(false);
@@ -820,12 +820,12 @@ export function CaptacaoLayout() {
                   const fullDescription = getLeadDescription(selectedLead);
             return (
           <aside
-            className="relative z-10 flex h-full w-full max-w-2xl flex-col border-l border-novian-muted/40 bg-[#071615] shadow-2xl shadow-black/40"
+            className="relative z-10 flex h-full w-full max-w-2xl flex-col border-l border-novian-muted/60 bg-[rgba(250,248,243,0.98)] shadow-[0_26px_70px_rgba(47,74,58,0.16)]"
             onClick={() => setIsDrawerMenuOpen(false)}
           >
             <div className="flex items-start justify-between border-b border-novian-muted/30 px-6 py-5">
               <div>
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-novian-text/70">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-novian-muted/60 bg-white/78 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-novian-text/70">
                   {badgeLabel}
                 </div>
                 <h3 className="max-w-xl text-2xl font-semibold text-novian-text">{selectedLead.title}</h3>
@@ -838,13 +838,13 @@ export function CaptacaoLayout() {
                     e.stopPropagation();
                     setIsDrawerMenuOpen(prev => !prev);
                   }}
-                  className="rounded-full border border-white/10 p-2 text-novian-text/70 transition-colors hover:bg-white/5 hover:text-novian-text"
+                  className="rounded-full border border-novian-muted/60 bg-white/80 p-2 text-novian-text/70 transition-colors hover:bg-white hover:text-novian-accent"
                 >
                   <MoreHorizontal size={18} />
                 </button>
                 {isDrawerMenuOpen && (
                   <div
-                    className="absolute right-12 top-0 z-20 min-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-[#0d1d1b] shadow-2xl shadow-black/30"
+                    className="absolute right-12 top-0 z-20 min-w-[220px] overflow-hidden rounded-xl border border-novian-muted/60 bg-[rgba(255,255,255,0.96)] shadow-[0_18px_40px_rgba(47,74,58,0.12)]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -864,7 +864,7 @@ export function CaptacaoLayout() {
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => setIsDrawerMenuOpen(false)}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-novian-text transition-colors hover:bg-white/5"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-novian-text transition-colors hover:bg-novian-surface-soft/70"
                       >
                         <MessageSquare size={14} />
                         Ver anúncio original
@@ -891,7 +891,7 @@ export function CaptacaoLayout() {
                     setIsDrawerMenuOpen(false);
                     setSelectedGalleryIndex(null);
                   }}
-                  className="rounded-full border border-white/10 p-2 text-novian-text/70 transition-colors hover:bg-white/5 hover:text-novian-text"
+                  className="rounded-full border border-novian-muted/60 bg-white/80 p-2 text-novian-text/70 transition-colors hover:bg-white hover:text-novian-accent"
                 >
                   <X size={18} />
                 </button>
@@ -899,16 +899,16 @@ export function CaptacaoLayout() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="border-b border-novian-muted/20 bg-black/10 p-6">
+              <div className="border-b border-novian-muted/35 bg-white/62 p-6">
                 {mainImage ? (
                   <img
                     src={mainImage}
                     alt={selectedLead.title}
                     onClick={() => setSelectedGalleryIndex(0)}
-                    className="h-[320px] w-full cursor-zoom-in rounded-2xl border border-white/5 object-cover"
+                    className="h-[320px] w-full cursor-zoom-in rounded-2xl border border-novian-muted/55 object-cover"
                   />
                 ) : (
-                  <div className="flex h-[320px] w-full items-center justify-center rounded-2xl border border-white/5 bg-[radial-gradient(circle_at_top,#12312d,transparent_60%)] text-sm uppercase tracking-[0.3em] text-novian-text/35">
+                  <div className="flex h-[320px] w-full items-center justify-center rounded-2xl border border-novian-muted/55 bg-[radial-gradient(circle_at_top,rgba(47,74,58,0.18),transparent_60%)] text-sm uppercase tracking-[0.3em] text-novian-text/35">
                     Sem Imagem Principal
                   </div>
                 )}
@@ -925,7 +925,7 @@ export function CaptacaoLayout() {
                           src={image}
                           alt={`${selectedLead.title} ${index + 1}`}
                           onClick={() => setSelectedGalleryIndex(index)}
-                          className="h-20 w-full cursor-zoom-in rounded-xl border border-white/5 object-cover transition-transform hover:scale-[1.02]"
+                          className="h-20 w-full cursor-zoom-in rounded-xl border border-novian-muted/55 object-cover transition-transform hover:scale-[1.02]"
                         />
                       ))}
                     </div>
@@ -933,47 +933,47 @@ export function CaptacaoLayout() {
                 )}
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Preço</div>
                     <div className="text-sm font-semibold text-novian-accent">
                       {formatCurrency(selectedLead.customData?.price)}
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Área</div>
                     <div className="text-sm font-semibold text-novian-text">{formatNumberLabel(selectedLead.customData?.area, " m²")}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Dormitórios</div>
                     <div className="text-sm font-semibold text-novian-text">{formatNumberLabel(selectedLead.customData?.bedrooms)}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Fonte</div>
                     <div className="text-sm font-semibold text-blue-300">{selectedLead.customData?.source ? String(selectedLead.customData.source).toUpperCase() : "APIFY"}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Preço / m²</div>
                     <div className="text-sm font-semibold text-novian-text">{getPricePerSqmLabel(selectedLead)}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Banheiros</div>
                     <div className="text-sm font-semibold text-novian-text">{formatNumberLabel(selectedLead.customData?.bathrooms)}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Vagas</div>
                     <div className="text-sm font-semibold text-novian-text">{formatNumberLabel(selectedLead.customData?.parkingSpaces)}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-4">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-4">
                     <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-novian-text/45">Fotos</div>
                     <div className="text-sm font-semibold text-novian-text">{formatNumberLabel(selectedLead.customData?.imageCount)}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-5">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-5">
                     <div className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Classificação</div>
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center justify-between gap-4">
@@ -995,7 +995,7 @@ export function CaptacaoLayout() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-white/5 bg-white/3 p-5">
+                  <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-5">
                     <div className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Custos</div>
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center justify-between gap-4">
@@ -1014,7 +1014,7 @@ export function CaptacaoLayout() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/5 bg-white/3 p-5">
+                <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-5">
                   <div className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Localização</div>
                   <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                     <div className="flex items-center justify-between gap-4">
@@ -1055,7 +1055,7 @@ export function CaptacaoLayout() {
                     <div className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Comodidades do imóvel</div>
                     <div className="flex flex-wrap gap-2">
                       {splitTags(selectedLead.customData?.amenities).map((item) => (
-                        <span key={item} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-novian-text/75">
+                        <span key={item} className="rounded-full border border-novian-muted/60 bg-novian-surface-soft/72 px-3 py-1.5 text-xs text-novian-text/75">
                           {item}
                         </span>
                       ))}
@@ -1087,7 +1087,7 @@ export function CaptacaoLayout() {
                   </div>
                 )}
 
-                <div className="rounded-2xl border border-white/5 bg-white/3 p-5">
+                <div className="rounded-2xl border border-novian-muted/55 bg-white/76 p-5">
                   <div className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">Rastreamento</div>
                   <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                     <div className="flex items-center justify-between gap-4">
@@ -1125,7 +1125,7 @@ export function CaptacaoLayout() {
         });
 
         return (
-          <div className="fixed inset-0 z-70 flex items-center justify-center bg-black/80 p-6 backdrop-blur-md">
+          <div className="fixed inset-0 z-70 flex items-center justify-center bg-[rgba(26,26,26,0.78)] p-6 backdrop-blur-md">
             <div
               className="absolute inset-0"
               onClick={() => setSelectedGalleryIndex(null)}
@@ -1136,7 +1136,7 @@ export function CaptacaoLayout() {
                 e.stopPropagation();
                 setSelectedGalleryIndex(null);
               }}
-              className="absolute right-6 top-6 z-10 rounded-full border border-white/10 bg-black/30 p-3 text-white/80 transition-colors hover:bg-black/50 hover:text-white"
+              className="absolute right-6 top-6 z-10 rounded-full border border-white/20 bg-[rgba(255,255,255,0.18)] p-3 text-white transition-colors hover:bg-[rgba(255,255,255,0.28)]"
             >
               <X size={20} />
             </button>
@@ -1148,7 +1148,7 @@ export function CaptacaoLayout() {
                     e.stopPropagation();
                     goPrev();
                   }}
-                  className="absolute left-6 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/30 p-3 text-white/80 transition-colors hover:bg-black/50 hover:text-white"
+                  className="absolute left-6 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/20 bg-[rgba(255,255,255,0.18)] p-3 text-white transition-colors hover:bg-[rgba(255,255,255,0.28)]"
                 >
                   <ChevronLeft size={20} />
                 </button>
@@ -1158,7 +1158,7 @@ export function CaptacaoLayout() {
                     e.stopPropagation();
                     goNext();
                   }}
-                  className="absolute right-6 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/30 p-3 text-white/80 transition-colors hover:bg-black/50 hover:text-white"
+                  className="absolute right-6 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/20 bg-[rgba(255,255,255,0.18)] p-3 text-white transition-colors hover:bg-[rgba(255,255,255,0.28)]"
                 >
                   <ChevronRight size={20} />
                 </button>
@@ -1170,7 +1170,7 @@ export function CaptacaoLayout() {
                 alt={`${selectedLead.title} ${selectedGalleryIndex + 1}`}
                 className="max-h-[78vh] w-full rounded-2xl object-contain"
               />
-              <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/80">
+              <div className="flex items-center justify-between rounded-2xl border border-white/20 bg-[rgba(255,255,255,0.14)] px-4 py-3 text-sm text-white">
                 <span>{selectedLead.title}</span>
                 <span>{selectedGalleryIndex + 1} / {galleryImages.length}</span>
               </div>
@@ -1180,8 +1180,8 @@ export function CaptacaoLayout() {
       })()}
 
       {leadToDelete && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/45 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0a1918] p-6 shadow-2xl">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-[rgba(26,26,26,0.18)] p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-novian-muted/60 bg-[rgba(255,255,255,0.96)] p-6 shadow-[0_22px_60px_rgba(47,74,58,0.14)]">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-300">
               <Trash2 size={12} />
               Excluir Item
@@ -1194,7 +1194,7 @@ export function CaptacaoLayout() {
               <button
                 type="button"
                 onClick={() => setLeadToDelete(null)}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-white/5"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-novian-text transition-colors hover:bg-novian-surface-soft/70"
               >
                 Cancelar
               </button>

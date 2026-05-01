@@ -37,8 +37,8 @@ const NavItem = ({ icon, label, href, active, collapsed }: { icon: React.ReactNo
     <div
       className={`flex items-center py-2.5 px-3 rounded-xl cursor-pointer transition-all duration-200 group
         ${active 
-          ? 'bg-black/30 text-novian-accent shadow-inner' 
-          : 'text-novian-text/60 hover:text-novian-text hover:bg-black/10'
+          ? 'bg-novian-accent/12 text-novian-accent shadow-[inset_0_0_0_1px_rgba(47,74,58,0.08)]'
+          : 'text-novian-text/60 hover:text-novian-text hover:bg-white/72'
         }
         ${collapsed ? 'justify-center' : 'justify-start gap-3'}
       `}
@@ -102,20 +102,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   }, []);
 
   return (
-    <div className="flex h-screen w-full bg-novian-primary text-novian-text overflow-hidden font-sans">
+    <div className="flex h-screen w-full overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(243,237,227,0.72))] text-novian-text font-sans">
       
       {/* Sidebar Navigation */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} border-r border-novian-muted/50 bg-novian-surface flex flex-col justify-between transition-all duration-300 relative z-20 shrink-0`}>
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20 flex shrink-0 flex-col justify-between border-r border-novian-muted/60 bg-[rgba(255,255,255,0.82)] shadow-[0_20px_50px_rgba(47,74,58,0.07)] backdrop-blur-xl transition-all duration-300`}>
         {/* Toggle Button */}
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-6 bg-novian-surface border border-novian-muted/50 rounded-full p-1 text-novian-text/50 hover:text-novian-accent z-50 hidden lg:block shadow-sm"
+          className="absolute -right-3 top-6 z-50 hidden rounded-full border border-novian-muted/65 bg-white p-1 text-novian-text/50 shadow-sm transition-colors hover:text-novian-accent lg:block"
         >
           {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
 
         <div>
-          <div className={`h-20 flex items-center justify-center ${isSidebarOpen ? 'lg:justify-start px-6' : 'px-0'} border-b border-novian-muted/50 transition-all duration-300`}>
+          <div className={`h-20 flex items-center justify-center ${isSidebarOpen ? 'lg:justify-start px-6' : 'px-0'} border-b border-novian-muted/55 transition-all duration-300`}>
             <div className={`flex items-center w-full overflow-hidden ${isSidebarOpen ? 'justify-start' : 'justify-center'}`}>
               <Image 
                 src="/logo.png" 
@@ -186,20 +186,20 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           {/* User Profile Footer */}
           <div className="mt-4 px-3 relative" ref={userMenuRef}>
             {isUserMenuOpen && (
-              <div className={`absolute bottom-full mb-2 w-60 rounded-2xl border border-white/10 bg-[#10201d] p-2 shadow-2xl shadow-black/30 backdrop-blur-xl ${isSidebarOpen ? 'left-3' : 'left-full ml-2'}`}>
+              <div className={`absolute bottom-full mb-2 w-60 rounded-2xl border border-novian-muted/65 bg-[rgba(255,255,255,0.94)] p-2 shadow-[0_22px_50px_rgba(47,74,58,0.12)] backdrop-blur-xl ${isSidebarOpen ? 'left-3' : 'left-full ml-2'}`}>
                 <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-novian-text/40">
                   Conta
                 </div>
                 <Link href="/admin/settings?tab=profile">
                   <div 
-                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-novian-text/80 transition-colors hover:bg-white/5 hover:text-white"
+                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-novian-text/80 transition-colors hover:bg-novian-surface-soft/80 hover:text-novian-text"
                     onClick={() => setIsUserMenuOpen(false)}
                   >
                     <Settings size={16} />
                     Meu perfil
                   </div>
                 </Link>
-                <div className="my-1 h-px w-full bg-white/5" />
+                <div className="my-1 h-px w-full bg-novian-muted/45" />
                 <Link href="/logout">
                   <div className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-red-400 transition-colors hover:bg-red-400/10">
                     Sair
@@ -212,12 +212,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all group ${
                 isUserMenuOpen 
-                  ? 'bg-black/30 text-novian-accent shadow-inner' 
-                  : 'text-novian-text/60 hover:text-novian-text hover:bg-black/10'
+                  ? 'bg-novian-accent/12 text-novian-accent shadow-[inset_0_0_0_1px_rgba(47,74,58,0.08)]'
+                  : 'text-novian-text/60 hover:text-novian-text hover:bg-white/72'
               } ${!isSidebarOpen ? 'justify-center' : ''}`}
             >
               <div className={`flex h-8 w-8 shrink-0 items-center ${!isSidebarOpen ? 'justify-center' : 'justify-start'} transition-transform duration-200 ${isUserMenuOpen ? 'scale-105' : 'group-hover:scale-105'}`}>
-                <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10">
+                <div className="relative h-8 w-8 overflow-hidden rounded-full border border-novian-muted/70 bg-white">
                   {currentAppUser?.avatar_url ? (
                     <Image
                       src={currentAppUser.avatar_url}
@@ -227,7 +227,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                       className="object-cover"
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-emerald-500/12 text-[9px] font-bold uppercase text-emerald-100">
+                    <div className="flex h-full w-full items-center justify-center bg-novian-accent/12 text-[9px] font-bold uppercase text-novian-accent">
                       {getUserInitials(currentAppUser)}
                     </div>
                   )}
@@ -246,11 +246,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 bg-novian-primary flex flex-col h-screen overflow-hidden min-w-0">
+      <main className="flex flex-1 min-w-0 flex-col overflow-hidden bg-transparent h-screen">
         {/* Top Header */}
-        <header className="h-20 flex items-center justify-between px-8 border-b border-novian-muted/50 bg-novian-primary/95 backdrop-blur-sm relative z-10 shrink-0">
+        <header className="relative z-10 flex h-20 shrink-0 items-center justify-between border-b border-novian-muted/55 bg-[rgba(250,248,243,0.72)] px-8 backdrop-blur-xl">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-medium tracking-wide uppercase text-novian-text/90">
+            <h1 className="text-xl font-medium tracking-wide uppercase text-novian-text/88">
               {pathname === "/admin/chat" ? "Chat" : 
                pathname === "/admin/people" ? "Pessoas" :
                pathname === "/admin/captacao" ? "Captação" :
@@ -269,10 +269,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <input 
                 type="text" 
                 placeholder="Buscar leads, imóveis ou agentes..." 
-                className="bg-novian-surface rounded-full pl-10 pr-4 py-2 text-sm w-64 focus:outline-none focus:ring-1 focus:ring-novian-accent/50 transition-all border-none"
+                className="w-64 rounded-full border border-novian-muted/65 bg-white/85 pl-10 pr-4 py-2 text-sm shadow-sm transition-all focus:border-novian-accent/35 focus:outline-none"
               />
             </div>
-            <button className="relative p-2 rounded-full hover:bg-novian-surface transition-colors">
+            <button className="relative rounded-full border border-novian-muted/65 bg-white/78 p-2 text-novian-text/76 transition-colors hover:text-novian-accent">
               <Bell size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 bg-novian-accent rounded-full animate-pulse"></span>
             </button>

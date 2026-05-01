@@ -1,0 +1,73 @@
+=MENSAGEM DO LEAD:
+{{ $('Normalizar WhatsApp').item.json.message }}
+
+CONTEXTO SEGURO DA PESSOA:
+{{ $json.matched_people_context }}
+
+RESUMO DO CATALOGO SEGURO DE IMOVEIS ATIVOS:
+{{ $json.active_properties_summary }}
+
+ANO ATUAL EM SAO PAULO:
+{{ $now.setZone('America/Sao_Paulo').format('yyyy') }}
+
+TAREFA:
+Responda ao lead pelo WhatsApp.
+Use as ferramentas quando precisar consultar ou atualizar dados alem do contexto resumido.
+- Antes de sugerir imoveis, descubra o perfil real do lead.
+- So apresente opcoes de imoveis quando o survey_status do contexto estiver completed ou quando a resposta atual completar a qualificacao.
+- Se o survey ainda estiver incompleto, faca 1 ou 2 perguntas curtas sobre os campos faltantes mais importantes.
+- Se o lead pedir foto, imagem, fachada, material visual ou documento de um imovel especifico, consulte primeiro os detalhes publicos desse imovel pelas ferramentas seguras antes de responder que nao possui esse material.
+
+Responda APENAS em JSON valido:
+{
+  "message": "texto final para enviar no WhatsApp",
+  "classification": "HOT | WARM | COLD | NAO_APLICAVEL",
+  "should_reply": true,
+  "delivery": {
+    "type": "text | image | document",
+    "url": null,
+    "urls": [],
+    "reference": null,
+    "caption": null,
+    "file_name": null
+  },
+  "profile_updates": {
+    "full_name": null,
+    "email": null,
+    "intent": "buy | sell | rent | unknown",
+    "score_delta": 0,
+    "notes_ai": ["observacoes curtas que a IA pode reutilizar depois"],
+    "notes_internal": ["observacoes internas para a equipe"],
+    "property_links": [
+      {
+        "reference": "nome, slug ou endereco exato citado pelo lead",
+        "relationship_type": "interested | owner",
+        "notes": "motivo do vinculo"
+      }
+    ],
+    "lead_profile": {
+      "property_type": null,
+      "city": null,
+      "neighborhoods": [],
+      "budget_min": null,
+      "budget_max": null,
+      "bedrooms_min": null,
+      "bathrooms_min": null,
+      "parking_spots_min": null,
+      "built_area_min": null,
+      "timeline": null,
+      "financing_status": null,
+      "needs_to_sell_first": null,
+      "preferred_features": [],
+      "reason": null,
+      "current_property_address": null,
+      "estimated_value": null,
+      "occupancy_status": null
+    },
+    "survey": {
+      "status": "in_progress | completed",
+      "missing_fields": [],
+      "last_question": null
+    }
+  }
+}

@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { listAgentConfigs, upsertAgentConfig } from '@/lib/agents/configStore';
+import { defaultAgentConfigs } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const agents = await listAgentConfigs();
-    return NextResponse.json({ agents });
+    try {
+        const agents = await listAgentConfigs();
+        return NextResponse.json({ agents });
+    } catch (error) {
+        console.error("Error loading agents:", error);
+        return NextResponse.json({ agents: defaultAgentConfigs, degraded: true });
+    }
 }
 
 export async function POST(req: Request) {

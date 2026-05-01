@@ -1,0 +1,30 @@
+{
+  "parameters": {
+    "descriptionType": "manual",
+    "toolDescription": "Use para cancelar ou excluir um evento ja existente na agenda da Barbara Camargo. Antes de usar, localize e confirme o eventId com get_google_calendar_events. Voce DEVE fornecer eventId. Em toda remarcacao feita por substituicao com um novo evento, use esta ferramenta obrigatoriamente para remover o evento antigo na mesma execucao antes da resposta final. Se encontrar duplicidade real de visitas, remova somente o evento claramente duplicado apos confirmar o eventId correto. Se esta ferramenta indicar que o evento nao foi encontrado, foi apagado manualmente ou ja nao existe, trate isso como evento ja ausente ou ja cancelado. Nessa situacao, nao trate como erro fatal para o lead: siga a resposta normalmente e informe o cancelamento como concluido ou o evento antigo como ja removido.",
+    "operation": "delete",
+    "calendar": {
+      "__rl": true,
+      "value": "barbara.camargo@novian.com.br",
+      "mode": "list",
+      "cachedResultName": "Bárbara Camargo"
+    },
+    "eventId": "={{ $fromAI('eventId', 'ID exato do evento do Google Calendar que deve ser cancelado', 'string') }}",
+    "options": {}
+  },
+  "type": "n8n-nodes-base.googleCalendarTool",
+  "typeVersion": 1.3,
+  "position": [
+    74960,
+    47056
+  ],
+  "id": "8ae2d675-1fdd-4ec9-9375-2fce68ce9be8",
+  "name": "delete_google_calendar_event",
+  "credentials": {
+    "googleCalendarOAuth2Api": {
+      "id": "Pjbx8c7uXRmoDalm",
+      "name": "Helder Perez - GC"
+    }
+  },
+  "onError": "continueRegularOutput"
+}

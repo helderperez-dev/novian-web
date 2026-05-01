@@ -6,6 +6,32 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
+function getFallbackDashboardPayload() {
+  return {
+    overview: {
+      crmLeads: 0,
+      crmFunnels: 0,
+      captacaoLeads: 0,
+      captacaoFunnels: 0,
+      totalProperties: 0,
+      activeProperties: 0,
+      internalUsers: 0,
+      clients: 0,
+      clientProcesses: 0,
+      clientDocuments: 0,
+      totalMessages: 0,
+    },
+    crmStatusBreakdown: [],
+    captacaoStatusBreakdown: [],
+    propertyStatusBreakdown: [],
+    clientProcessBreakdown: [],
+    recentCaptacao: [],
+    recentProperties: [],
+    recentClientProcesses: [],
+    degraded: true,
+  };
+}
+
 type FunnelStepDefinition = {
   label: string;
   aliases: string[];
@@ -89,12 +115,12 @@ function toFunnelBreakdown(steps: FunnelStepDefinition[], items: string[]) {
 }
 
 export async function GET() {
-  const currentUser = await getCurrentAppUser();
-  if (!currentUser || currentUser.user_type !== "internal" || !currentUser.is_active) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const currentUser = await getCurrentAppUser();
+    if (!currentUser || currentUser.user_type !== "internal" || !currentUser.is_active) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const supabase = createAdminSupabaseClient();
 
     const [
@@ -251,6 +277,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(getFallbackDashboardPayload());
   }
 }

@@ -3919,10 +3919,14 @@ export function SettingsLayout() {
   const fetchFunnels = async () => {
     try {
       const res = await fetch("/api/funnels");
+      if (!res.ok) {
+        throw new Error("Failed to load funnels");
+      }
       const data = await res.json();
-      setFunnels(data.funnels);
+      setFunnels(Array.isArray(data.funnels) ? data.funnels : []);
     } catch (e) {
       console.error(e);
+      setFunnels([]);
     }
   };
 
@@ -4080,11 +4084,15 @@ export function SettingsLayout() {
 
   const fetchAgents = async () => {
     try {
-      const res = await fetch("/api/agents");
+      const res = await fetch("/api/agents", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Failed to load agents");
+      }
       const data = await res.json();
-      setAgents(data.agents);
+      setAgents(Array.isArray(data.agents) ? data.agents : []);
     } catch (e) {
       console.error(e);
+      setAgents([]);
     }
   };
 
@@ -4100,6 +4108,8 @@ export function SettingsLayout() {
       setDefaultAiCopyPrompt(data.defaultPrompt || "");
     } catch (e) {
       console.error(e);
+      setAiCopyPrompt("");
+      setDefaultAiCopyPrompt("");
     } finally {
       setIsLoadingAiCopyPrompt(false);
     }

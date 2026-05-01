@@ -27,14 +27,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const next = params.next || "/admin";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#091211] px-6 py-10 text-novian-text">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0d1d1b] p-8 shadow-2xl shadow-black/25">
+    <div className="flex min-h-screen items-center justify-center px-6 py-10 text-novian-text">
+      <div className="w-full max-w-md rounded-[32px] border border-novian-muted/65 bg-[rgba(255,255,255,0.9)] p-8 shadow-[0_26px_80px_rgba(47,74,58,0.12)] backdrop-blur-xl">
         <div className="mb-8">
           <Link href="/" className="text-xs font-semibold uppercase tracking-[0.24em] text-novian-accent/80">
             Novian
           </Link>
-          <h1 className="mt-4 text-3xl font-semibold text-white">Portal de Acesso</h1>
-          <p className="mt-2 text-sm leading-6 text-novian-text/60">
+          <h1 className="mt-4 font-serif text-4xl leading-tight text-novian-text">Portal de Acesso</h1>
+          <p className="mt-3 text-sm leading-6 text-novian-text/60">
             Entre para acessar o admin interno ou o portal do cliente.
           </p>
         </div>
@@ -51,7 +51,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               name="email"
               type="email"
               required
-              className="w-full rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm outline-none transition-colors focus:border-novian-accent/50"
+              className="novian-input w-full rounded-2xl px-4 py-3 text-sm"
               placeholder="voce@empresa.com"
             />
           </div>
@@ -65,20 +65,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               name="password"
               type="password"
               required
-              className="w-full rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm outline-none transition-colors focus:border-novian-accent/50"
+              className="novian-input w-full rounded-2xl px-4 py-3 text-sm"
               placeholder="Sua senha"
             />
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
           <button
             type="submit"
-            className="w-full rounded-2xl bg-novian-accent px-4 py-3 text-sm font-semibold text-novian-primary transition-colors hover:bg-white"
+            className="w-full rounded-2xl bg-novian-accent px-4 py-3 text-sm font-semibold text-white transition hover:opacity-92"
           >
             Entrar
           </button>

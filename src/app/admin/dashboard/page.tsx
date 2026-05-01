@@ -66,72 +66,72 @@ const getStageTheme = (color?: string | null) => {
 
   if (normalized.includes("purple")) {
     return {
-      border: "rgba(168, 85, 247, 0.28)",
-      background: "rgba(168, 85, 247, 0.12)",
-      accent: "#c084fc",
-      badgeBackground: "rgba(168, 85, 247, 0.18)",
-      badgeBorder: "rgba(168, 85, 247, 0.32)",
-      text: "#e9d5ff",
+      border: "rgba(124, 58, 237, 0.25)",
+      background: "rgba(124, 58, 237, 0.12)",
+      accent: "#8b5cf6",
+      badgeBackground: "rgba(124, 58, 237, 0.16)",
+      badgeBorder: "rgba(124, 58, 237, 0.28)",
+      text: "#f5f3ff",
     };
   }
 
   if (normalized.includes("yellow")) {
     return {
-      border: "rgba(234, 179, 8, 0.28)",
-      background: "rgba(234, 179, 8, 0.12)",
-      accent: "#facc15",
-      badgeBackground: "rgba(234, 179, 8, 0.18)",
-      badgeBorder: "rgba(234, 179, 8, 0.32)",
-      text: "#fef08a",
+      border: "rgba(180, 83, 9, 0.26)",
+      background: "rgba(217, 119, 6, 0.12)",
+      accent: "#b45309",
+      badgeBackground: "rgba(180, 83, 9, 0.16)",
+      badgeBorder: "rgba(180, 83, 9, 0.28)",
+      text: "#fff7ed",
     };
   }
 
   if (normalized.includes("orange")) {
     return {
-      border: "rgba(249, 115, 22, 0.28)",
-      background: "rgba(249, 115, 22, 0.12)",
-      accent: "#fb923c",
-      badgeBackground: "rgba(249, 115, 22, 0.18)",
-      badgeBorder: "rgba(249, 115, 22, 0.32)",
-      text: "#fdba74",
+      border: "rgba(194, 65, 12, 0.26)",
+      background: "rgba(194, 65, 12, 0.12)",
+      accent: "#c2410c",
+      badgeBackground: "rgba(194, 65, 12, 0.16)",
+      badgeBorder: "rgba(194, 65, 12, 0.28)",
+      text: "#fff7ed",
     };
   }
 
   if (normalized.includes("green")) {
     return {
-      border: "rgba(34, 197, 94, 0.28)",
-      background: "rgba(34, 197, 94, 0.12)",
-      accent: "#4ade80",
-      badgeBackground: "rgba(34, 197, 94, 0.18)",
-      badgeBorder: "rgba(34, 197, 94, 0.32)",
-      text: "#bbf7d0",
+      border: "rgba(47, 74, 58, 0.26)",
+      background: "rgba(47, 74, 58, 0.12)",
+      accent: "#2f6d4a",
+      badgeBackground: "rgba(47, 74, 58, 0.16)",
+      badgeBorder: "rgba(47, 74, 58, 0.28)",
+      text: "#f0fdf4",
     };
   }
 
   if (normalized.includes("red")) {
     return {
-      border: "rgba(239, 68, 68, 0.28)",
-      background: "rgba(239, 68, 68, 0.12)",
-      accent: "#f87171",
-      badgeBackground: "rgba(239, 68, 68, 0.18)",
-      badgeBorder: "rgba(239, 68, 68, 0.32)",
-      text: "#fecaca",
+      border: "rgba(185, 28, 28, 0.24)",
+      background: "rgba(220, 38, 38, 0.12)",
+      accent: "#c24141",
+      badgeBackground: "rgba(220, 38, 38, 0.16)",
+      badgeBorder: "rgba(185, 28, 28, 0.28)",
+      text: "#fef2f2",
     };
   }
 
   return {
-    border: "rgba(59, 130, 246, 0.28)",
-    background: "rgba(59, 130, 246, 0.12)",
-    accent: "#60a5fa",
-    badgeBackground: "rgba(59, 130, 246, 0.18)",
-    badgeBorder: "rgba(59, 130, 246, 0.32)",
-    text: "#bfdbfe",
+    border: "rgba(37, 99, 235, 0.24)",
+    background: "rgba(37, 99, 235, 0.12)",
+    accent: "#3567b8",
+    badgeBackground: "rgba(37, 99, 235, 0.16)",
+    badgeBorder: "rgba(37, 99, 235, 0.28)",
+    text: "#eff6ff",
   };
 };
 
 function StatCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
-    <div className="min-w-0 rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="min-w-0 rounded-3xl border border-novian-muted/60 bg-[rgba(255,255,255,0.82)] p-6 shadow-[0_18px_44px_rgba(47,74,58,0.06)]">
       <div className="text-sm font-medium text-novian-text/55">{label}</div>
       <div className="mt-3 flex items-baseline gap-2">
         <div className="text-3xl font-bold text-novian-text">{value}</div>
@@ -153,7 +153,7 @@ function RecentListCard({
   emptyMessage: string;
 }) {
   return (
-    <div className="rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="rounded-3xl border border-novian-muted/60 bg-[rgba(255,255,255,0.82)] p-6 shadow-[0_18px_44px_rgba(47,74,58,0.06)]">
       <div className="mb-1 text-lg font-semibold text-novian-text">{title}</div>
       <div className="truncate whitespace-nowrap text-sm text-novian-text/55">{subtitle}</div>
 
@@ -164,7 +164,7 @@ function RecentListCard({
               <div className="flex items-center justify-between gap-4 w-full">
                 <div className="flex items-center min-w-0 gap-4 flex-1">
                   {item.image && (
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-novian-surface/80 shadow-md">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-novian-muted/55 bg-white shadow-sm">
                       <Image 
                         src={item.image} 
                         alt={item.title} 
@@ -175,7 +175,7 @@ function RecentListCard({
                     </div>
                   )}
                   {!item.image && (
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/5 text-xs text-novian-text/30">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-novian-muted/60 bg-novian-surface-soft/55 text-xs text-novian-text/30">
                       Sem foto
                     </div>
                   )}
@@ -192,7 +192,7 @@ function RecentListCard({
 
             if (item.href) {
               return (
-                <Link key={item.id} href={item.href} className="group block rounded-2xl p-2 -mx-2 hover:bg-white/5 transition-colors">
+                <Link key={item.id} href={item.href} className="group -mx-2 block rounded-2xl p-2 transition-colors hover:bg-novian-surface-soft/55">
                   {content}
                 </Link>
               );
@@ -205,7 +205,7 @@ function RecentListCard({
             );
           })
         ) : (
-          <div className="rounded-2xl border border-dashed border-novian-muted/40 bg-novian-primary/40 px-4 py-5 text-sm text-novian-text/45">
+          <div className="rounded-2xl border border-dashed border-novian-muted/55 bg-novian-surface-soft/55 px-4 py-5 text-sm text-novian-text/45">
             {emptyMessage}
           </div>
         )}
@@ -228,7 +228,7 @@ function BreakdownCard({
   const maxCount = Math.max(...items.map((i) => i.count), 1);
 
   return (
-    <div className="rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="rounded-3xl border border-novian-muted/60 bg-[rgba(255,255,255,0.82)] p-6 shadow-[0_18px_44px_rgba(47,74,58,0.06)]">
       <div className="mb-1 text-lg font-semibold text-novian-text">{title}</div>
       <div className="truncate whitespace-nowrap text-sm text-novian-text/55">{subtitle}</div>
 
@@ -240,7 +240,7 @@ function BreakdownCard({
                 <span className="text-novian-text/75">{getDashboardLabel(item.label)}</span>
                 <span className="font-semibold text-novian-text">{item.count}</span>
               </div>
-              <div className="h-2 rounded-full bg-novian-primary/80">
+              <div className="h-2 rounded-full bg-novian-surface-soft">
                 <div
                   className="h-2 rounded-full bg-novian-accent"
                   style={{ width: `${(item.count / maxCount) * 100}%` }}
@@ -249,7 +249,7 @@ function BreakdownCard({
             </div>
           ))
         ) : (
-          <div className="rounded-2xl border border-dashed border-novian-muted/40 bg-novian-primary/40 px-4 py-5 text-sm text-novian-text/45">
+          <div className="rounded-2xl border border-dashed border-novian-muted/55 bg-novian-surface-soft/55 px-4 py-5 text-sm text-novian-text/45">
             {emptyMessage}
           </div>
         )}
@@ -262,7 +262,7 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: { payl
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="rounded-xl border border-white/10 bg-[#061110]/95 px-4 py-3 shadow-2xl backdrop-blur-md">
+      <div className="rounded-xl border border-novian-muted/60 bg-[rgba(255,255,255,0.96)] px-4 py-3 shadow-[0_18px_40px_rgba(47,74,58,0.12)] backdrop-blur-md">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-novian-text/45">{data.label}</p>
         <p className="mt-1 text-2xl font-bold" style={{ color: data.accent }}>
           {data.count}
@@ -340,7 +340,7 @@ function FunnelBreakdownCard({
   };
 
   return (
-    <div className="rounded-3xl border border-novian-muted/40 bg-novian-surface/45 p-6">
+    <div className="rounded-3xl border border-novian-muted/60 bg-[rgba(255,255,255,0.82)] p-6 shadow-[0_18px_44px_rgba(47,74,58,0.06)]">
       <div className="mb-1 text-lg font-semibold text-novian-text">{title}</div>
       <div className="truncate whitespace-nowrap text-sm text-novian-text/55">{subtitle}</div>
 
@@ -366,7 +366,7 @@ function FunnelBreakdownCard({
             </FunnelChart>
           </ResponsiveContainer>
         ) : (
-          <div className="rounded-2xl border border-dashed border-novian-muted/40 bg-novian-primary/40 px-4 py-5 text-sm text-novian-text/45">
+          <div className="rounded-2xl border border-dashed border-novian-muted/55 bg-novian-surface-soft/55 px-4 py-5 text-sm text-novian-text/45">
             {emptyMessage}
           </div>
         )}
@@ -378,7 +378,7 @@ function FunnelBreakdownCard({
 function DashboardLoader() {
   return (
     <div className="flex flex-col gap-8 w-full max-w-[1400px]">
-      <div className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-3xl border border-novian-muted/40 bg-novian-surface/35">
+      <div className="flex min-h-[180px] w-full flex-col items-center justify-center rounded-3xl border border-novian-muted/55 bg-[rgba(255,255,255,0.78)]">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-novian-muted/35 border-t-novian-accent" />
         <p className="mt-4 text-sm font-medium text-novian-text/75">Carregando dashboard...</p>
         <p className="mt-1 text-xs text-novian-text/45">Buscando os dados mais recentes do sistema.</p>
@@ -386,19 +386,19 @@ function DashboardLoader() {
 
       <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-[120px] w-full animate-pulse rounded-3xl border border-novian-muted/20 bg-novian-surface/20" />
+          <div key={i} className="h-[120px] w-full animate-pulse rounded-3xl border border-novian-muted/30 bg-white/65" />
         ))}
       </div>
 
       <div className="grid w-full grid-cols-1 gap-6 xl:grid-cols-3">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-[480px] w-full animate-pulse rounded-3xl border border-novian-muted/20 bg-novian-surface/20" />
+          <div key={i} className="h-[480px] w-full animate-pulse rounded-3xl border border-novian-muted/30 bg-white/65" />
         ))}
       </div>
       
       <div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
         {[...Array(2)].map((_, i) => (
-          <div key={i} className="h-[300px] w-full animate-pulse rounded-3xl border border-novian-muted/20 bg-novian-surface/20" />
+          <div key={i} className="h-[300px] w-full animate-pulse rounded-3xl border border-novian-muted/30 bg-white/65" />
         ))}
       </div>
     </div>

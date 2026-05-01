@@ -49,11 +49,25 @@ const normalizeDbFunnel = (row: {
         })),
 });
 
-export async function GET(req: Request) {
-    try {
-        const { searchParams } = new URL(req.url);
-        const requestedType = searchParams.get('type') as FunnelType | null;
+const getFallbackFunnels = (requestedType: FunnelType | null) => {
+    const allFunnels = Array.from(funnelsStore.values());
 
+    if (requestedType === 'lead') {
+        return allFunnels.filter((funnel) => funnel.type === 'lead');
+    }
+
+    if (requestedType === 'captacao') {
+        return allFunnels.filter((funnel) => funnel.type === 'captacao');
+    }
+
+    return allFunnels;
+};
+
+export async function GET(req: Request) {
+    const { searchParams } = new URL(req.url);
+    const requestedType = searchParams.get('type') as FunnelType | null;
+
+    try {
         const { data, error } = await supabase
             .from('funnels')
             .select('id, name, type, stages:funnel_stages(id, title, color, order)')
@@ -95,8 +109,11 @@ export async function GET(req: Request) {
 
         return NextResponse.json({ funnels });
     } catch (e) {
-        console.error(e);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error("Error loading funnels:", e);
+        return NextResponse.json({
+            funnels: getFallbackFunnels(requestedType),
+            degraded: true,
+        });
     }
 }
 
