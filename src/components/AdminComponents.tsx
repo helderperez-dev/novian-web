@@ -1,24 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, BarChart3, Settings, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square } from "lucide-react";
+import { ArrowRight, MessageSquare, BarChart3, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField, PropertyOfferType } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
 import { formatPropertyOfferLabel, getPrimaryPropertyOffer } from "@/lib/property-utils";
+import { buildStructuredAddressLabel } from "@/lib/property-attributes";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DocumentsWorkspace from "@/components/DocumentsWorkspace";
 import ImageGalleryUploader from "@/components/ImageGalleryUploader";
 import FunnelAutomationSettings from "@/components/FunnelAutomationSettings";
-import PopupSelect from "@/components/PopupSelect";
+import PopupSelect, { type PopupSelectOption } from "@/components/PopupSelect";
+import PopupMultiSelect from "@/components/PopupMultiSelect";
 import { CaptacaoLayout } from "@/components/CaptacaoLayout";
 import AccountProfileForm from "@/components/AccountProfileForm";
 import type { Database } from "@/lib/database.types";
+import { getPropertyReferenceCode, PROPERTY_REFERENCE_CODE_KEY } from "@/lib/property-reference";
+import { getPropertyFieldIcon, PROPERTY_FIELD_ICON_OPTIONS } from "@/lib/property-field-icons";
 import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, ResponsiveContainer } from "recharts";
 
 type ManagedAppUser = Database["public"]["Tables"]["app_users"]["Row"];
@@ -31,6 +35,7 @@ type BrokerOption = {
   avatarUrl: string | null;
   creci: string | null;
 };
+type GeoOption = PopupSelectOption & { code?: string };
 type DashboardBreakdownItem = { label: string; count: number; color?: string | null };
 type DashboardRecentCaptacaoItem = { id: string; title: string; status: string; source: string; createdAt: string };
 type DashboardRecentPropertyItem = {
@@ -64,6 +69,43 @@ type DashboardPayload = {
   recentProperties: DashboardRecentPropertyItem[];
   recentClientProcesses: DashboardRecentClientProcessItem[];
 };
+
+const PROPERTY_LOCATION_FIELD_IDS = new Set([
+  "street",
+  "street_number",
+  "complement",
+  "neighborhood",
+  "city",
+  "state",
+  "postal_code",
+  "country",
+]);
+
+const PROPERTY_PRIMARY_FIELD_IDS = new Set([
+  "property_type",
+  "area",
+  "bedrooms",
+  "bathrooms",
+  "parking",
+  "condominium_fee",
+  "iptu",
+  "transaction_type",
+  "property_purpose",
+  "lavabos",
+  "built_area",
+  "private_area",
+  "total_area",
+  "property_age",
+  "accepts_exchange",
+  "accepts_financing",
+]);
+
+const PROPERTY_AMENITIES_FIELD_IDS = new Set(["amenities"]);
+const PROPERTY_SYSTEM_FIELD_IDS = new Set([
+  ...PROPERTY_PRIMARY_FIELD_IDS,
+  ...PROPERTY_LOCATION_FIELD_IDS,
+  ...PROPERTY_AMENITIES_FIELD_IDS,
+]);
 
 const getUserInitials = (user: ManagedAppUser | null) => {
   const base = user?.full_name?.trim() || user?.email?.trim() || "";
@@ -364,6 +406,30 @@ const formatPropertyCardMetricValue = (field: Pick<CustomField, "unit">, value: 
 
   const suffix = field.unit ? ` ${field.unit}` : "";
   return `${value}${suffix}`;
+};
+
+const getPropertyCardStatusMeta = (status: Property["status"]) => {
+  if (status === "active") {
+    return {
+      label: "Ativo",
+      className:
+        "border-emerald-700/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(232,244,235,0.96))] text-[#365744]",
+    };
+  }
+
+  if (status === "sold") {
+    return {
+      label: "Vendido",
+      className:
+        "border-sky-800/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(234,242,248,0.96))] text-[#35556b]",
+    };
+  }
+
+  return {
+    label: "Inativo",
+    className:
+      "border-stone-800/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(241,237,231,0.96))] text-[#61584d]",
+  };
 };
 
 type OfferDraft = {
@@ -2529,6 +2595,12 @@ export function PropertiesLayout() {
   const [brokerUserId, setBrokerUserId] = useState("");
   const [brokers, setBrokers] = useState<BrokerOption[]>([]);
   const [propertyDropdownValues, setPropertyDropdownValues] = useState<Record<string, string>>({});
+  const [propertyFieldValues, setPropertyFieldValues] = useState<Record<string, string>>({});
+  const [propertyMultiSelectValues, setPropertyMultiSelectValues] = useState<Record<string, string[]>>({});
+  const [countryOptions, setCountryOptions] = useState<GeoOption[]>([]);
+  const [stateOptions, setStateOptions] = useState<GeoOption[]>([]);
+  const [cityOptions, setCityOptions] = useState<GeoOption[]>([]);
+  const [isGeoLoading, setIsGeoLoading] = useState(false);
   const [heroTitle, setHeroTitle] = useState<string>("Descubra seu novo lar");
   const [heroSubtitle, setHeroSubtitle] = useState<string>("Cadastre-se para receber mais informações exclusivas.");
   const [callToActionText, setCallToActionText] = useState<string>("Quero Saber Mais");
@@ -2576,10 +2648,75 @@ export function PropertiesLayout() {
     }
   };
 
+  const selectedCountryLabel = propertyDropdownValues.country || "Brasil";
+  const selectedStateLabel = propertyDropdownValues.state || "";
+  const selectedCountryCode = useMemo(
+    () => countryOptions.find((option) => option.value === selectedCountryLabel)?.code || "BR",
+    [countryOptions, selectedCountryLabel],
+  );
+  const selectedStateCode = useMemo(
+    () => stateOptions.find((option) => option.value === selectedStateLabel)?.code || "",
+    [stateOptions, selectedStateLabel],
+  );
+
+  const primaryFields = useMemo(
+    () => fields.filter((field) => PROPERTY_PRIMARY_FIELD_IDS.has(field.id)),
+    [fields],
+  );
+  const locationFields = useMemo(
+    () => fields.filter((field) => PROPERTY_LOCATION_FIELD_IDS.has(field.id)),
+    [fields],
+  );
+  const amenityFields = useMemo(
+    () => fields.filter((field) => PROPERTY_AMENITIES_FIELD_IDS.has(field.id)),
+    [fields],
+  );
+  const customAttributeFields = useMemo(
+    () =>
+      fields.filter(
+        (field) =>
+          !PROPERTY_PRIMARY_FIELD_IDS.has(field.id) &&
+          !PROPERTY_LOCATION_FIELD_IDS.has(field.id) &&
+          !PROPERTY_AMENITIES_FIELD_IDS.has(field.id),
+      ),
+    [fields],
+  );
+
+  const fetchGeoOptions = useCallback(async (countryCode: string, stateCode?: string) => {
+    setIsGeoLoading(true);
+    try {
+      const params = new URLSearchParams({ countryCode });
+      if (stateCode) {
+        params.set("stateCode", stateCode);
+      }
+
+      const response = await fetch(`/api/geo?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Failed to load geo options");
+      }
+
+      const data = await response.json();
+      setCountryOptions(Array.isArray(data.countries) ? data.countries : []);
+      setStateOptions(Array.isArray(data.states) ? data.states : []);
+      setCityOptions(Array.isArray(data.cities) ? data.cities : []);
+    } catch (error) {
+      console.error(error);
+      setCountryOptions([]);
+      setStateOptions([]);
+      setCityOptions([]);
+    } finally {
+      setIsGeoLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchProps();
     fetchBrokers();
   }, []);
+
+  useEffect(() => {
+    fetchGeoOptions(selectedCountryCode, selectedStateCode);
+  }, [fetchGeoOptions, selectedCountryCode, selectedStateCode]);
 
   useEffect(() => {
     if (selectedProperty) {
@@ -2620,6 +2757,28 @@ export function PropertiesLayout() {
           return acc;
         }, {}),
       );
+      setPropertyFieldValues(
+        fields.reduce<Record<string, string>>((acc, field) => {
+          if (field.type !== "dropdown" && field.type !== "boolean" && field.type !== "multiselect") {
+            const rawValue = selectedProperty.customData?.[field.id];
+            acc[field.id] = typeof rawValue === "string" ? rawValue : rawValue != null ? String(rawValue) : "";
+          }
+          return acc;
+        }, {}),
+      );
+      setPropertyMultiSelectValues(
+        fields.reduce<Record<string, string[]>>((acc, field) => {
+          if (field.type === "multiselect") {
+            const rawValue = selectedProperty.customData?.[field.id];
+            acc[field.id] = Array.isArray(rawValue)
+              ? rawValue.filter((item): item is string => typeof item === "string")
+              : typeof rawValue === "string"
+                ? rawValue.split(",").map((item) => item.trim()).filter(Boolean)
+                : [];
+          }
+          return acc;
+        }, {}),
+      );
       const generatedMapUrl = buildGoogleMapsEmbedUrl(selectedProperty.address || "");
       const existingMapUrl = selectedProperty.mapEmbedUrl || "";
       const hasManualMapUrl = Boolean(existingMapUrl) && existingMapUrl !== generatedMapUrl;
@@ -2654,14 +2813,44 @@ export function PropertiesLayout() {
       setPropertyStatus("active");
       setIsExclusiveNovian(false);
       setBrokerUserId("");
-      setPropertyDropdownValues({});
+      setPropertyDropdownValues({ country: "Brasil" });
+      setPropertyFieldValues({});
+      setPropertyMultiSelectValues({});
       setHeroTitle("Descubra seu novo lar");
       setHeroSubtitle("Cadastre-se para receber mais informações exclusivas.");
       setCallToActionText("Quero Saber Mais");
       setLeadMagnetTitle("Baixar Apresentação do Imóvel");
       setLeadMagnetFileUrl("");
     }
-  }, [selectedProperty, isDrawerOpen]);
+  }, [selectedProperty, isDrawerOpen, fields]);
+
+  useEffect(() => {
+    const generatedAddress = buildStructuredAddressLabel({
+      street: propertyFieldValues.street,
+      streetNumber: propertyFieldValues.street_number,
+      neighborhood: propertyFieldValues.neighborhood,
+      city: propertyDropdownValues.city,
+      state: propertyDropdownValues.state,
+      country: propertyDropdownValues.country || "Brasil",
+    });
+
+    if (generatedAddress) {
+      setAddress(generatedAddress);
+      return;
+    }
+
+    if (!selectedProperty) {
+      setAddress("");
+    }
+  }, [
+    propertyDropdownValues.city,
+    propertyDropdownValues.country,
+    propertyDropdownValues.state,
+    propertyFieldValues.neighborhood,
+    propertyFieldValues.street,
+    propertyFieldValues.street_number,
+    selectedProperty,
+  ]);
 
   const updateOfferDraft = (offerType: PropertyOfferType, partial: Partial<OfferDraft>) => {
     setOfferDrafts((current) => ({
@@ -2851,6 +3040,176 @@ export function PropertiesLayout() {
     ? { ownerPrice, commissionRate, finalPrice }
     : offerDrafts[primaryOfferType];
 
+  const renderPropertyField = (field: CustomField) => {
+    const inputName = `custom_${field.id}`;
+
+    if (field.id === "country") {
+      return (
+        <PopupSelect
+          name={inputName}
+          value={propertyDropdownValues[field.id] || "Brasil"}
+          onChange={(value) =>
+            setPropertyDropdownValues((current) => ({
+              ...current,
+              [field.id]: value,
+              state: "",
+              city: "",
+            }))
+          }
+          options={countryOptions}
+          placeholder="Selecione o país"
+          searchable
+          searchPlaceholder="Buscar país..."
+          emptyMessage="Nenhum país encontrado."
+          disabled={isGeoLoading}
+          required={field.required}
+        />
+      );
+    }
+
+    if (field.id === "state") {
+      return (
+        <PopupSelect
+          name={inputName}
+          value={propertyDropdownValues[field.id] || ""}
+          onChange={(value) =>
+            setPropertyDropdownValues((current) => ({
+              ...current,
+              [field.id]: value,
+              city: "",
+            }))
+          }
+          options={stateOptions}
+          placeholder="Selecione o estado"
+          searchable
+          searchPlaceholder="Buscar estado..."
+          emptyMessage="Nenhum estado encontrado."
+          disabled={isGeoLoading || stateOptions.length === 0}
+          required={field.required}
+        />
+      );
+    }
+
+    if (field.id === "city") {
+      return (
+        <PopupSelect
+          name={inputName}
+          value={propertyDropdownValues[field.id] || ""}
+          onChange={(value) =>
+            setPropertyDropdownValues((current) => ({
+              ...current,
+              [field.id]: value,
+            }))
+          }
+          options={cityOptions}
+          placeholder={selectedStateCode ? "Selecione a cidade" : "Selecione o estado antes"}
+          searchable
+          searchPlaceholder="Buscar cidade..."
+          emptyMessage="Nenhuma cidade encontrada."
+          disabled={isGeoLoading || !selectedStateCode}
+          required={field.required}
+        />
+      );
+    }
+
+    if (field.type === "dropdown") {
+      return (
+        <PopupSelect
+          name={inputName}
+          value={propertyDropdownValues[field.id] || ""}
+          onChange={(value) =>
+            setPropertyDropdownValues((current) => ({
+              ...current,
+              [field.id]: value,
+            }))
+          }
+          placeholder="Selecione..."
+          options={(field.options || []).map((option) => ({
+            value: option,
+            label: option,
+          }))}
+          required={field.required}
+        />
+      );
+    }
+
+    if (field.type === "boolean") {
+      return (
+        <label className="flex min-h-[42px] items-center gap-3 rounded-lg border border-novian-muted/50 bg-novian-primary px-3 py-2 text-sm text-novian-text">
+          <input
+            name={inputName}
+            type="checkbox"
+            defaultChecked={Boolean(selectedProperty?.customData?.[field.id])}
+            className="h-4 w-4 rounded border-novian-muted/50 text-novian-accent focus:ring-novian-accent/30"
+          />
+          <span>Ativar</span>
+        </label>
+      );
+    }
+
+    if (field.type === "multiselect") {
+      return (
+        <PopupMultiSelect
+          name={inputName}
+          values={propertyMultiSelectValues[field.id] || []}
+          onChange={(values) =>
+            setPropertyMultiSelectValues((current) => ({
+              ...current,
+              [field.id]: values,
+            }))
+          }
+          options={(field.options || []).map((option) => ({
+            value: option,
+            label: option,
+          }))}
+          placeholder="Selecione as amenidades"
+        />
+      );
+    }
+
+    return (
+      <input
+        name={inputName}
+        type={field.type === "number" ? "number" : "text"}
+        value={propertyFieldValues[field.id] || ""}
+        onChange={(event) =>
+          setPropertyFieldValues((current) => ({
+            ...current,
+            [field.id]: event.target.value,
+          }))
+        }
+        required={field.required}
+        className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
+      />
+    );
+  };
+
+  const renderPropertyFieldRow = (field: CustomField, description?: string) => {
+    const FieldIcon = getPropertyFieldIcon(field.iconName);
+
+    return (
+      <div
+        key={field.id}
+        className="rounded-[22px] border border-novian-muted/30 bg-novian-primary/30 px-4 py-3"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+          <div className="flex min-w-0 items-start gap-3 lg:max-w-[42%]">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/30 bg-novian-surface/70 text-novian-accent">
+              <FieldIcon size={18} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-novian-text">{field.name}</p>
+              <p className="mt-1 text-xs leading-5 text-novian-text/52">
+                {field.description || description || "Campo usado na apresentação e nos filtros do imóvel."}
+              </p>
+            </div>
+          </div>
+          <div className="w-full lg:max-w-[420px]">{renderPropertyField(field)}</div>
+        </div>
+      </div>
+    );
+  };
+
   const handleAddOfferType = (offerType: PropertyOfferType) => {
     const nextDraft =
       offerDrafts[offerType].finalPrice > 0 || offerDrafts[offerType].ownerPrice > 0
@@ -2917,14 +3276,38 @@ export function PropertiesLayout() {
     setIsSaving(true);
     
     const formData = new FormData(e.currentTarget);
-    const customData: Record<string, string | number> = {};
+    const customData: Record<string, Property["customData"][string]> = {};
     
     fields.forEach(f => {
       const val = formData.get(`custom_${f.id}`);
+      if (f.type === "boolean") {
+        customData[f.id] = val === "on";
+        return;
+      }
+
+      if (typeof val !== "string") {
+        return;
+      }
+
+      if (f.type === "multiselect") {
+        const values = val
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        if (values.length > 0) {
+          customData[f.id] = Array.from(new Set(values));
+        }
+        return;
+      }
+
       if (val) {
         customData[f.id] = f.type === 'number' ? Number(val) : String(val);
       }
     });
+
+    if (selectedProperty) {
+      customData[PROPERTY_REFERENCE_CODE_KEY] = getPropertyReferenceCode(selectedProperty);
+    }
 
     customData[PROPERTY_OWNER_PRICE_KEY] = ownerPrice;
     customData[PROPERTY_COMMISSION_RATE_KEY] = commissionRate;
@@ -3047,7 +3430,7 @@ export function PropertiesLayout() {
             setSelectedProperty(null);
             setIsDrawerOpen(true);
           }}
-          className="bg-novian-accent text-novian-primary px-4 py-2 rounded-full text-sm font-semibold flex items-center gap-2 hover:bg-white transition-colors"
+          className="inline-flex items-center gap-2 rounded-full border border-novian-accent/20 bg-[linear-gradient(135deg,#2f4a3a,#5b7359)] px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_34px_rgba(47,74,58,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_42px_rgba(47,74,58,0.22)]"
         >
           <Plus size={16} /> Cadastrar Imóvel
         </button>
@@ -3069,76 +3452,150 @@ export function PropertiesLayout() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {properties.map(prop => (
-            <div key={prop.id} className="border border-novian-muted/50 rounded-2xl overflow-hidden bg-novian-surface group relative">
-              <div className="h-48 bg-novian-muted/20 relative cursor-pointer" onClick={() => { setSelectedProperty(prop); setIsDrawerOpen(true); }}>
-                {prop.coverImage ? (
-                  <img src={prop.coverImage} alt={prop.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-novian-text/30">
-                    <HomeIcon size={48} />
-                  </div>
-                )}
-                <div className="absolute top-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold border border-white/10">
-                  {prop.status === 'active' ? 'Ativo' : prop.status === 'sold' ? 'Vendido' : 'Inativo'}
-                </div>
-              </div>
-              <div className="absolute top-3 right-3 z-10">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setOpenDropdownId(openDropdownId === prop.id ? null : prop.id); }}
-                  className="bg-black/60 hover:bg-black/80 backdrop-blur-md p-1.5 rounded-full border border-white/10 text-white transition-colors"
+            {properties.map(prop => {
+              const statusMeta = getPropertyCardStatusMeta(prop.status);
+              const propertyReferenceCode = getPropertyReferenceCode(prop);
+              const propertyMetrics = fields
+                .filter((field) => field.showOnPropertyCard)
+                .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+                .slice(0, 4)
+                .map((field) => {
+                  const value = prop.customData[field.id];
+                  const formattedValue = formatPropertyCardMetricValue(field, value);
+                  if (!formattedValue) {
+                    return null;
+                  }
+
+                  const Icon = getPropertyCardMetricIcon(field);
+
+                  return {
+                    id: field.id,
+                    name: field.name,
+                    value: formattedValue,
+                    Icon,
+                  };
+                })
+                .filter(Boolean) as Array<{
+                  id: string;
+                  name: string;
+                  value: string;
+                  Icon: ReturnType<typeof getPropertyCardMetricIcon>;
+                }>;
+              const locationPreview = prop.address?.split("-")[0]?.trim() || "Localização sob consulta";
+
+              return (
+                <article
+                  key={prop.id}
+                  className="group relative overflow-hidden rounded-[28px] border border-white/90 bg-white transition-all duration-300 hover:-translate-y-1"
                 >
-                  <MoreHorizontal size={16} />
-                </button>
-                {openDropdownId === prop.id && (
-                  <div className="absolute right-0 mt-2 w-36 bg-novian-surface border border-novian-muted/50 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); setSelectedProperty(prop); setIsDrawerOpen(true); }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-novian-muted/50 flex items-center gap-2 transition-colors"
-                    >
-                      <Edit size={14} /> Editar
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); setPropertyToDelete(prop); }}
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-red-500/10 text-red-500 flex items-center gap-2 transition-colors"
-                    >
-                      <Trash2 size={14} /> Excluir
-                    </button>
+                  <div
+                    className="relative h-52 cursor-pointer overflow-hidden border-b border-[#e3dbcf]"
+                    onClick={() => { setSelectedProperty(prop); setIsDrawerOpen(true); }}
+                  >
+                    {prop.coverImage ? (
+                      <img
+                        src={prop.coverImage}
+                        alt={prop.title}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.06]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(95,120,80,0.2),transparent_58%),linear-gradient(180deg,#f5efe5_0%,#eee5d9_100%)] text-novian-text/30">
+                        <HomeIcon size={48} />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(14,18,16,0.04)_0%,rgba(14,18,16,0.08)_42%,rgba(14,18,16,0.42)_100%)]" />
+                    <div className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(180deg,rgba(12,18,15,0)_0%,rgba(12,18,15,0.42)_100%)]" />
+
+                    <div className="absolute left-4 top-4">
+                      <div className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold backdrop-blur-md ${statusMeta.className}`}>
+                        {statusMeta.label}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-              <div className="p-4 cursor-pointer" onClick={() => { setSelectedProperty(prop); setIsDrawerOpen(true); }}>
-                <h3 className="font-semibold text-lg text-novian-text truncate">{prop.title}</h3>
-                <p className="text-novian-accent font-medium mt-1">{formatPropertyPriceSummary(prop)}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {fields
-                    .filter((field) => field.showOnPropertyCard)
-                    .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
-                    .slice(0, 4)
-                    .map((field) => {
-                      const value = prop.customData[field.id];
-                      const formattedValue = formatPropertyCardMetricValue(field, value);
-                      if (!formattedValue) {
-                        return null;
-                      }
 
-                      const Icon = getPropertyCardMetricIcon(field);
-
-                      return (
-                        <span
-                          key={field.id}
-                          className="inline-flex items-center gap-2 rounded-xl border border-novian-muted/45 bg-novian-primary/35 px-3 py-1.5 text-xs font-medium text-novian-text/80 shadow-[0_10px_24px_rgba(0,0,0,0.12)]"
-                          title={field.name}
+                  <div className="absolute right-4 top-4 z-10">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setOpenDropdownId(openDropdownId === prop.id ? null : prop.id); }}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-[rgba(17,24,21,0.42)] text-white backdrop-blur-md transition-colors hover:bg-[rgba(17,24,21,0.6)]"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                    {openDropdownId === prop.id && (
+                      <div className="absolute right-0 mt-2 w-40 overflow-hidden rounded-2xl border border-novian-muted/55 bg-[rgba(255,255,255,0.97)] animate-in fade-in zoom-in duration-200">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); setSelectedProperty(prop); setIsDrawerOpen(true); }}
+                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-novian-text transition-colors hover:bg-novian-surface-soft/72"
                         >
-                          {Icon ? <Icon size={13} className="shrink-0 text-novian-accent/85" /> : null}
-                          <span>{formattedValue}</span>
-                        </span>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
-          ))}
+                          <Edit size={14} /> Editar
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); setPropertyToDelete(prop); }}
+                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-600 transition-colors hover:bg-red-500/10"
+                        >
+                          <Trash2 size={14} /> Excluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    className="cursor-pointer px-5 pb-5 pt-4"
+                    onClick={() => { setSelectedProperty(prop); setIsDrawerOpen(true); }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-novian-text/42">
+                          Imóvel
+                        </p>
+                        <h3 className="mt-2 truncate text-[1.12rem] font-semibold leading-tight tracking-[-0.02em] text-novian-text">
+                          {prop.title}
+                        </h3>
+                      </div>
+                      <div className="shrink-0 rounded-full border border-[#ddd3c6] bg-novian-primary/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-novian-accent">
+                        {propertyReferenceCode}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-start justify-between gap-4 rounded-[22px] border border-novian-muted/45 bg-white px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-novian-text/42">
+                          Valor principal
+                        </p>
+                        <p className="mt-1 truncate text-[1.15rem] font-semibold text-novian-accent">
+                          {formatPropertyPriceSummary(prop)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-full border border-[#ddd3c6] bg-white px-3 py-1.5 text-xs text-novian-text/62">
+                      <MapPin size={13} className="shrink-0 text-novian-accent/72" />
+                      <span className="truncate">{locationPreview}</span>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2.5">
+                      {propertyMetrics.length > 0 ? propertyMetrics.map((metric) => {
+                        const Icon = metric.Icon;
+
+                        return (
+                          <span
+                            key={metric.id}
+                            className="inline-flex items-center gap-2 rounded-full border border-[#ddd3c6] bg-white px-3 py-1.5 text-[11px] font-medium text-novian-text/78"
+                            title={metric.name}
+                          >
+                            {Icon ? <Icon size={13} className="shrink-0 text-novian-accent/82" /> : null}
+                            <span>{metric.value}</span>
+                          </span>
+                        );
+                      }) : (
+                        <div className="rounded-2xl border border-dashed border-novian-muted/55 bg-white/55 px-4 py-3 text-xs text-novian-text/48">
+                          Adicione campos visiveis no card para destacar este imovel.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           {properties.length === 0 && (
             <div className="col-span-full py-12 text-center text-novian-text/50">
               Nenhum imóvel cadastrado.
@@ -3199,6 +3656,17 @@ export function PropertiesLayout() {
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Código do Imóvel</label>
+                    <div className="flex min-h-[46px] items-center justify-between rounded-xl border border-novian-muted/50 bg-novian-primary px-3 py-2.5 text-sm text-novian-text">
+                      <span className="font-semibold tracking-[0.18em] text-novian-accent">
+                        {selectedProperty ? getPropertyReferenceCode(selectedProperty) : "Gerado ao salvar"}
+                      </span>
+                      <span className="text-xs text-novian-text/55">
+                        {selectedProperty ? "Use este código para referência rápida." : "Código curto e único."}
+                      </span>
+                    </div>
+                  </div>
                   <div className="col-span-2">
                     <AiInputField
                       label="Título do Imóvel"
@@ -3265,15 +3733,15 @@ export function PropertiesLayout() {
                   </div>
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-novian-text/70 mb-1">Endereço Completo</label>
-                    <input
-                      name="address"
-                      required
-                      type="text"
-                      value={address}
-                      onChange={(event) => setAddress(event.target.value)}
-                      className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
-                      placeholder="Ex: Rua Amauri, 123 - Itaim Bibi, São Paulo - SP"
-                    />
+                    <input type="hidden" name="address" value={address} />
+                    <div className="rounded-xl border border-novian-muted/45 bg-novian-primary px-4 py-3">
+                      <p className="text-sm font-medium text-novian-text">
+                        {address || "Preencha rua, bairro, estado e cidade para montar o endereço automaticamente."}
+                      </p>
+                      <p className="mt-1 text-xs text-novian-text/52">
+                        O endereço completo agora é organizado automaticamente a partir dos campos de localização.
+                      </p>
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <div className="flex items-center justify-between gap-3 mb-1">
@@ -3350,7 +3818,7 @@ export function PropertiesLayout() {
                           Edite uma oferta por vez. Adicione venda ou locacao somente quando fizer sentido para este imovel.
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-novian-accent/25 bg-novian-accent/10 px-4 py-3 text-right">
+                      <div className="rounded-2xl border border-novian-muted/50 bg-novian-surface/65 px-4 py-3 text-right">
                         <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Oferta principal</p>
                         <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-novian-accent">
                           {getPropertyOfferTypeLabel(primaryOfferType)}
@@ -3372,13 +3840,13 @@ export function PropertiesLayout() {
                             onClick={() => setEditableOfferType(offerType)}
                             className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
                               isActive
-                                ? "border-novian-accent/45 bg-novian-accent/12 text-novian-text"
+                                ? "border-novian-accent/40 bg-novian-surface/70 text-novian-text shadow-[0_8px_20px_rgba(47,74,58,0.06)]"
                                 : "border-novian-muted/35 bg-novian-surface/10 text-novian-text/65 hover:border-novian-accent/20"
                             }`}
                           >
                             <span>{getPropertyOfferTypeLabel(offerType)}</span>
                             {isPrimary ? (
-                              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-emerald-200">
+                              <span className="rounded-full border border-novian-accent/25 bg-novian-accent/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-novian-accent">
                                 Principal
                               </span>
                             ) : null}
@@ -3412,12 +3880,12 @@ export function PropertiesLayout() {
                             <button
                               type="button"
                               onClick={() => setPrimaryOfferType(editableOfferType)}
-                              className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200 transition hover:border-emerald-300/40 hover:text-emerald-100"
+                              className="rounded-full border border-novian-accent/25 bg-novian-accent/10 px-3 py-1.5 text-xs font-medium text-novian-accent transition hover:border-novian-accent/40 hover:bg-novian-accent/15"
                             >
                               Definir como principal
                             </button>
                           ) : (
-                            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-medium text-emerald-200">
+                            <span className="rounded-full border border-novian-accent/25 bg-novian-accent/10 px-3 py-1.5 text-xs font-medium text-novian-accent">
                               Oferta principal
                             </span>
                           )}
@@ -3433,15 +3901,15 @@ export function PropertiesLayout() {
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                        <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
                           <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Valor do proprietario</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerPrice)}</p>
                         </div>
-                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                        <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
                           <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Comissao</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{commissionRate}%</p>
                         </div>
-                        <div className="rounded-xl border border-novian-muted/25 bg-black/10 px-3 py-3">
+                        <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
                           <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Liquido estimado</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerReceives)}</p>
                         </div>
@@ -3570,7 +4038,7 @@ export function PropertiesLayout() {
                       </div>
                       <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
                         <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Ajuste vs. desejado</p>
-                        <p className={`mt-1 text-sm font-medium ${ownerAdjustment >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                        <p className={`mt-1 text-sm font-medium ${ownerAdjustment >= 0 ? "text-novian-accent" : "text-red-500"}`}>
                           {ownerAdjustment >= 0 ? "+" : "-"} {formatCurrency(Math.abs(ownerAdjustment))}
                         </p>
                       </div>
@@ -3603,37 +4071,68 @@ export function PropertiesLayout() {
               </section>
 
               <section className="space-y-4">
-                <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos Personalizados</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {fields.map(field => (
-                    <div key={field.id}>
-                      <label className="block text-xs font-medium text-novian-text/70 mb-1">{field.name}</label>
-                      {field.type === "dropdown" ? (
-                        <PopupSelect
-                          name={`custom_${field.id}`}
-                          value={propertyDropdownValues[field.id] || ""}
-                          onChange={(value) =>
-                            setPropertyDropdownValues((current) => ({
-                              ...current,
-                              [field.id]: value,
-                            }))
-                          }
-                          placeholder="Selecione..."
-                          options={(field.options || []).map((option) => ({
-                            value: option,
-                            label: option,
-                          }))}
-                        />
-                      ) : (
-                        <input 
-                          name={`custom_${field.id}`}
-                          type={field.type === 'number' ? 'number' : 'text'} 
-                          className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none" 
-                          defaultValue={selectedProperty?.customData?.[field.id] as string | number | undefined} 
-                        />
+                <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos do Imóvel</h3>
+                <div className="space-y-6">
+                  <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
+                    <div className="mb-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Detalhes principais</p>
+                      <p className="mt-1 text-sm text-novian-text/58">Mais próximo de uma ficha técnica: rótulo de um lado, valor do outro.</p>
+                    </div>
+                    <div className="space-y-3">
+                      {primaryFields.map((field) =>
+                        renderPropertyFieldRow(field, "Informação central para busca, destaque e entendimento rápido do imóvel."),
                       )}
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
+                    <div className="mb-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Localização</p>
+                      <p className="mt-1 text-sm text-novian-text/58">Cidade, estado e país seguem seletores estruturados para manter os filtros consistentes.</p>
+                    </div>
+                    <div className="space-y-3">
+                      {locationFields.map((field) =>
+                        renderPropertyFieldRow(field, "Dados estruturados que compõem o endereço e os filtros públicos."),
+                      )}
+                    </div>
+                  </div>
+
+                  {amenityFields.length > 0 ? (
+                    <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
+                      <div className="mb-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Amenidades e diferenciais</p>
+                        <p className="mt-1 text-sm text-novian-text/58">Selecione múltiplos itens para alimentar filtros e enriquecer a ficha do imóvel.</p>
+                      </div>
+                      <div className="space-y-3">
+                        {amenityFields.map((field) =>
+                          renderPropertyFieldRow(field, "Seleção múltipla para itens como piscina, academia, sauna e outros diferenciais."),
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
+                    <div className="mb-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Campos dinâmicos</p>
+                        <p className="mt-1 text-sm text-novian-text/58">
+                          {"Campos criados em Settings > Campos Personalizados aparecem automaticamente aqui para preenchimento."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {customAttributeFields.length > 0 ? (
+                      <div className="space-y-3">
+                        {customAttributeFields.map((field) =>
+                          renderPropertyFieldRow(field, "Campo criado dinamicamente para complementar a ficha e os filtros do imóvel."),
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-novian-muted/45 bg-novian-primary/20 px-4 py-5 text-sm text-novian-text/52">
+                        {"Nenhum campo dinâmico adicional ainda. Crie novos campos em Settings > Campos Personalizados."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
               </>
@@ -3915,6 +4414,34 @@ export function SettingsLayout() {
     permissions: "crm.access, properties.manage",
     isActive: true,
   });
+  const [propertyFields, setPropertyFields] = useState<CustomField[]>([]);
+  const [isLoadingPropertyFields, setIsLoadingPropertyFields] = useState(false);
+  const [isPropertyFieldCreatorOpen, setIsPropertyFieldCreatorOpen] = useState(false);
+  const [isSavingPropertyField, setIsSavingPropertyField] = useState(false);
+  const [editingPropertyFieldId, setEditingPropertyFieldId] = useState<string | null>(null);
+  const [propertyFieldForm, setPropertyFieldForm] = useState<{
+    name: string;
+    description: string;
+    iconName: string;
+    type: CustomField["type"];
+    optionsText: string;
+    required: boolean;
+    unit: string;
+    showOnPropertyCard: boolean;
+    showOnPropertyPage: boolean;
+    showOnPropertyFilters: boolean;
+  }>({
+    name: "",
+    description: "",
+    iconName: "building-2",
+    type: "text",
+    optionsText: "",
+    required: false,
+    unit: "",
+    showOnPropertyCard: false,
+    showOnPropertyPage: true,
+    showOnPropertyFilters: true,
+  });
 
   const fetchFunnels = async () => {
     try {
@@ -4082,6 +4609,140 @@ export function SettingsLayout() {
     }
   };
 
+  const loadPropertyFields = async () => {
+    setIsLoadingPropertyFields(true);
+    try {
+      const res = await fetch("/api/custom-fields?targetEntity=properties", { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error("Failed to load property fields");
+      }
+
+      const data = await res.json();
+      setPropertyFields(Array.isArray(data.fields) ? data.fields : []);
+    } catch (error) {
+      console.error(error);
+      setPropertyFields([]);
+    } finally {
+      setIsLoadingPropertyFields(false);
+    }
+  };
+
+  const resetPropertyFieldForm = () => {
+    setPropertyFieldForm({
+      name: "",
+      description: "",
+      iconName: "building-2",
+      type: "text",
+      optionsText: "",
+      required: false,
+      unit: "",
+      showOnPropertyCard: false,
+      showOnPropertyPage: true,
+      showOnPropertyFilters: true,
+    });
+    setEditingPropertyFieldId(null);
+  };
+
+  const startEditingPropertyField = (field: CustomField) => {
+    setEditingPropertyFieldId(field.dbId || field.id);
+    setIsPropertyFieldCreatorOpen(true);
+    setPropertyFieldForm({
+      name: field.name,
+      description: field.description || "",
+      iconName: field.iconName || "building-2",
+      type: field.type,
+      optionsText: field.options?.join("\n") || "",
+      required: field.required,
+      unit: field.unit || "",
+      showOnPropertyCard: Boolean(field.showOnPropertyCard),
+      showOnPropertyPage: field.showOnPropertyPage !== false,
+      showOnPropertyFilters: Boolean(field.showOnPropertyFilters),
+    });
+  };
+
+  const handleSavePropertyFieldFromSettings = async () => {
+    if (!isAdmin || !propertyFieldForm.name.trim()) {
+      return;
+    }
+
+    setIsSavingPropertyField(true);
+    try {
+      const existingField = editingPropertyFieldId
+        ? propertyFields.find((field) => field.dbId === editingPropertyFieldId || field.id === editingPropertyFieldId)
+        : null;
+      const options =
+        propertyFieldForm.type === "dropdown" || propertyFieldForm.type === "multiselect"
+          ? propertyFieldForm.optionsText
+              .split("\n")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : [];
+
+      const isEditing = Boolean(editingPropertyFieldId);
+      const endpoint = isEditing ? `/api/custom-fields/${editingPropertyFieldId}` : "/api/custom-fields";
+      const method = isEditing ? "PATCH" : "POST";
+      const res = await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: propertyFieldForm.name.trim(),
+          description: propertyFieldForm.description.trim(),
+          iconName: propertyFieldForm.iconName,
+          targetEntity: "properties",
+          type: propertyFieldForm.type,
+          options,
+          required: propertyFieldForm.required,
+          unit: propertyFieldForm.type === "number" ? propertyFieldForm.unit.trim() : "",
+          showOnPropertyCard: propertyFieldForm.showOnPropertyCard,
+          showOnPropertyPage: propertyFieldForm.showOnPropertyPage,
+          showOnPropertyFilters: propertyFieldForm.showOnPropertyFilters,
+          sortOrder: existingField?.sortOrder ?? propertyFields.length * 10 + 10,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create property field");
+      }
+
+      resetPropertyFieldForm();
+      setIsPropertyFieldCreatorOpen(false);
+      await loadPropertyFields();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSavingPropertyField(false);
+    }
+  };
+
+  const handleDeletePropertyFieldFromSettings = async (field: CustomField) => {
+    if (!isAdmin || PROPERTY_SYSTEM_FIELD_IDS.has(field.id) || !field.dbId) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete the field "${field.name}"? This will remove it from the property settings.`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/custom-fields/${field.dbId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete property field");
+      }
+
+      if (editingPropertyFieldId === field.dbId) {
+        resetPropertyFieldForm();
+        setIsPropertyFieldCreatorOpen(false);
+      }
+
+      await loadPropertyFields();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const fetchAgents = async () => {
     try {
       const res = await fetch("/api/agents", { cache: "no-store" });
@@ -4116,7 +4777,6 @@ export function SettingsLayout() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line
     fetchAgents();
     fetchFunnels();
     fetchCurrentAppUser();
@@ -4136,6 +4796,12 @@ export function SettingsLayout() {
       fetchManagedUsers();
     }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeSettingsTab === "fields") {
+      loadPropertyFields();
+    }
+  }, [activeSettingsTab]);
 
   useEffect(() => {
     if (!isAdmin && activeSettingsTab === "users") {
@@ -4185,6 +4851,32 @@ export function SettingsLayout() {
     } finally {
       setIsSavingAiCopyPrompt(false);
     }
+  };
+
+  const systemPropertyFields = propertyFields.filter((field) => PROPERTY_SYSTEM_FIELD_IDS.has(field.id));
+  const dynamicPropertyFields = propertyFields.filter((field) => !PROPERTY_SYSTEM_FIELD_IDS.has(field.id));
+  const editingPropertyField = editingPropertyFieldId
+    ? propertyFields.find((field) => field.dbId === editingPropertyFieldId || field.id === editingPropertyFieldId) || null
+    : null;
+  const isEditingSystemPropertyField = Boolean(
+    editingPropertyField && PROPERTY_SYSTEM_FIELD_IDS.has(editingPropertyField.id),
+  );
+  const SelectedPropertyFieldIcon = getPropertyFieldIcon(propertyFieldForm.iconName);
+  const propertyFieldTypeOptions: PopupSelectOption[] = [
+    { value: "text", label: "Texto" },
+    { value: "number", label: "Numero" },
+    { value: "dropdown", label: "Dropdown" },
+    { value: "multiselect", label: "Multi select" },
+    { value: "boolean", label: "Sim / Nao" },
+    { value: "date", label: "Data" },
+  ];
+  const propertyFieldTypeLabels: Record<CustomField["type"], string> = {
+    text: "Texto",
+    number: "Numero",
+    dropdown: "Dropdown",
+    multiselect: "Multi select",
+    boolean: "Sim / Nao",
+    date: "Data",
   };
 
   return (
@@ -4310,10 +5002,317 @@ export function SettingsLayout() {
           )}
 
           {activeSettingsTab === "fields" && (
-            <div className="text-center py-20 text-novian-text/50">
-               <Settings className="w-16 h-16 mx-auto mb-4 opacity-20" />
-               <p className="text-lg mb-2">Gerenciador de Campos Personalizados</p>
-               <p className="text-sm max-w-md mx-auto">Em breve: Crie campos dinâmicos (texto, número, dropdown) para o cadastro de Leads. Os campos criados aqui aparecerão automaticamente no formulário de &quot;Novo Lead&quot;.</p>
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-novian-text mb-2">Campos Personalizados de Imóveis</h2>
+                  <p className="text-sm text-novian-text/60 max-w-2xl">
+                    Crie aqui os campos dinâmicos usados no drawer do imóvel. Os campos estruturados como tipo, cidade, estado, país e amenidades continuam gerenciados pelo sistema.
+                  </p>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isPropertyFieldCreatorOpen) {
+                        resetPropertyFieldForm();
+                        setIsPropertyFieldCreatorOpen(false);
+                        return;
+                      }
+
+                      resetPropertyFieldForm();
+                      setIsPropertyFieldCreatorOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-novian-muted/40 px-4 py-2 text-sm font-medium text-novian-text/78 transition hover:border-novian-accent/35 hover:text-novian-text"
+                  >
+                    <Plus size={14} />
+                    {isPropertyFieldCreatorOpen ? "Fechar editor" : "Adicionar campo"}
+                  </button>
+                ) : null}
+              </div>
+
+              {isPropertyFieldCreatorOpen && isAdmin ? (
+                <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-5">
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">
+                      {editingPropertyFieldId
+                        ? isEditingSystemPropertyField
+                          ? "Editar campo do sistema"
+                          : "Editar campo dinamico"
+                        : "Novo campo dinamico"}
+                    </p>
+                    <p className="mt-1 text-sm text-novian-text/58">
+                      {editingPropertyFieldId
+                        ? isEditingSystemPropertyField
+                          ? "Ajuste nome, descricao, icone e visibilidade de um campo estruturado do sistema."
+                          : "Atualize configuracoes, descricao, icone e exibicao do campo dinamico."
+                        : "Campos criados aqui aparecem automaticamente na secao de campos dinamicos do drawer do imovel."}
+                    </p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Nome do campo</label>
+                      <input
+                        type="text"
+                        value={propertyFieldForm.name}
+                        onChange={(event) => setPropertyFieldForm((current) => ({ ...current, name: event.target.value }))}
+                        className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-sm outline-none transition focus:border-novian-accent/35"
+                        placeholder="Ex: Lavabos"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Tipo</label>
+                      <PopupSelect
+                        value={propertyFieldForm.type}
+                        onChange={(value) => setPropertyFieldForm((current) => ({ ...current, type: value as CustomField["type"] }))}
+                        options={propertyFieldTypeOptions}
+                        disabled={isEditingSystemPropertyField}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Descricao</label>
+                      <textarea
+                        value={propertyFieldForm.description}
+                        onChange={(event) =>
+                          setPropertyFieldForm((current) => ({ ...current, description: event.target.value }))
+                        }
+                        className="h-24 w-full resize-none rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-sm outline-none transition focus:border-novian-accent/35"
+                        placeholder="Explique quando este campo aparece e por que ele e importante."
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Icone</label>
+                      <PopupSelect
+                        value={propertyFieldForm.iconName}
+                        onChange={(value) => setPropertyFieldForm((current) => ({ ...current, iconName: value }))}
+                        options={PROPERTY_FIELD_ICON_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                        }))}
+                        searchable
+                        searchPlaceholder="Buscar icone"
+                        emptyMessage="Nenhum icone encontrado."
+                      />
+                    </div>
+                    <div className="rounded-2xl border border-novian-muted/35 bg-novian-primary/30 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-novian-text/50">
+                        Pre-visualizacao
+                      </p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-novian-muted/35 bg-novian-surface/70 text-novian-accent">
+                          <SelectedPropertyFieldIcon size={18} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-novian-text">
+                            {propertyFieldForm.name.trim() || "Nome do campo"}
+                          </p>
+                          <p className="text-xs text-novian-text/52">
+                            {propertyFieldForm.description.trim() || "Descricao curta para orientar o time no drawer do imovel."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {propertyFieldForm.type === "number" ? (
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-novian-text/70">Unidade</label>
+                        <input
+                          type="text"
+                          value={propertyFieldForm.unit}
+                          onChange={(event) => setPropertyFieldForm((current) => ({ ...current, unit: event.target.value }))}
+                          disabled={isEditingSystemPropertyField}
+                          className="w-full rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-sm outline-none transition focus:border-novian-accent/35"
+                          placeholder="Ex: m²"
+                        />
+                      </div>
+                    ) : null}
+                    {propertyFieldForm.type === "dropdown" || propertyFieldForm.type === "multiselect" ? (
+                      <div className="md:col-span-2">
+                        <label className="mb-1 block text-xs font-medium text-novian-text/70">Opções</label>
+                        <textarea
+                          value={propertyFieldForm.optionsText}
+                          onChange={(event) => setPropertyFieldForm((current) => ({ ...current, optionsText: event.target.value }))}
+                          disabled={isEditingSystemPropertyField}
+                          className="h-24 w-full resize-none rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-sm outline-none transition focus:border-novian-accent/35"
+                          placeholder={"Uma opção por linha\nPiscina\nAcademia\nSauna"}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {[
+                      { key: "required", label: "Obrigatório" },
+                      { key: "showOnPropertyCard", label: "Mostrar no card" },
+                      { key: "showOnPropertyPage", label: "Mostrar na página" },
+                      { key: "showOnPropertyFilters", label: "Usar nos filtros" },
+                    ].map((toggle) => (
+                      <label key={toggle.key} className="flex items-center gap-3 rounded-xl border border-novian-muted/35 bg-novian-primary px-3 py-2.5 text-sm text-novian-text/78">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(propertyFieldForm[toggle.key as keyof typeof propertyFieldForm])}
+                          onChange={(event) =>
+                            setPropertyFieldForm((current) => ({
+                              ...current,
+                              [toggle.key]: event.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-novian-muted/50"
+                        />
+                        <span>{toggle.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetPropertyFieldForm();
+                        setIsPropertyFieldCreatorOpen(false);
+                      }}
+                      className="rounded-full px-4 py-2 text-sm text-novian-text/60 transition hover:text-novian-text"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSavePropertyFieldFromSettings}
+                      disabled={isSavingPropertyField || !propertyFieldForm.name.trim()}
+                      className="rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
+                    >
+                      {isSavingPropertyField
+                        ? editingPropertyFieldId
+                          ? "Salvando..."
+                          : "Criando..."
+                        : editingPropertyFieldId
+                          ? "Salvar alteracoes"
+                          : "Criar campo"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-6 xl:grid-cols-[1.05fr_1.55fr]">
+                <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-5">
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Campos do sistema</p>
+                    <p className="mt-1 text-sm text-novian-text/58">Esses campos são estruturados e controlados pela plataforma.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {systemPropertyFields.map((field) => (
+                      <div key={field.id} className="rounded-2xl border border-novian-muted/30 bg-novian-primary/25 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/35 bg-novian-surface/70 text-novian-accent">
+                              {(() => {
+                                const FieldIcon = getPropertyFieldIcon(field.iconName);
+                                return <FieldIcon size={16} />;
+                              })()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-novian-text">{field.name}</p>
+                              <p className="mt-1 text-xs text-novian-text/48">
+                                Tipo: {propertyFieldTypeLabels[field.type]}
+                              </p>
+                              <p className="mt-2 text-xs leading-5 text-novian-text/50">
+                                {field.description || "Campo estruturado mantido pela plataforma para endereco, destaques e filtros."}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] uppercase tracking-[0.14em] text-novian-text/52">
+                              Sistema
+                            </span>
+                            {isAdmin && field.dbId ? (
+                              <button
+                                type="button"
+                                onClick={() => startEditingPropertyField(field)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-novian-muted/35 text-novian-text/65 transition hover:border-novian-accent/35 hover:text-novian-text"
+                                aria-label={`Editar campo ${field.name}`}
+                              >
+                                <Edit size={14} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-5">
+                  <div className="mb-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Campos dinâmicos</p>
+                    <p className="mt-1 text-sm text-novian-text/58">Estes são os campos que realmente podem ser adicionados e evoluídos pelo admin.</p>
+                  </div>
+
+                  {isLoadingPropertyFields ? (
+                    <div className="rounded-2xl border border-dashed border-novian-muted/35 bg-novian-primary/20 px-4 py-10 text-center text-sm text-novian-text/50">
+                      Carregando campos...
+                    </div>
+                  ) : dynamicPropertyFields.length > 0 ? (
+                    <div className="space-y-3">
+                      {dynamicPropertyFields.map((field) => (
+                        <div key={field.id} className="rounded-2xl border border-novian-muted/30 bg-novian-primary/25 px-4 py-3">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/35 bg-novian-surface/70 text-novian-accent">
+                                {(() => {
+                                  const FieldIcon = getPropertyFieldIcon(field.iconName);
+                                  return <FieldIcon size={16} />;
+                                })()}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-novian-text">{field.name}</p>
+                                <p className="mt-1 text-xs text-novian-text/48">
+                                  Tipo: {propertyFieldTypeLabels[field.type]}
+                                  {field.unit ? ` · Unidade: ${field.unit}` : ""}
+                                  {field.options?.length ? ` · ${field.options.length} opções` : ""}
+                                </p>
+                                <p className="mt-2 text-xs leading-5 text-novian-text/50">
+                                  {field.description || "Campo dinamico criado pelo admin para complementar a ficha e os filtros do imovel."}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-start gap-3 lg:items-end">
+                              <div className="flex flex-wrap gap-2">
+                                {field.required ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Obrigatorio</span> : null}
+                                {field.showOnPropertyCard ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Card</span> : null}
+                                {field.showOnPropertyPage ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Pagina</span> : null}
+                                {field.showOnPropertyFilters ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Filtro</span> : null}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {isAdmin && field.dbId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditingPropertyField(field)}
+                                    className="inline-flex h-9 items-center gap-2 rounded-full border border-novian-muted/35 px-3 text-sm text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
+                                  >
+                                    <Edit size={14} />
+                                    Editar
+                                  </button>
+                                ) : null}
+                                {isAdmin && field.dbId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePropertyFieldFromSettings(field)}
+                                    className="inline-flex h-9 items-center gap-2 rounded-full border border-red-400/25 px-3 text-sm text-red-500 transition hover:border-red-400/45 hover:bg-red-500/5"
+                                  >
+                                    <Trash2 size={14} />
+                                    Excluir
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-novian-muted/35 bg-novian-primary/20 px-4 py-10 text-center text-sm text-novian-text/50">
+                      Nenhum campo dinâmico criado ainda.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 

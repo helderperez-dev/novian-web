@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 import { Database } from "./database.types";
+import { ensurePropertyReferenceCode } from "./property-reference";
+import { PROPERTY_SYSTEM_FIELD_KEYS, synchronizePropertyStructuredData } from "./property-attributes";
 
 type PropertyRow = Database["public"]["Tables"]["properties"]["Row"];
 type PropertyOfferRow = Database["public"]["Tables"]["property_offers"]["Row"];
@@ -17,14 +19,17 @@ export interface ChatMessage {
 export interface CustomField {
     id: string;
     name: string;
-    type: 'text' | 'number' | 'dropdown' | 'date';
-    options?: string[]; // For dropdowns
+    description?: string;
+    iconName?: string;
+    type: 'text' | 'number' | 'dropdown' | 'date' | 'boolean' | 'multiselect';
+    options?: string[]; // For dropdowns and multiselects
     required: boolean;
     dbId?: string;
     unit?: string;
     sortOrder?: number;
     showOnPropertyCard?: boolean;
     showOnPropertyPage?: boolean;
+    showOnPropertyFilters?: boolean;
     targetEntity?: string;
 }
 
@@ -81,7 +86,7 @@ export interface LandingPageConfig {
     leadMagnetFileUrl?: string;
 }
 
-export type PropertyCustomDataValue = string | number | boolean;
+export type PropertyCustomDataValue = string | number | boolean | string[];
 export type PropertyOfferType = "sale" | "rent";
 
 export interface PropertyOffer {
@@ -112,6 +117,16 @@ export interface Property {
     coverImage: string;
     images: string[];
     address: string;
+    propertyType?: string | null;
+    street?: string | null;
+    streetNumber?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+    amenities?: string[];
     mapEmbedUrl?: string;
     customData: Record<string, PropertyCustomDataValue>;
     landingPage: LandingPageConfig;
@@ -431,9 +446,31 @@ export const messagesStore = globalForStore.messages ?? [];
 export const threadsStore = globalForStore.threads ?? new Map<string, Thread>();
 export const propertiesStore = globalForStore.properties;
 export const propertyFieldsStore = globalForStore.propertyFields ?? [
-    { id: "area", name: "Área", type: "number", required: true, unit: "m²", sortOrder: 10, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
-    { id: "bedrooms", name: "Quartos", type: "number", required: true, sortOrder: 20, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
-    { id: "parking", name: "Vagas", type: "number", required: true, sortOrder: 30, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "property_type", name: "Tipo de Imóvel", description: "Tipo principal do imóvel usado em filtros, cards e na landing page.", iconName: "building-2", type: "dropdown", options: ["Apartamento", "Casa", "Cobertura", "Casa em condominio", "Terreno", "Comercial", "Studio", "Loft"], required: true, sortOrder: 5, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "area", name: "Área", description: "Área principal usada para destaque e comparação entre imóveis.", iconName: "ruler", type: "number", required: true, unit: "m²", sortOrder: 10, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "street", name: "Rua", description: "Nome da rua do imóvel.", iconName: "map", type: "text", required: false, sortOrder: 12, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "street_number", name: "Número", description: "Número do endereço.", iconName: "hash", type: "text", required: false, sortOrder: 14, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "complement", name: "Complemento", description: "Complemento opcional do endereço.", iconName: "door-open", type: "text", required: false, sortOrder: 16, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "neighborhood", name: "Bairro", description: "Bairro utilizado em filtros e localização.", iconName: "map-pinned", type: "text", required: false, sortOrder: 18, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "city", name: "Cidade", description: "Cidade padronizada para filtros e buscas.", iconName: "map-pin", type: "dropdown", required: true, sortOrder: 19, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "bedrooms", name: "Quartos", description: "Quantidade de quartos do imóvel.", iconName: "bed-double", type: "number", required: true, sortOrder: 20, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "bathrooms", name: "Banheiros", description: "Quantidade total de banheiros do imóvel.", iconName: "building-2", type: "number", required: false, sortOrder: 25, showOnPropertyCard: true, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "state", name: "Estado", description: "Estado padronizado para filtros e buscas.", iconName: "landmark", type: "dropdown", required: false, sortOrder: 21, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "postal_code", name: "CEP", description: "CEP do imóvel.", iconName: "mail", type: "text", required: false, sortOrder: 22, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "country", name: "País", description: "País do imóvel.", iconName: "flag", type: "dropdown", required: false, sortOrder: 23, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "parking", name: "Vagas", description: "Quantidade de vagas de garagem disponíveis.", iconName: "car-front", type: "number", required: true, sortOrder: 30, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
+    { id: "condominium_fee", name: "Condomínio", description: "Valor mensal do condomínio.", iconName: "building-2", type: "number", required: false, unit: "R$", sortOrder: 31, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "iptu", name: "IPTU", description: "Valor do IPTU.", iconName: "building-2", type: "number", required: false, unit: "R$", sortOrder: 32, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "transaction_type", name: "Transação", description: "Define se o imóvel está disponível para venda, locação ou ambos.", iconName: "building-2", type: "dropdown", options: ["Venda", "Locação", "Venda e locação"], required: false, sortOrder: 33, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "property_purpose", name: "Finalidade", description: "Finalidade principal do imóvel.", iconName: "building-2", type: "dropdown", options: ["Residencial", "Comercial", "Industrial", "Rural", "Temporada"], required: false, sortOrder: 34, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "lavabos", name: "Lavabos", description: "Quantidade de lavabos do imóvel.", iconName: "building-2", type: "number", required: false, sortOrder: 35, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
+    { id: "built_area", name: "Área construída", description: "Área construída em metros quadrados.", iconName: "ruler", type: "number", required: false, unit: "m²", sortOrder: 36, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "private_area", name: "Área privativa", description: "Área privativa em metros quadrados.", iconName: "ruler", type: "number", required: false, unit: "m²", sortOrder: 37, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "total_area", name: "Área total", description: "Área total do imóvel em metros quadrados.", iconName: "ruler", type: "number", required: false, unit: "m²", sortOrder: 38, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "property_age", name: "Idade do imóvel", description: "Idade aproximada do imóvel em anos.", iconName: "building-2", type: "number", required: false, unit: "anos", sortOrder: 39, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "amenities", name: "Amenidades", description: "Amenidades selecionáveis para enriquecer a ficha do imóvel.", iconName: "sparkles", type: "multiselect", options: ["Piscina", "Academia", "Espaco gourmet", "Churrasqueira", "Playground", "Salao de festas", "Portaria 24h", "Pet place", "Varanda", "Suite"], required: false, sortOrder: 40, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "accepts_exchange", name: "Aceita permuta", description: "Indica se o proprietário aceita permuta.", iconName: "building-2", type: "boolean", required: false, sortOrder: 41, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "accepts_financing", name: "Aceita financiamento", description: "Indica se o imóvel aceita financiamento.", iconName: "building-2", type: "boolean", required: false, sortOrder: 42, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
 ];
 
 export const customFieldsStore = globalForStore.customFields ?? [
@@ -596,6 +633,8 @@ function mapPropertyFieldRow(row: Record<string, unknown>): CustomField {
         id: typeof row.field_key === "string" && row.field_key ? row.field_key : String(row.id),
         dbId: typeof row.id === "string" ? row.id : undefined,
         name: String(row.name || ""),
+        description: typeof row.description === "string" && row.description ? row.description : undefined,
+        iconName: typeof row.icon_name === "string" && row.icon_name ? row.icon_name : undefined,
         type: (row.type as CustomField["type"]) || "text",
         options: Array.isArray(row.options) ? row.options.map((option) => String(option)) : undefined,
         required: Boolean(row.required),
@@ -603,6 +642,7 @@ function mapPropertyFieldRow(row: Record<string, unknown>): CustomField {
         sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
         showOnPropertyCard: Boolean(row.show_on_property_card),
         showOnPropertyPage: Boolean(row.show_on_property_page),
+        showOnPropertyFilters: Boolean(row.show_on_property_filters),
         targetEntity: typeof row.target_entity === "string" ? row.target_entity : "properties",
     };
 }
@@ -680,6 +720,28 @@ export async function getProperties() {
     return rowsWithOffers.map((row: Record<string, unknown>) => {
         const offers = mapPropertyOffers(row);
         const primaryOffer = offers.find((offer) => offer.isPrimary) || offers[0];
+        const referenceAwareCustomData = ensurePropertyReferenceCode(
+            (row.custom_data as unknown as Record<string, PropertyCustomDataValue>) || {},
+            {
+                id: String(row.id),
+                slug: typeof row.slug === "string" ? row.slug : null,
+                title: typeof row.title === "string" ? row.title : null,
+            },
+        );
+        const structured = synchronizePropertyStructuredData({
+            propertyType: typeof row.property_type === "string" ? row.property_type : null,
+            street: typeof row.street === "string" ? row.street : null,
+            streetNumber: typeof row.street_number === "string" ? row.street_number : null,
+            complement: typeof row.complement === "string" ? row.complement : null,
+            neighborhood: typeof row.neighborhood === "string" ? row.neighborhood : null,
+            city: typeof row.city === "string" ? row.city : null,
+            state: typeof row.state === "string" ? row.state : null,
+            postalCode: typeof row.postal_code === "string" ? row.postal_code : null,
+            country: typeof row.country === "string" ? row.country : null,
+            amenities: Array.isArray(row.amenities) ? row.amenities : [],
+            address: typeof row.address === "string" ? row.address : "",
+            customData: referenceAwareCustomData,
+        });
 
         return {
             id: row.id,
@@ -691,9 +753,19 @@ export async function getProperties() {
             isExclusiveNovian: Boolean(row.is_exclusive_novian),
             coverImage: row.cover_image,
             images: row.images,
-            address: row.address,
+            address: structured.address,
+            propertyType: structured.propertyType,
+            street: structured.street,
+            streetNumber: structured.streetNumber,
+            complement: structured.complement,
+            neighborhood: structured.neighborhood,
+            city: structured.city,
+            state: structured.state,
+            postalCode: structured.postalCode,
+            country: structured.country,
+            amenities: structured.amenities,
             mapEmbedUrl: row.map_embed_url,
-            customData: (row.custom_data as unknown as Record<string, PropertyCustomDataValue>) || {},
+            customData: structured.customData as Record<string, PropertyCustomDataValue>,
             landingPage: (row.landing_page as unknown as LandingPageConfig) || {},
             offers,
             brokerUserId: typeof row.broker_user_id === "string" ? row.broker_user_id : null,
@@ -703,6 +775,20 @@ export async function getProperties() {
 }
 
 export async function createProperty(data: Omit<Property, "id">) {
+    const structured = synchronizePropertyStructuredData({
+        propertyType: data.propertyType,
+        street: data.street,
+        streetNumber: data.streetNumber,
+        complement: data.complement,
+        neighborhood: data.neighborhood,
+        city: data.city,
+        state: data.state,
+        postalCode: data.postalCode,
+        country: data.country,
+        amenities: data.amenities,
+        address: data.address,
+        customData: data.customData,
+    });
     const snakeCaseData: Database['public']['Tables']['properties']['Insert'] = {
         title: data.title,
         slug: data.slug,
@@ -712,9 +798,19 @@ export async function createProperty(data: Omit<Property, "id">) {
         is_exclusive_novian: Boolean(data.isExclusiveNovian),
         cover_image: data.coverImage,
         images: data.images,
-        address: data.address,
+        address: structured.address,
+        property_type: structured.propertyType,
+        street: structured.street,
+        street_number: structured.streetNumber,
+        complement: structured.complement,
+        neighborhood: structured.neighborhood,
+        city: structured.city,
+        state: structured.state,
+        postal_code: structured.postalCode,
+        country: structured.country,
+        amenities: structured.amenities,
         map_embed_url: data.mapEmbedUrl,
-        custom_data: data.customData as Database['public']['Tables']['properties']['Insert']['custom_data'],
+        custom_data: structured.customData as Database['public']['Tables']['properties']['Insert']['custom_data'],
         landing_page: data.landingPage as unknown as Database['public']['Tables']['properties']['Insert']['landing_page']
     };
 
@@ -728,12 +824,42 @@ export async function createProperty(data: Omit<Property, "id">) {
     return {
         ...data,
         id: result.id,
+        address: structured.address,
+        propertyType: structured.propertyType,
+        street: structured.street,
+        streetNumber: structured.streetNumber,
+        complement: structured.complement,
+        neighborhood: structured.neighborhood,
+        city: structured.city,
+        state: structured.state,
+        postalCode: structured.postalCode,
+        country: structured.country,
+        amenities: structured.amenities,
+        customData: ensurePropertyReferenceCode(structured.customData as Record<string, PropertyCustomDataValue>, {
+            id: result.id,
+            slug: data.slug,
+            title: data.title,
+        }),
         offers: data.offers,
     } as Property;
 }
 
 export async function updateProperty(id: string, data: Partial<Property>) {
     const snakeCaseData: Database['public']['Tables']['properties']['Update'] = {};
+    const structured = synchronizePropertyStructuredData({
+        propertyType: data.propertyType,
+        street: data.street,
+        streetNumber: data.streetNumber,
+        complement: data.complement,
+        neighborhood: data.neighborhood,
+        city: data.city,
+        state: data.state,
+        postalCode: data.postalCode,
+        country: data.country,
+        amenities: data.amenities,
+        address: data.address,
+        customData: data.customData,
+    });
     if (data.title !== undefined) snakeCaseData.title = data.title;
     if (data.slug !== undefined) snakeCaseData.slug = data.slug;
     if (data.description !== undefined) snakeCaseData.description = data.description;
@@ -742,9 +868,19 @@ export async function updateProperty(id: string, data: Partial<Property>) {
     if (data.isExclusiveNovian !== undefined) snakeCaseData.is_exclusive_novian = data.isExclusiveNovian;
     if (data.coverImage !== undefined) snakeCaseData.cover_image = data.coverImage;
     if (data.images !== undefined) snakeCaseData.images = data.images;
-    if (data.address !== undefined) snakeCaseData.address = data.address;
+    if (data.address !== undefined || data.street !== undefined || data.city !== undefined || data.neighborhood !== undefined || data.state !== undefined || data.country !== undefined) snakeCaseData.address = structured.address;
+    if (data.propertyType !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.propertyType] !== undefined) snakeCaseData.property_type = structured.propertyType;
+    if (data.street !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.street] !== undefined) snakeCaseData.street = structured.street;
+    if (data.streetNumber !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.streetNumber] !== undefined) snakeCaseData.street_number = structured.streetNumber;
+    if (data.complement !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.complement] !== undefined) snakeCaseData.complement = structured.complement;
+    if (data.neighborhood !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.neighborhood] !== undefined) snakeCaseData.neighborhood = structured.neighborhood;
+    if (data.city !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.city] !== undefined) snakeCaseData.city = structured.city;
+    if (data.state !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.state] !== undefined) snakeCaseData.state = structured.state;
+    if (data.postalCode !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.postalCode] !== undefined) snakeCaseData.postal_code = structured.postalCode;
+    if (data.country !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.country] !== undefined) snakeCaseData.country = structured.country;
+    if (data.amenities !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.amenities] !== undefined) snakeCaseData.amenities = structured.amenities;
     if (data.mapEmbedUrl !== undefined) snakeCaseData.map_embed_url = data.mapEmbedUrl;
-    if (data.customData !== undefined) snakeCaseData.custom_data = data.customData as Database['public']['Tables']['properties']['Update']['custom_data'];
+    if (data.customData !== undefined) snakeCaseData.custom_data = structured.customData as Database['public']['Tables']['properties']['Update']['custom_data'];
     if (data.landingPage !== undefined) snakeCaseData.landing_page = data.landingPage as unknown as Database['public']['Tables']['properties']['Update']['landing_page'];
 
     const { data: result, error } = await supabase.from('properties').update(snakeCaseData).eq('id', id).select().single();
@@ -764,9 +900,26 @@ export async function updateProperty(id: string, data: Partial<Property>) {
         isExclusiveNovian: Boolean(result.is_exclusive_novian),
         coverImage: result.cover_image,
         images: result.images,
-        address: result.address,
+        address: structured.address || result.address,
+        propertyType: structured.propertyType,
+        street: structured.street,
+        streetNumber: structured.streetNumber,
+        complement: structured.complement,
+        neighborhood: structured.neighborhood,
+        city: structured.city,
+        state: structured.state,
+        postalCode: structured.postalCode,
+        country: structured.country,
+        amenities: structured.amenities,
         mapEmbedUrl: result.map_embed_url,
-        customData: result.custom_data as unknown as Record<string, PropertyCustomDataValue>,
+        customData: ensurePropertyReferenceCode(
+            structured.customData as Record<string, PropertyCustomDataValue>,
+            {
+                id: result.id,
+                slug: result.slug,
+                title: result.title,
+            },
+        ),
         landingPage: result.landing_page as unknown as LandingPageConfig,
         offers: data.offers,
     } as Property;
@@ -817,9 +970,12 @@ export async function createPropertyField(field: Omit<CustomField, "id">) {
         required: field.required,
         options: field.options && field.options.length > 0 ? field.options : null,
         field_key: fieldKey,
+        description: field.description ?? null,
+        icon_name: field.iconName ?? null,
         unit: field.unit ?? null,
         sort_order: field.sortOrder ?? propertyFieldsStore.length * 10,
         show_on_property_card: Boolean(field.showOnPropertyCard),
+        show_on_property_filters: Boolean(field.showOnPropertyFilters),
         show_on_property_page: field.showOnPropertyPage ?? true,
     };
 

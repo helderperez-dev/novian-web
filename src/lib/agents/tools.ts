@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminSupabaseClient } from "../supabase/admin";
 import { getProperties, type Property } from "../store";
 import { getPrimaryPropertyOffer } from "../property-utils";
+import { getPropertyReferenceCode } from "../property-reference";
 
 type SupportedPropertyType = "apartment" | "house" | "land" | "commercial";
 
@@ -74,6 +75,7 @@ function normalizePropertyType(value: unknown): SupportedPropertyType | null {
 
 function inferOfficialPropertyType(property: Property): SupportedPropertyType | null {
     const customType =
+        normalizePropertyType(property.propertyType) ||
         normalizePropertyType(property.customData?.property_type) ||
         normalizePropertyType(property.customData?.propertyType);
 
@@ -126,6 +128,7 @@ export const searchPropertiesTool = new DynamicStructuredTool({
 
             const combinedData: {
                 id: string;
+                referenceCode: string;
                 title: string;
                 price: number | null;
                 offerType?: "sale" | "rent";
@@ -139,11 +142,15 @@ export const searchPropertiesTool = new DynamicStructuredTool({
                 .filter((property) =>
                     matchesLocation(
                         [
+                            getPropertyReferenceCode(property),
                             property.title,
                             property.address,
                             property.description,
-                            String(property.customData?.neighborhood || ""),
-                            String(property.customData?.city || ""),
+                            String(property.neighborhood || property.customData?.neighborhood || ""),
+                            String(property.city || property.customData?.city || ""),
+                            String(property.state || property.customData?.state || ""),
+                            String(property.propertyType || property.customData?.property_type || ""),
+                            ...(Array.isArray(property.amenities) ? property.amenities : []),
                         ],
                         location,
                     ),
@@ -167,6 +174,7 @@ export const searchPropertiesTool = new DynamicStructuredTool({
                     const primaryOffer = getPrimaryPropertyOffer(property);
                     return {
                     id: property.id,
+                    referenceCode: getPropertyReferenceCode(property),
                     title: property.title,
                     price: primaryOffer?.price ?? property.price,
                     offerType: primaryOffer?.offerType,

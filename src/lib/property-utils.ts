@@ -99,6 +99,10 @@ export function formatPropertyFieldValue(value: PropertyCustomDataValue, field?:
     return String(value);
   }
 
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
   if (field?.type === "number" && field?.unit) {
     return `${value} ${field.unit}`;
   }

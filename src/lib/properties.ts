@@ -4,6 +4,8 @@ import type { Database } from "@/lib/database.types";
 import type { LandingPageConfig, Property, PropertyCustomDataValue, PropertyOffer } from "@/lib/store";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { listBrokerSummariesByIds } from "@/lib/brokers";
+import { ensurePropertyReferenceCode } from "@/lib/property-reference";
+import { PROPERTY_SYSTEM_FIELD_KEYS, synchronizePropertyStructuredData } from "@/lib/property-attributes";
 
 type PropertyInsert = Database["public"]["Tables"]["properties"]["Insert"];
 type PropertyUpdate = Database["public"]["Tables"]["properties"]["Update"];
@@ -101,6 +103,24 @@ function getPrimaryOffer(offers: PropertyOffer[]) {
 function mapPropertyRow(row: PropertyRowWithOffers): Property {
   const offers = mapPropertyOffers(row);
   const primaryOffer = getPrimaryOffer(offers);
+  const referenceAwareCustomData = ensurePropertyReferenceCode(
+    (row.custom_data as Record<string, PropertyCustomDataValue> | null) || {},
+    { id: row.id, slug: row.slug, title: row.title },
+  );
+  const structured = synchronizePropertyStructuredData({
+    propertyType: row.property_type,
+    street: row.street,
+    streetNumber: row.street_number,
+    complement: row.complement,
+    neighborhood: row.neighborhood,
+    city: row.city,
+    state: row.state,
+    postalCode: row.postal_code,
+    country: row.country,
+    amenities: row.amenities,
+    address: row.address,
+    customData: referenceAwareCustomData,
+  });
 
   return {
     id: row.id,
@@ -112,9 +132,19 @@ function mapPropertyRow(row: PropertyRowWithOffers): Property {
     isExclusiveNovian: Boolean(row.is_exclusive_novian),
     coverImage: row.cover_image || "",
     images: row.images || [],
-    address: row.address,
+    address: structured.address,
+    propertyType: structured.propertyType,
+    street: structured.street,
+    streetNumber: structured.streetNumber,
+    complement: structured.complement,
+    neighborhood: structured.neighborhood,
+    city: structured.city,
+    state: structured.state,
+    postalCode: structured.postalCode,
+    country: structured.country,
+    amenities: structured.amenities,
     mapEmbedUrl: row.map_embed_url || undefined,
-    customData: (row.custom_data as Record<string, PropertyCustomDataValue>) || {},
+    customData: structured.customData as Record<string, PropertyCustomDataValue>,
     landingPage: (row.landing_page as unknown as LandingPageConfig) || {},
     offers,
     brokerUserId: row.broker_user_id,
@@ -123,6 +153,21 @@ function mapPropertyRow(row: PropertyRowWithOffers): Property {
 }
 
 function toPropertyInsert(data: Omit<Property, "id">): PropertyInsert {
+  const structured = synchronizePropertyStructuredData({
+    propertyType: data.propertyType,
+    street: data.street,
+    streetNumber: data.streetNumber,
+    complement: data.complement,
+    neighborhood: data.neighborhood,
+    city: data.city,
+    state: data.state,
+    postalCode: data.postalCode,
+    country: data.country,
+    amenities: data.amenities,
+    address: data.address,
+    customData: data.customData,
+  });
+
   return {
     title: data.title,
     slug: data.slug,
@@ -132,9 +177,19 @@ function toPropertyInsert(data: Omit<Property, "id">): PropertyInsert {
     is_exclusive_novian: Boolean(data.isExclusiveNovian),
     cover_image: data.coverImage,
     images: data.images,
-    address: data.address,
+    address: structured.address,
+    property_type: structured.propertyType,
+    street: structured.street,
+    street_number: structured.streetNumber,
+    complement: structured.complement,
+    neighborhood: structured.neighborhood,
+    city: structured.city,
+    state: structured.state,
+    postal_code: structured.postalCode,
+    country: structured.country,
+    amenities: structured.amenities,
     map_embed_url: data.mapEmbedUrl,
-    custom_data: data.customData as PropertyInsert["custom_data"],
+    custom_data: structured.customData as PropertyInsert["custom_data"],
     landing_page: data.landingPage as unknown as PropertyInsert["landing_page"],
     broker_user_id: data.brokerUserId ?? null,
   };
@@ -142,6 +197,20 @@ function toPropertyInsert(data: Omit<Property, "id">): PropertyInsert {
 
 function toPropertyUpdate(data: Partial<Property>): PropertyUpdate {
   const next: PropertyUpdate = {};
+  const structured = synchronizePropertyStructuredData({
+    propertyType: data.propertyType,
+    street: data.street,
+    streetNumber: data.streetNumber,
+    complement: data.complement,
+    neighborhood: data.neighborhood,
+    city: data.city,
+    state: data.state,
+    postalCode: data.postalCode,
+    country: data.country,
+    amenities: data.amenities,
+    address: data.address,
+    customData: data.customData,
+  });
 
   if (data.title !== undefined) next.title = data.title;
   if (data.slug !== undefined) next.slug = data.slug;
@@ -151,9 +220,19 @@ function toPropertyUpdate(data: Partial<Property>): PropertyUpdate {
   if (data.isExclusiveNovian !== undefined) next.is_exclusive_novian = data.isExclusiveNovian;
   if (data.coverImage !== undefined) next.cover_image = data.coverImage;
   if (data.images !== undefined) next.images = data.images;
-  if (data.address !== undefined) next.address = data.address;
+  if (data.address !== undefined || data.street !== undefined || data.city !== undefined || data.neighborhood !== undefined || data.state !== undefined || data.country !== undefined) next.address = structured.address;
+  if (data.propertyType !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.propertyType] !== undefined) next.property_type = structured.propertyType;
+  if (data.street !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.street] !== undefined) next.street = structured.street;
+  if (data.streetNumber !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.streetNumber] !== undefined) next.street_number = structured.streetNumber;
+  if (data.complement !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.complement] !== undefined) next.complement = structured.complement;
+  if (data.neighborhood !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.neighborhood] !== undefined) next.neighborhood = structured.neighborhood;
+  if (data.city !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.city] !== undefined) next.city = structured.city;
+  if (data.state !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.state] !== undefined) next.state = structured.state;
+  if (data.postalCode !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.postalCode] !== undefined) next.postal_code = structured.postalCode;
+  if (data.country !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.country] !== undefined) next.country = structured.country;
+  if (data.amenities !== undefined || data.customData?.[PROPERTY_SYSTEM_FIELD_KEYS.amenities] !== undefined) next.amenities = structured.amenities;
   if (data.mapEmbedUrl !== undefined) next.map_embed_url = data.mapEmbedUrl;
-  if (data.customData !== undefined) next.custom_data = data.customData as PropertyUpdate["custom_data"];
+  if (data.customData !== undefined) next.custom_data = structured.customData as PropertyUpdate["custom_data"];
   if (data.landingPage !== undefined) next.landing_page = data.landingPage as unknown as PropertyUpdate["landing_page"];
   if (data.brokerUserId !== undefined) next.broker_user_id = data.brokerUserId ?? null;
 
@@ -270,6 +349,34 @@ export async function createPropertyAdmin(data: Omit<Property, "id">) {
     throw error;
   }
 
+  const enrichedCustomData = synchronizePropertyStructuredData({
+    propertyType: result.property_type,
+    street: result.street,
+    streetNumber: result.street_number,
+    complement: result.complement,
+    neighborhood: result.neighborhood,
+    city: result.city,
+    state: result.state,
+    postalCode: result.postal_code,
+    country: result.country,
+    amenities: result.amenities,
+    address: result.address,
+    customData: ensurePropertyReferenceCode(data.customData, {
+      id: result.id,
+      slug: result.slug,
+      title: result.title,
+    }),
+  }).customData;
+
+  const { error: customDataError } = await supabase
+    .from("properties")
+    .update({ custom_data: enrichedCustomData as PropertyUpdate["custom_data"] })
+    .eq("id", result.id);
+
+  if (customDataError) {
+    throw customDataError;
+  }
+
   await replacePropertyOffers(result.id, normalizeOffers(data));
 
   const { data: propertyRow, error: reloadError } = await supabase
@@ -298,6 +405,33 @@ export async function updatePropertyAdmin(id: string, data: Partial<Property>) {
 
   if (error) {
     throw error;
+  }
+
+  const enrichedCustomData = synchronizePropertyStructuredData({
+    propertyType: result.property_type,
+    street: result.street,
+    streetNumber: result.street_number,
+    complement: result.complement,
+    neighborhood: result.neighborhood,
+    city: result.city,
+    state: result.state,
+    postalCode: result.postal_code,
+    country: result.country,
+    amenities: result.amenities,
+    address: result.address,
+    customData: ensurePropertyReferenceCode(
+      (result.custom_data as Record<string, PropertyCustomDataValue> | null) || {},
+      { id: result.id, slug: result.slug, title: result.title },
+    ),
+  }).customData;
+
+  const { error: customDataError } = await supabase
+    .from("properties")
+    .update({ custom_data: enrichedCustomData as PropertyUpdate["custom_data"] })
+    .eq("id", result.id);
+
+  if (customDataError) {
+    throw customDataError;
   }
 
   if (data.offers !== undefined) {

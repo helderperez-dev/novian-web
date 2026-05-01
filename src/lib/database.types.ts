@@ -264,12 +264,15 @@ export type Database = {
       custom_fields: {
         Row: {
           created_at: string
+          description: string | null
           field_key: string | null
+          icon_name: string | null
           id: string
           name: string
           options: string[] | null
           required: boolean | null
           show_on_property_card: boolean
+          show_on_property_filters: boolean
           show_on_property_page: boolean
           sort_order: number
           target_entity: string
@@ -278,12 +281,15 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          description?: string | null
           field_key?: string | null
+          icon_name?: string | null
           id?: string
           name: string
           options?: string[] | null
           required?: boolean | null
           show_on_property_card?: boolean
+          show_on_property_filters?: boolean
           show_on_property_page?: boolean
           sort_order?: number
           target_entity: string
@@ -292,12 +298,15 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          description?: string | null
           field_key?: string | null
+          icon_name?: string | null
           id?: string
           name?: string
           options?: string[] | null
           required?: boolean | null
           show_on_property_card?: boolean
+          show_on_property_filters?: boolean
           show_on_property_page?: boolean
           sort_order?: number
           target_entity?: string
@@ -625,8 +634,12 @@ export type Database = {
       properties: {
         Row: {
           address: string
+          amenities: string[]
           broker_user_id: string | null
+          city: string | null
+          complement: string | null
           cover_image: string | null
+          country: string | null
           created_at: string
           custom_data: Json | null
           description: string
@@ -635,16 +648,26 @@ export type Database = {
           is_exclusive_novian: boolean
           landing_page: Json | null
           map_embed_url: string | null
+          neighborhood: string | null
+          postal_code: string | null
           price: number
+          property_type: string | null
           slug: string
+          state: string | null
           status: Database["public"]["Enums"]["property_status"]
+          street: string | null
+          street_number: string | null
           title: string
           updated_at: string
         }
         Insert: {
           address: string
+          amenities?: string[]
           broker_user_id?: string | null
+          city?: string | null
+          complement?: string | null
           cover_image?: string | null
+          country?: string | null
           created_at?: string
           custom_data?: Json | null
           description: string
@@ -653,16 +676,26 @@ export type Database = {
           is_exclusive_novian?: boolean
           landing_page?: Json | null
           map_embed_url?: string | null
+          neighborhood?: string | null
+          postal_code?: string | null
           price: number
+          property_type?: string | null
           slug: string
+          state?: string | null
           status?: Database["public"]["Enums"]["property_status"]
+          street?: string | null
+          street_number?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           address?: string
+          amenities?: string[]
           broker_user_id?: string | null
+          city?: string | null
+          complement?: string | null
           cover_image?: string | null
+          country?: string | null
           created_at?: string
           custom_data?: Json | null
           description?: string
@@ -671,9 +704,15 @@ export type Database = {
           is_exclusive_novian?: boolean
           landing_page?: Json | null
           map_embed_url?: string | null
+          neighborhood?: string | null
+          postal_code?: string | null
           price?: number
+          property_type?: string | null
           slug?: string
+          state?: string | null
           status?: Database["public"]["Enums"]["property_status"]
+          street?: string | null
+          street_number?: string | null
           title?: string
           updated_at?: string
         }
@@ -874,7 +913,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "broker" | "client"
       app_user_type: "internal" | "client"
-      custom_field_type: "text" | "number" | "dropdown" | "date"
+      custom_field_type: "text" | "number" | "dropdown" | "date" | "boolean" | "multiselect"
       person_role: "lead" | "client" | "buyer" | "seller"
       property_offer_type: "sale" | "rent"
       property_status: "active" | "inactive" | "sold"
@@ -1005,7 +1044,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      custom_field_type: ["text", "number", "dropdown", "date"],
+      custom_field_type: ["text", "number", "dropdown", "date", "boolean", "multiselect"],
       person_role: ["lead", "client", "buyer", "seller"],
       property_status: ["active", "inactive", "sold"],
     },

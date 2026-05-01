@@ -19,6 +19,10 @@ type PopupSelectProps = {
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  emptyMessage?: string;
+  maxVisibleOptions?: number;
   buttonClassName?: string;
   menuClassName?: string;
 };
@@ -31,10 +35,15 @@ export default function PopupSelect({
   placeholder = "Selecionar",
   disabled = false,
   required = false,
+  searchable = false,
+  searchPlaceholder = "Buscar...",
+  emptyMessage = "Nenhuma opcao encontrada.",
+  maxVisibleOptions = 120,
   buttonClassName = "",
   menuClassName = "",
 }: PopupSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -72,9 +81,21 @@ export default function PopupSelect({
     () => options.find((option) => option.value === value),
     [options, value],
   );
+  const visibleOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const filtered = normalizedQuery
+      ? options.filter((option) => {
+          const haystack = `${option.label} ${option.description || ""} ${option.value}`.toLowerCase();
+          return haystack.includes(normalizedQuery);
+        })
+      : options;
+
+    return filtered.slice(0, maxVisibleOptions);
+  }, [maxVisibleOptions, options, query]);
 
   const applyValue = (nextValue: string) => {
     onChange(nextValue);
+    setQuery("");
     setIsOpen(false);
   };
 
@@ -114,7 +135,23 @@ export default function PopupSelect({
           className={`absolute top-[calc(100%+8px)] z-80 w-full rounded-2xl border border-novian-muted/35 bg-novian-surface/95 p-1.5 shadow-[0_18px_40px_rgba(0,0,0,0.28)] backdrop-blur ${menuClassName}`}
           role="listbox"
         >
-          {options.map((option) => {
+          {searchable ? (
+            <div className="px-1.5 pb-1.5">
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="h-10 w-full rounded-xl border border-novian-muted/35 bg-novian-primary px-3 text-sm text-novian-text outline-none transition focus:border-novian-accent/35"
+              />
+            </div>
+          ) : null}
+          {visibleOptions.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-novian-text/45">
+              {emptyMessage}
+            </div>
+          ) : null}
+          {visibleOptions.map((option) => {
             const isSelected = option.value === value;
 
             return (

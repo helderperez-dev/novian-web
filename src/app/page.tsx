@@ -202,13 +202,26 @@ const testimonials = [
   },
 ];
 
-export default async function PropertiesListingPage() {
+export default async function PropertiesListingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await connection();
+  const resolvedSearchParams = searchParams ? await searchParams : {};
 
   const properties = await getProperties();
 
   const activeProperties = properties.filter((property) => property.status === "active");
-  const featuredProperties = activeProperties.slice(0, 4);
+  const readSearchParam = (key: string) => {
+    const value = resolvedSearchParams[key];
+    return Array.isArray(value) ? value[0] || "" : value || "";
+  };
+  const locationQuery = readSearchParam("location").trim().toLowerCase();
+  const propertyTypeFilter = readSearchParam("propertyType").trim();
+  const priceRangeFilter = readSearchParam("priceRange").trim();
+  const amenityFilter = readSearchParam("amenity").trim();
+  const hasActiveFilters = Boolean(locationQuery || propertyTypeFilter || priceRangeFilter || amenityFilter);
 
   const getNumericMeta = (value: unknown) => {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -222,6 +235,71 @@ export default async function PropertiesListingPage() {
 
     return null;
   };
+
+  const matchesPriceRange = (price: number) => {
+    if (!priceRangeFilter) {
+      return true;
+    }
+
+    if (priceRangeFilter === "under_500k") return price <= 500_000;
+    if (priceRangeFilter === "500k_1m") return price >= 500_000 && price <= 1_000_000;
+    if (priceRangeFilter === "1m_2m") return price >= 1_000_000 && price <= 2_000_000;
+    if (priceRangeFilter === "over_2m") return price >= 2_000_000;
+    return true;
+  };
+
+  const availablePropertyTypes = Array.from(
+    new Set(
+      activeProperties
+        .map((property) =>
+          property.propertyType ||
+          (typeof property.customData?.property_type === "string" ? property.customData.property_type : ""),
+        )
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right, "pt-BR"));
+
+  const availableAmenities = Array.from(
+    new Set(
+      activeProperties.flatMap((property) => {
+        if (Array.isArray(property.amenities) && property.amenities.length > 0) {
+          return property.amenities;
+        }
+
+        return Array.isArray(property.customData?.amenities) ? property.customData.amenities : [];
+      }),
+    ),
+  ).sort((left, right) => left.localeCompare(right, "pt-BR"));
+
+  const filteredProperties = activeProperties.filter((property) => {
+    const { primaryOffer } = getPropertyOfferSummary(property);
+    const comparablePrice = primaryOffer?.price ?? property.price;
+    const propertyType =
+      property.propertyType ||
+      (typeof property.customData?.property_type === "string" ? property.customData.property_type : "");
+    const amenities =
+      Array.isArray(property.amenities) && property.amenities.length > 0
+        ? property.amenities
+        : Array.isArray(property.customData?.amenities)
+          ? property.customData.amenities
+          : [];
+    const locationMatches = !locationQuery || [
+      property.address,
+      property.city,
+      property.neighborhood,
+      property.state,
+      property.title,
+    ]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(locationQuery));
+
+    return (
+      locationMatches &&
+      (!propertyTypeFilter || propertyType === propertyTypeFilter) &&
+      matchesPriceRange(comparablePrice) &&
+      (!amenityFilter || amenities.includes(amenityFilter))
+    );
+  });
 
   return (
     <div className="min-h-screen bg-novian-primary text-novian-text">
@@ -354,15 +432,17 @@ export default async function PropertiesListingPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.2fr_1.05fr_1.05fr_0.9fr]">
+              <form method="get" className="grid gap-4 xl:grid-cols-[1.15fr_1fr_1fr_1fr_0.9fr]">
                 <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
                   <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
                     Localização
                   </span>
                   <span className="flex items-center justify-between gap-4">
                     <input
+                      name="location"
                       type="text"
                       placeholder="Bairro, cidade ou região"
+                      defaultValue={readSearchParam("location")}
                       className="w-full bg-transparent text-[15px] text-[#1F2B2A] outline-none placeholder:text-[#64706b]"
                     />
                     <MapPin size={18} className="shrink-0 text-[#1F2B2A]" />
@@ -373,12 +453,17 @@ export default async function PropertiesListingPage() {
                   <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
                     Tipo de imóvel
                   </span>
-                  <select className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none">
-                    <option>Selecione o tipo</option>
-                    <option>Casa</option>
-                    <option>Apartamento</option>
-                    <option>Condomínio</option>
-                    <option>Alto padrão</option>
+                  <select
+                    name="propertyType"
+                    defaultValue={propertyTypeFilter}
+                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
+                  >
+                    <option value="">Selecione o tipo</option>
+                    {availablePropertyTypes.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
                   </select>
                 </label>
 
@@ -386,29 +471,58 @@ export default async function PropertiesListingPage() {
                   <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
                     Faixa de preço
                   </span>
-                  <select className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none">
-                    <option>Selecione a faixa</option>
-                    <option>Até R$ 500 mil</option>
-                    <option>R$ 500 mil a R$ 1 mi</option>
-                    <option>R$ 1 mi a R$ 2 mi</option>
-                    <option>Acima de R$ 2 mi</option>
+                  <select
+                    name="priceRange"
+                    defaultValue={priceRangeFilter}
+                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
+                  >
+                    <option value="">Selecione a faixa</option>
+                    <option value="under_500k">Até R$ 500 mil</option>
+                    <option value="500k_1m">R$ 500 mil a R$ 1 mi</option>
+                    <option value="1m_2m">R$ 1 mi a R$ 2 mi</option>
+                    <option value="over_2m">Acima de R$ 2 mi</option>
                   </select>
                 </label>
 
-                <a
-                  href="#collection"
+                <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
+                  <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
+                    Amenidades
+                  </span>
+                  <select
+                    name="amenity"
+                    defaultValue={amenityFilter}
+                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
+                  >
+                    <option value="">Selecione uma amenidade</option>
+                    {availableAmenities.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="submit"
                   className="inline-flex min-h-[76px] items-center justify-center gap-3 rounded-[18px] bg-[#5E7F49] px-6 py-5 text-base font-semibold text-white shadow-lg shadow-green-900/30 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#4F6F3D]"
                 >
                   <Search size={18} />
                   Buscar imóveis
                   <ArrowRight size={16} />
-                </a>
-              </div>
+                </button>
+              </form>
 
-              <p className="mt-6 flex items-start gap-2.5 text-sm leading-6 text-white/85">
-                <ShieldCheck size={16} className="mt-1 shrink-0 text-[#A8BE8A]" />
-                Atendimento humano, tecnologia e uma seleção cuidadosa para você encontrar o lugar ideal.
-              </p>
+              <div className="mt-6 flex flex-col gap-3 text-sm leading-6 text-white/85 sm:flex-row sm:items-center sm:justify-between">
+                <p className="flex items-start gap-2.5">
+                  <ShieldCheck size={16} className="mt-1 shrink-0 text-[#A8BE8A]" />
+                  {filteredProperties.length} {filteredProperties.length === 1 ? "imóvel encontrado" : "imóveis encontrados"} com os filtros atuais.
+                </p>
+                {hasActiveFilters ? (
+                  <Link href="/" className="text-sm font-medium text-[#A8BE8A] transition hover:text-white">
+                    Limpar filtros
+                  </Link>
+                ) : null}
+              </div>
             </div>
           </div>
         </section>
@@ -422,22 +536,29 @@ export default async function PropertiesListingPage() {
                   Imóveis em destaque
                 </p>
                 <h2 className="mt-3 text-[2rem] font-medium leading-tight tracking-[-0.04em] text-novian-text sm:text-[2.45rem]">
-                  Selecionados para você
+                  {hasActiveFilters ? "Resultados da busca" : "Selecionados para você"}
                 </h2>
               </div>
-              <a
-                href="#contact"
-                className="inline-flex items-center gap-3 self-start rounded-[10px] border border-novian-muted/75 bg-white/72 px-5 py-3 text-sm font-medium text-novian-text/74 shadow-[0_14px_34px_rgba(47,74,58,0.06)] transition hover:border-novian-accent/18 hover:text-novian-accent"
-              >
-                Ver todos os imóveis
-                <ArrowRight size={15} />
-              </a>
+              <p className="text-sm text-novian-text/58">
+                {filteredProperties.length} {filteredProperties.length === 1 ? "imóvel disponível" : "imóveis disponíveis"}.
+              </p>
             </div>
 
+            {filteredProperties.length === 0 ? (
+              <div className="rounded-[28px] border border-novian-muted/55 bg-white px-8 py-12 text-center">
+                <p className="text-lg font-medium text-novian-text">Nenhum imóvel encontrado</p>
+                <p className="mt-2 text-sm text-novian-text/58">
+                  Ajuste os filtros ou fale com a equipe Novian para uma seleção personalizada.
+                </p>
+              </div>
+            ) : (
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-              {featuredProperties.map((property) => {
+              {filteredProperties.map((property) => {
                 const { primaryOffer, saleOffer, rentOffer } = getPropertyOfferSummary(property);
-                const [propertyType, propertyRegion] = property.title.split(" - ");
+                const propertyTypeLabel =
+                  property.propertyType ||
+                  (typeof property.customData?.property_type === "string" ? property.customData.property_type : "Imóvel");
+                const propertyRegion = property.city || property.neighborhood || property.address?.split("-")[0]?.trim() || "";
                 const bedrooms = getNumericMeta(property.customData?.bedrooms);
                 const bathrooms = getNumericMeta(property.customData?.bathrooms);
                 const parking = getNumericMeta(property.customData?.parking);
@@ -478,7 +599,7 @@ export default async function PropertiesListingPage() {
                       <div className="flex flex-col px-4 pb-4 pt-4">
                         <div>
                           <p className="text-[15px] font-medium leading-tight text-novian-text/74">
-                            {propertyType || property.title}
+                            {propertyTypeLabel}
                           </p>
                           <p className="mt-1 text-[17px] font-medium leading-tight text-novian-text">
                             {propertyRegion || addressPreview}
@@ -515,6 +636,7 @@ export default async function PropertiesListingPage() {
                 );
               })}
             </div>
+            )}
           </div>
         </section>
 
