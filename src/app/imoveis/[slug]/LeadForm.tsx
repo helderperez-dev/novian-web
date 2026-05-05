@@ -4,6 +4,24 @@ import { useState } from "react";
 import { usePostHog } from "posthog-js/react";
 import { getBrowserContextProps, getPropertyAnalyticsProps } from "@/lib/posthog";
 
+function formatPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length <= 2) {
+    return digits.length ? `(${digits}` : "";
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 interface LeadFormProps {
   primaryColor: string;
   showLeadMagnet?: boolean;
@@ -153,13 +171,13 @@ export default function LeadForm({
   if (success) {
     return (
       <div className="text-center space-y-4 py-8">
-        <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center border-2" style={{ borderColor: primaryColor, color: primaryColor }}>
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border-2" style={{ borderColor: primaryColor, color: primaryColor }}>
           <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <h3 className="text-2xl font-serif">Obrigado pelo interesse!</h3>
-        <p className="text-gray-400">
+        <p className="text-[#66706b]">
           {showLeadMagnet ? "Seu material foi liberado e" : "Um especialista"} entrará em contato em breve.
         </p>
       </div>
@@ -169,48 +187,50 @@ export default function LeadForm({
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       {error && (
-        <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm">
+        <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-300">Nome Completo</label>
+          <label className="text-sm font-medium text-[#6a726d]">Nome Completo</label>
           <input 
             type="text" 
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             onFocus={handleFieldFocus}
-            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
+            className="w-full rounded-xl border border-[#ddd3c7] bg-white/88 px-4 py-3 text-[#1f2421] outline-none transition-colors placeholder:text-[#8f948f] focus:border-current" 
             style={{ borderColor: formData.name ? primaryColor : undefined, outlineColor: primaryColor }} 
             placeholder="Seu nome" 
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-300">Telefone / WhatsApp</label>
+          <label className="text-sm font-medium text-[#6a726d]">Telefone / WhatsApp</label>
           <input 
             type="tel" 
             required
             value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, phone: formatPhoneNumber(e.target.value) })}
             onFocus={handleFieldFocus}
-            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
+            className="w-full rounded-xl border border-[#ddd3c7] bg-white/88 px-4 py-3 text-[#1f2421] outline-none transition-colors placeholder:text-[#8f948f] focus:border-current" 
             style={{ borderColor: formData.phone ? primaryColor : undefined, outlineColor: primaryColor }} 
+            inputMode="numeric"
+            maxLength={15}
             placeholder="(00) 00000-0000" 
           />
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">E-mail</label>
+        <label className="text-sm font-medium text-[#6a726d]">E-mail</label>
         <input 
           type="email" 
           required
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           onFocus={handleFieldFocus}
-          className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-current transition-colors" 
+          className="w-full rounded-xl border border-[#ddd3c7] bg-white/88 px-4 py-3 text-[#1f2421] outline-none transition-colors placeholder:text-[#8f948f] focus:border-current" 
           style={{ borderColor: formData.email ? primaryColor : undefined, outlineColor: primaryColor }} 
           placeholder="seu@email.com" 
         />
@@ -218,7 +238,7 @@ export default function LeadForm({
       <button 
         type="submit" 
         disabled={loading}
-        className="w-full py-4 rounded-xl font-bold text-lg transition-transform hover:scale-[1.02] shadow-lg mt-4 disabled:opacity-70 disabled:hover:scale-100 flex items-center justify-center gap-2" 
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold shadow-lg transition-transform hover:scale-[1.02] disabled:opacity-70 disabled:hover:scale-100" 
         style={{ backgroundColor: primaryColor, color: '#0d1514' }}
       >
         {loading ? (
@@ -227,7 +247,7 @@ export default function LeadForm({
           callToActionText
         )}
       </button>
-      <p className="text-xs text-center text-gray-500 mt-4">
+      <p className="mt-4 text-center text-xs text-[#8a8f8b]">
         Seus dados estão seguros. Ao enviar, você concorda com nossos Termos de Privacidade.
       </p>
     </form>

@@ -1,5 +1,30 @@
 import type { CustomField, Property, PropertyCustomDataValue, PropertyOffer, PropertyOfferType } from "@/lib/store";
 
+const PROPERTY_DISPLAY_TEXT_MAP: Record<string, string> = {
+  "Tipo de Imovel": "Tipo de Imóvel",
+  Numero: "Número",
+  Area: "Área",
+  Pais: "País",
+  Nao: "Não",
+  "Casa em condominio": "Casa em condomínio",
+  "Condominio": "Condomínio",
+  "Espaco gourmet": "Espaço Gourmet",
+  "Espaço gourmet": "Espaço Gourmet",
+  "Salao de festas": "Salão de Festas",
+  "Salão de festas": "Salão de Festas",
+  Suite: "Suíte",
+};
+
+export function normalizePropertyDisplayText(text: string) {
+  const trimmed = text.trim();
+
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  return PROPERTY_DISPLAY_TEXT_MAP[trimmed] ?? trimmed;
+}
+
 export function getPrimaryPropertyOffer(property: Pick<Property, "offers" | "price">, preferredType?: PropertyOfferType) {
   const offers = Array.isArray(property.offers) ? property.offers : [];
 
@@ -88,7 +113,7 @@ function isEmptyPropertyValue(value: PropertyCustomDataValue | undefined) {
 
 export function formatPropertyFieldValue(value: PropertyCustomDataValue, field?: Pick<CustomField, "type" | "unit">) {
   if (typeof value === "boolean") {
-    return value ? "Sim" : "Nao";
+    return value ? "Sim" : "Não";
   }
 
   if (typeof value === "number") {
@@ -100,14 +125,14 @@ export function formatPropertyFieldValue(value: PropertyCustomDataValue, field?:
   }
 
   if (Array.isArray(value)) {
-    return value.join(", ");
+    return value.map((item) => normalizePropertyDisplayText(item)).join(", ");
   }
 
   if (field?.type === "number" && field?.unit) {
-    return `${value} ${field.unit}`;
+    return normalizePropertyDisplayText(`${value} ${field.unit}`);
   }
 
-  return value;
+  return normalizePropertyDisplayText(value);
 }
 
 export function getVisiblePropertyFieldEntries(

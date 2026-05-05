@@ -78,14 +78,19 @@ const footerSolutions = [
   "Avaliação de imóveis",
 ];
 
-type SocialPlatform = "instagram" | "facebook" | "tiktok" | "linkedin" | "x";
+type SocialPlatform = "instagram" | "facebook";
 
 const socialLinks: { label: string; href: string; platform: SocialPlatform }[] = [
-  { label: "Instagram", href: "#", platform: "instagram" },
-  { label: "Facebook", href: "#", platform: "facebook" },
-  { label: "TikTok", href: "#", platform: "tiktok" },
-  { label: "LinkedIn", href: "#", platform: "linkedin" },
-  { label: "X", href: "#", platform: "x" },
+  {
+    label: "Instagram",
+    href: "https://www.instagram.com/barbara_camargocorretora/",
+    platform: "instagram",
+  },
+  {
+    label: "Facebook",
+    href: "https://www.facebook.com/profile.php?id=100085177520030",
+    platform: "facebook",
+  },
 ];
 
 function SocialIcon({ platform }: { platform: SocialPlatform }) {
@@ -99,14 +104,6 @@ function SocialIcon({ platform }: { platform: SocialPlatform }) {
     );
   }
 
-  if (platform === "tiktok") {
-    return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]">
-        <path d="M14.6 3c.28 2.28 1.56 4.06 3.96 4.57v2.62a7.2 7.2 0 0 1-3.75-1.23v5.44c0 3.4-2.17 5.82-5.83 5.82-3.2 0-5.58-2.3-5.58-5.36 0-3.5 2.72-5.53 5.95-5.53.35 0 .7.03 1.03.1v2.7a3.8 3.8 0 0 0-.97-.13c-1.76 0-3.03 1.08-3.03 2.73 0 1.53 1.16 2.65 2.67 2.65 1.91 0 2.96-1.2 2.96-3.63V3h2.6Z" />
-      </svg>
-    );
-  }
-
   if (platform === "facebook") {
     return (
       <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]">
@@ -114,20 +111,6 @@ function SocialIcon({ platform }: { platform: SocialPlatform }) {
       </svg>
     );
   }
-
-  if (platform === "linkedin") {
-    return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]">
-        <path d="M6.86 8.36a1.68 1.68 0 1 1 0-3.36 1.68 1.68 0 0 1 0 3.36ZM5.4 9.8h2.93V19H5.4V9.8Zm4.76 0h2.8v1.26H13c.39-.74 1.36-1.52 2.8-1.52 3 0 3.56 1.98 3.56 4.56V19h-2.93v-4.38c0-1.05-.02-2.39-1.46-2.39-1.46 0-1.68 1.14-1.68 2.31V19h-2.93V9.8Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-[18px] w-[18px]">
-      <path d="M18.901 2.25H21l-6.873 7.855L22.207 21.75H15.88l-4.953-6.474-5.665 6.474H3.16l7.349-8.399L2.75 2.25h6.488l4.477 5.908L18.901 2.25Zm-1.109 17.608h1.163L8.606 4.039H7.357l10.435 15.819Z" />
-    </svg>
-  );
 }
 
 const novianReasons = [
