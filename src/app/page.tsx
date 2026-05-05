@@ -476,6 +476,10 @@ export default async function PropertiesListingPage({
                 const parking = getNumericMeta(property.customData?.parking);
                 const area = getNumericMeta(property.customData?.area);
                 const addressPreview = property.address?.split("-")[0]?.trim() || "Localização sob consulta";
+                const propertyCardTitle = property.title?.trim() || propertyTypeLabel;
+                const propertyCardMeta = [propertyTypeLabel, propertyRegion || addressPreview]
+                  .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
+                  .join(" • ");
                 const offerLabel = saleOffer && rentOffer ? "Venda e locação" : rentOffer ? "Para locação" : "À venda";
                 const metrics = [
                   bedrooms ? { icon: BedDouble, value: bedrooms } : null,
@@ -510,11 +514,11 @@ export default async function PropertiesListingPage({
 
                       <div className="flex flex-col px-4 pb-4 pt-4">
                         <div>
-                          <p className="text-[15px] font-medium leading-tight text-novian-text/74">
-                            {propertyTypeLabel}
+                          <p className="line-clamp-2 text-[17px] font-medium leading-[1.18] text-novian-text">
+                            {propertyCardTitle}
                           </p>
-                          <p className="mt-1 text-[17px] font-medium leading-tight text-novian-text">
-                            {propertyRegion || addressPreview}
+                          <p className="mt-1 line-clamp-2 text-[13px] font-medium leading-tight text-novian-text/62">
+                            {propertyCardMeta}
                           </p>
                         </div>
 
