@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { Database } from "./database.types";
+import { normalizeAssetUrl, normalizeAssetUrls } from "./assets";
 import { ensurePropertyReferenceCode } from "./property-reference";
 import { PROPERTY_SYSTEM_FIELD_KEYS, synchronizePropertyStructuredData } from "./property-attributes";
 
@@ -802,8 +803,8 @@ export async function getProperties() {
             price: primaryOffer?.price ?? Number(row.price || 0),
             status: row.status,
             isExclusiveNovian: Boolean(row.is_exclusive_novian),
-            coverImage: row.cover_image,
-            images: row.images,
+            coverImage: normalizeAssetUrl(row.cover_image),
+            images: normalizeAssetUrls(row.images),
             address: structured.address,
             propertyType: structured.propertyType,
             street: structured.street,
@@ -949,8 +950,8 @@ export async function updateProperty(id: string, data: Partial<Property>) {
         price: result.price,
         status: result.status,
         isExclusiveNovian: Boolean(result.is_exclusive_novian),
-        coverImage: result.cover_image,
-        images: result.images,
+        coverImage: normalizeAssetUrl(result.cover_image),
+        images: normalizeAssetUrls(result.images),
         address: structured.address || result.address,
         propertyType: structured.propertyType,
         street: structured.street,

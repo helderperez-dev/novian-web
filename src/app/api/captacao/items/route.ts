@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { normalizeAssetUrl, normalizeAssetUrls } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,10 @@ export async function GET(req: Request) {
       throw error;
     }
 
-    const items = (data || []).map((row) => ({
+    const items = (data || []).map((row) => {
+      const customData = (row.custom_data || {}) as Record<string, unknown>;
+
+      return {
       id: row.id,
       title: row.title,
       phone: row.external_id || row.id,
@@ -27,11 +31,16 @@ export async function GET(req: Request) {
       time: row.created_at,
       agentIds: [],
       status: row.status || "Oportunidades (Web)",
-      customData: row.custom_data || {},
+      customData: {
+        ...customData,
+        image: normalizeAssetUrl(customData.image),
+        images: normalizeAssetUrls(customData.images),
+      },
       unread: false,
       score: 0,
       funnelId: row.funnel_id || undefined,
-    }));
+    };
+    });
 
     return NextResponse.json({ items });
   } catch (error) {

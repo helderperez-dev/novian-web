@@ -143,9 +143,9 @@ type DuplicateGroup = {
 
 const ROLE_OPTIONS: Array<{ value: PersonRole; label: string; hint: string }> = [
   { value: "lead", label: "Lead", hint: "Contato em desenvolvimento comercial." },
-  { value: "client", label: "Cliente", hint: "Relacionamento ativo ou concluido." },
+  { value: "client", label: "Cliente", hint: "Relacionamento ativo ou concluído." },
   { value: "buyer", label: "Comprador", hint: "Interesse principal em compra." },
-  { value: "seller", label: "Proprietário", hint: "Contato ligado a captacao ou venda do imovel." },
+  { value: "seller", label: "Proprietário", hint: "Contato ligado à captação ou venda do imóvel." },
 ];
 
 const PERSON_TYPE_TABS: Array<{ value: string; label: string }> = [
@@ -161,7 +161,7 @@ const BUSINESS_ROLE_OPTIONS = ROLE_OPTIONS.filter((role) => role.value === "buye
 const PEOPLE_PAGE_SIZE = 10;
 
 const BULK_ACTION_OPTIONS = [
-  { value: "", label: "Selecione a acao" },
+  { value: "", label: "Selecione a ação" },
   { value: "add_tag", label: "Adicionar tag" },
   { value: "remove_tag", label: "Remover tag" },
   { value: "add_role", label: "Adicionar perfil" },
@@ -789,14 +789,14 @@ function PersonDrawer({
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Nao foi possivel salvar.");
+        throw new Error(data?.error || "Não foi possível salvar.");
       }
 
       onSaved();
       onClose();
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Nao foi possivel salvar a pessoa.");
+      alert(error instanceof Error ? error.message : "Não foi possível salvar a pessoa.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1027,7 +1027,7 @@ function PersonDrawer({
                   </button>
                 </div>
                 <div className="text-xs text-novian-text/42">
-                  Papel define o lado do contato no negocio. Relacionamento define se ele esta no funil ou ja e cliente.
+                  Papel define o lado do contato no negócio. Relacionamento define se ele está no funil ou já é cliente.
                 </div>
                 {leadEnabled || mode === "crm" ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1429,7 +1429,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      throw new Error(data?.error || "Nao foi possivel mesclar as pessoas.");
+      throw new Error(data?.error || "Não foi possível mesclar as pessoas.");
     }
 
     setSelectedIds(new Set());
@@ -1466,7 +1466,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Nao foi possivel excluir a pessoa.");
+        throw new Error(data?.error || "Não foi possível excluir a pessoa.");
       }
 
       setOpenRowMenuId(null);
@@ -1483,7 +1483,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
       await refreshAll();
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Nao foi possivel excluir a pessoa.");
+      alert(error instanceof Error ? error.message : "Não foi possível excluir a pessoa.");
     } finally {
       setDeletingPersonId(null);
     }
@@ -1591,12 +1591,12 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Nao foi possivel mover a pessoa de etapa.");
+        throw new Error(data?.error || "Não foi possível mover a pessoa de etapa.");
       }
     } catch (error) {
       console.error(error);
       await refreshAll();
-      alert(error instanceof Error ? error.message : "Nao foi possivel mover a pessoa de etapa.");
+      alert(error instanceof Error ? error.message : "Não foi possível mover a pessoa de etapa.");
     }
   };
 
@@ -1645,14 +1645,14 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Nao foi possivel executar a acao em lote.");
+        throw new Error(data?.error || "Não foi possível executar a ação em lote.");
       }
 
       setSelectedIds(new Set());
       await refreshAll();
     } catch (error) {
       console.error(error);
-      alert(error instanceof Error ? error.message : "Nao foi possivel executar a acao em lote.");
+      alert(error instanceof Error ? error.message : "Não foi possível executar a ação em lote.");
     } finally {
       setSubmittingBulk(false);
     }
@@ -1680,7 +1680,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
               {duplicateGroups.map((group) => (
                 <DuplicateCard key={group.key} group={group} onMerge={(item) => mergeGroup(item).catch((error) => {
                   console.error(error);
-                  alert(error instanceof Error ? error.message : "Nao foi possivel mesclar.");
+                  alert(error instanceof Error ? error.message : "Não foi possível mesclar.");
                 })} />
               ))}
             </div>
@@ -1751,7 +1751,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                 <button
                   onClick={() => mergeSelected().catch((error) => {
                     console.error(error);
-                    alert(error instanceof Error ? error.message : "Nao foi possivel mesclar.");
+                    alert(error instanceof Error ? error.message : "Não foi possível mesclar.");
                   })}
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200 transition hover:bg-amber-300/15"
                 >
@@ -1845,12 +1845,12 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                     </div>
                   ) : null}
 
-                  {!bulkAction ? <div className="rounded-2xl border border-dashed border-novian-muted/25 bg-transparent px-4 py-3 text-sm text-novian-text/35">Escolha uma acao em lote.</div> : null}
+                  {!bulkAction ? <div className="rounded-2xl border border-dashed border-novian-muted/25 bg-transparent px-4 py-3 text-sm text-novian-text/35">Escolha uma ação em lote.</div> : null}
 
                   <button
                     onClick={() => runBulkAction().catch((error) => {
                       console.error(error);
-                      alert(error instanceof Error ? error.message : "Nao foi possivel executar a acao em lote.");
+                      alert(error instanceof Error ? error.message : "Não foi possível executar a ação em lote.");
                     })}
                     disabled={!bulkAction || submittingBulk}
                     className="inline-flex items-center justify-center gap-2 rounded-2xl bg-novian-accent px-4 py-3 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
@@ -2307,20 +2307,20 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
           }}
         >
           <div
-            className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#0d221f]/96 p-6 shadow-2xl shadow-black/45 backdrop-blur-xl"
+            className="w-full max-w-md rounded-[28px] border border-red-200/70 bg-[rgba(255,250,248,0.98)] p-6 shadow-[0_28px_70px_rgba(33,19,16,0.18)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-400/20 bg-red-400/10 text-red-300">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-red-300/60 bg-red-50 text-red-500">
                 <AlertTriangle size={18} />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-semibold uppercase tracking-[0.16em] text-red-200/78">Excluir contato</div>
+                <div className="text-sm font-semibold uppercase tracking-[0.16em] text-red-500/90">Excluir contato</div>
                 <div className="mt-2 text-lg font-semibold text-novian-text">{pendingDeletePerson.fullName}</div>
-                <div className="mt-2 text-sm leading-6 text-novian-text/62">
+                <div className="mt-2 text-sm leading-6 text-novian-text/70">
                   {pendingDeletePerson.lead || pendingDeletePerson.leadCount > 0
-                    ? "Essa acao remove o contato e o lead vinculado. Nao pode ser desfeita."
-                    : "Essa acao remove o contato da base e nao pode ser desfeita."}
+                    ? "Essa ação remove o contato e o lead vinculado. Não pode ser desfeita."
+                    : "Essa ação remove o contato da base e não pode ser desfeita."}
                 </div>
               </div>
             </div>
@@ -2329,7 +2329,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                 type="button"
                 onClick={() => setPendingDeletePerson(null)}
                 disabled={Boolean(deletingPersonId)}
-                className="rounded-2xl px-4 py-2 text-sm text-novian-text/70 transition hover:bg-white/5 hover:text-novian-text disabled:opacity-50"
+                className="rounded-2xl px-4 py-2 text-sm text-novian-text/65 transition hover:bg-novian-surface-soft/90 hover:text-novian-text disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -2337,7 +2337,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                 type="button"
                 onClick={() => deletePerson(pendingDeletePerson).catch((error) => console.error(error))}
                 disabled={Boolean(deletingPersonId)}
-                className="inline-flex items-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/12 px-4 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-400/16 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-2xl border border-red-300/70 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
               >
                 <Trash2 size={15} />
                 {deletingPersonId === pendingDeletePerson.id

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Database } from "@/lib/database.types";
 import type { LandingPageConfig, Property, PropertyCustomDataValue, PropertyOffer } from "@/lib/store";
+import { normalizeAssetUrl, normalizeAssetUrls } from "@/lib/assets";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { listBrokerSummariesByIds } from "@/lib/brokers";
 import { ensurePropertyReferenceCode } from "@/lib/property-reference";
@@ -130,8 +131,8 @@ function mapPropertyRow(row: PropertyRowWithOffers): Property {
     price: primaryOffer?.price ?? row.price,
     status: row.status,
     isExclusiveNovian: Boolean(row.is_exclusive_novian),
-    coverImage: row.cover_image || "",
-    images: row.images || [],
+    coverImage: normalizeAssetUrl(row.cover_image),
+    images: normalizeAssetUrls(row.images),
     address: structured.address,
     propertyType: structured.propertyType,
     street: structured.street,

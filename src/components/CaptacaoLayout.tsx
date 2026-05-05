@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, Sparkles, MessageSquare, SlidersHorizontal, X, Trash2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { normalizeAssetUrl } from "@/lib/assets";
 import type { Funnel, Thread, FunnelColumn } from "@/lib/store";
 import PopupSelect from "@/components/PopupSelect";
 
@@ -25,9 +26,7 @@ interface ApifySearchConfig {
 }
 
 const sanitizeMediaUrl = (value: unknown) =>
-  String(value ?? "")
-    .replace(/[`"]/g, "")
-    .trim();
+  normalizeAssetUrl(value);
 
 const getLeadImages = (lead: Thread) => {
   const rawImages = lead.customData?.images;

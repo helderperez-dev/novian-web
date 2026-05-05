@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
+import { normalizeAssetUrl, normalizeAssetUrls } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       throw error;
     }
 
-    return NextResponse.json({ item: data });
+    const customData = (data.custom_data || {}) as Record<string, unknown>;
+
+    return NextResponse.json({
+      item: {
+        ...data,
+        custom_data: {
+          ...customData,
+          image: normalizeAssetUrl(customData.image),
+          images: normalizeAssetUrls(customData.images),
+        },
+      },
+    });
   } catch (error) {
     console.error("Captacao item GET error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

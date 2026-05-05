@@ -165,13 +165,25 @@ function RecentListCard({
                 <div className="flex items-center min-w-0 gap-4 flex-1">
                   {item.image && (
                     <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-novian-muted/55 bg-white shadow-sm">
-                      <Image 
-                        src={item.image} 
-                        alt={item.title} 
-                        fill 
-                        sizes="48px"
-                        className="object-cover"
-                      />
+                      {item.image.startsWith("/api/image-proxy?") ? (
+                        // Proxied local URLs include a dynamic query string that Next 16 blocks in next/image unless
+                        // images.localPatterns.search is explicitly configured. For these dashboard thumbnails, a plain
+                        // img matches the existing captacao behavior and avoids over-broad local allowlisting.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Image
+                          src={item.image}
+                          alt={item.title}
+                          fill
+                          sizes="48px"
+                          className="object-cover"
+                        />
+                      )}
                     </div>
                   )}
                   {!item.image && (

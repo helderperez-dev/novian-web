@@ -1,4 +1,5 @@
 import type { Database, Json } from "@/lib/database.types";
+import { normalizeAssetUrl } from "@/lib/assets";
 import type { PropertyOffer } from "@/lib/store";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
@@ -109,7 +110,7 @@ function mapLinkSummary(row: PersonPropertyRow, property: PropertyRowWithOffers 
           price: property.price,
           offers: mapPropertyOffers(property),
           status: property.status,
-          coverImage: property.cover_image,
+          coverImage: normalizeAssetUrl(property.cover_image),
         }
       : null,
   };

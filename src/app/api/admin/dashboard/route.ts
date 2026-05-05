@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAppUser } from "@/lib/auth";
+import { normalizeAssetUrl } from "@/lib/assets";
 import { getPrimaryPropertyOffer } from "@/lib/property-utils";
 import { listAllProperties } from "@/lib/properties";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -226,7 +227,7 @@ export async function GET() {
       }
       
       // Sanitiza url (remove aspas se tiver)
-      coverImage = coverImage.replace(/[`"]/g, "").trim();
+      coverImage = normalizeAssetUrl(coverImage);
 
       return {
         id: lead.id,
