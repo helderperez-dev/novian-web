@@ -13,6 +13,7 @@ import {
   MapPin,
   MapPinned,
   Ruler,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ export const PROPERTY_FIELD_ICON_OPTIONS = [
   { value: "landmark", label: "Landmark" },
   { value: "mail", label: "Mail" },
   { value: "flag", label: "Flag" },
+  { value: "sliders-horizontal", label: "Features" },
   { value: "sparkles", label: "Sparkles" },
 ] as const;
 
@@ -45,6 +47,7 @@ const PROPERTY_FIELD_ICON_MAP: Record<string, LucideIcon> = {
   landmark: Landmark,
   mail: Mail,
   flag: Flag,
+  "sliders-horizontal": SlidersHorizontal,
   sparkles: Sparkles,
 };
 

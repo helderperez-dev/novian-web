@@ -10,7 +10,7 @@ import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type Lea
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField, PropertyOfferType } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
 import { formatPropertyOfferLabel, getPrimaryPropertyOffer } from "@/lib/property-utils";
-import { buildStructuredAddressLabel } from "@/lib/property-attributes";
+import { buildStructuredAddressLabel, PROPERTY_SYSTEM_FIELD_KEYS } from "@/lib/property-attributes";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import DocumentsWorkspace from "@/components/DocumentsWorkspace";
@@ -1058,11 +1058,11 @@ function RichTextEditor({
   };
 
   const actions: Array<{ id: RichTextAction; label: string; icon: typeof Type }> = [
-    { id: "heading", label: "Titulo", icon: Type },
+    { id: "heading", label: "Título", icon: Type },
     { id: "bold", label: "Negrito", icon: Bold },
-    { id: "italic", label: "Italico", icon: Italic },
+    { id: "italic", label: "Itálico", icon: Italic },
     { id: "bullet", label: "Lista", icon: List },
-    { id: "paragraph", label: "Paragrafo", icon: FileText },
+    { id: "paragraph", label: "Parágrafo", icon: FileText },
   ];
 
   return (
@@ -1116,7 +1116,7 @@ function RichTextEditor({
           role="textbox"
           aria-multiline="true"
           data-required={required ? "true" : "false"}
-          data-placeholder="Descreva o imovel com detalhes, diferenciais e contexto da localizacao."
+          data-placeholder="Descreva o imóvel com detalhes, diferenciais e contexto da localização."
           className={`prose prose-sm prose-invert max-w-none overflow-y-auto bg-transparent px-4 py-4 pr-24 text-novian-text outline-none before:pointer-events-none before:block before:text-novian-text/35 empty:before:content-[attr(data-placeholder)] prose-p:my-0 prose-p:leading-7 prose-headings:mb-3 prose-headings:mt-0 prose-headings:text-novian-text prose-strong:text-novian-text prose-li:my-1 prose-li:marker:text-novian-accent [&_ul]:pl-5 ${minHeightClass} ${isLoading ? "cursor-not-allowed opacity-55" : ""}`}
         />
         {isLoading ? (
@@ -2383,7 +2383,7 @@ const getNumericCustomDataValue = (customData: Property["customData"] | undefine
   return null;
 };
 
-const getPropertyOfferTypeLabel = (offerType: PropertyOfferType) => (offerType === "rent" ? "Locacao" : "Venda");
+const getPropertyOfferTypeLabel = (offerType: PropertyOfferType) => (offerType === "rent" ? "Locação" : "Venda");
 
 const createOfferEnabledState = (property: Property | null): Record<PropertyOfferType, boolean> => ({
   sale: Boolean(getPrimaryPropertyOffer(property ?? { price: 0, offers: [] }, "sale")) || !property,
@@ -2516,7 +2516,7 @@ function LeadMagnetUploader({
               {fileUrl ? getFileNameFromUrl(fileUrl) : "Nenhum arquivo selecionado"}
             </p>
             <p className="mt-1 text-xs text-novian-text/50">
-              PDF, DOCX, PPTX ou qualquer material complementar do imovel.
+              PDF, DOCX, PPTX ou qualquer material complementar do imóvel.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2596,6 +2596,7 @@ export function PropertiesLayout() {
   const [brokers, setBrokers] = useState<BrokerOption[]>([]);
   const [propertyDropdownValues, setPropertyDropdownValues] = useState<Record<string, string>>({});
   const [propertyFieldValues, setPropertyFieldValues] = useState<Record<string, string>>({});
+  const [propertyBooleanValues, setPropertyBooleanValues] = useState<Record<string, boolean>>({});
   const [propertyMultiSelectValues, setPropertyMultiSelectValues] = useState<Record<string, string[]>>({});
   const [countryOptions, setCountryOptions] = useState<GeoOption[]>([]);
   const [stateOptions, setStateOptions] = useState<GeoOption[]>([]);
@@ -2766,6 +2767,14 @@ export function PropertiesLayout() {
           return acc;
         }, {}),
       );
+      setPropertyBooleanValues(
+        fields.reduce<Record<string, boolean>>((acc, field) => {
+          if (field.type === "boolean") {
+            acc[field.id] = Boolean(selectedProperty.customData?.[field.id]);
+          }
+          return acc;
+        }, {}),
+      );
       setPropertyMultiSelectValues(
         fields.reduce<Record<string, string[]>>((acc, field) => {
           if (field.type === "multiselect") {
@@ -2815,6 +2824,7 @@ export function PropertiesLayout() {
       setBrokerUserId("");
       setPropertyDropdownValues({ country: "Brasil" });
       setPropertyFieldValues({});
+      setPropertyBooleanValues({});
       setPropertyMultiSelectValues({});
       setHeroTitle("Descubra seu novo lar");
       setHeroSubtitle("Cadastre-se para receber mais informações exclusivas.");
@@ -2839,9 +2849,7 @@ export function PropertiesLayout() {
       return;
     }
 
-    if (!selectedProperty) {
-      setAddress("");
-    }
+    setAddress("");
   }, [
     propertyDropdownValues.city,
     propertyDropdownValues.country,
@@ -3135,14 +3143,26 @@ export function PropertiesLayout() {
 
     if (field.type === "boolean") {
       return (
-        <label className="flex min-h-[42px] items-center gap-3 rounded-lg border border-novian-muted/50 bg-novian-primary px-3 py-2 text-sm text-novian-text">
+        <label className="group flex min-h-[48px] cursor-pointer items-center gap-3 rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-4 py-3 text-sm text-novian-text/85 transition-colors hover:border-novian-accent/25 hover:bg-novian-surface/25">
           <input
             name={inputName}
             type="checkbox"
-            defaultChecked={Boolean(selectedProperty?.customData?.[field.id])}
-            className="h-4 w-4 rounded border-novian-muted/50 text-novian-accent focus:ring-novian-accent/30"
+            checked={Boolean(propertyBooleanValues[field.id])}
+            onChange={(event) =>
+              setPropertyBooleanValues((current) => ({
+                ...current,
+                [field.id]: event.target.checked,
+              }))
+            }
+            className="sr-only peer"
           />
-          <span>Ativar</span>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-novian-muted/60 bg-novian-primary/80 transition-all duration-200 peer-checked:border-novian-accent/80 peer-checked:bg-novian-accent/18 peer-focus-visible:ring-2 peer-focus-visible:ring-novian-accent/35 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-novian-surface group-hover:border-novian-accent/40">
+            <span className={`h-2.5 w-2.5 rounded-sm bg-novian-accent transition-all duration-200 ${propertyBooleanValues[field.id] ? "scale-100 opacity-100" : "scale-0 opacity-0"}`} />
+          </span>
+          <div className="space-y-1">
+            <span className="block">Ativar</span>
+            <span className="block text-xs text-novian-text/55">Habilita este campo para o imóvel.</span>
+          </div>
         </label>
       );
     }
@@ -3162,7 +3182,7 @@ export function PropertiesLayout() {
             value: option,
             label: option,
           }))}
-          placeholder="Selecione as amenidades"
+          placeholder="Selecione as características"
         />
       );
     }
@@ -3277,6 +3297,7 @@ export function PropertiesLayout() {
     
     const formData = new FormData(e.currentTarget);
     const customData: Record<string, Property["customData"][string]> = {};
+    const structuredFieldKeys = new Set<string>(Object.values(PROPERTY_SYSTEM_FIELD_KEYS));
     
     fields.forEach(f => {
       const val = formData.get(`custom_${f.id}`);
@@ -3296,12 +3317,17 @@ export function PropertiesLayout() {
           .filter(Boolean);
         if (values.length > 0) {
           customData[f.id] = Array.from(new Set(values));
+        } else if (f.id === PROPERTY_SYSTEM_FIELD_KEYS.amenities) {
+          customData[f.id] = [];
         }
         return;
       }
 
-      if (val) {
-        customData[f.id] = f.type === 'number' ? Number(val) : String(val);
+      const trimmedValue = val.trim();
+      if (trimmedValue) {
+        customData[f.id] = f.type === 'number' ? Number(trimmedValue) : trimmedValue;
+      } else if (structuredFieldKeys.has(f.id)) {
+        customData[f.id] = "";
       }
     });
 
@@ -3365,7 +3391,9 @@ export function PropertiesLayout() {
       mapEmbedUrl: mapUrl,
       price: publicPrimaryOffer?.price ?? finalPrice,
       offers: nextOffers,
-      status: formData.get("status"),
+      // On tabs where the status control isn't rendered, FormData won't have it.
+      // Never send null for a NOT NULL column.
+      status: propertyStatus || selectedProperty?.status || "active",
       coverImage: currentCover,
       images: currentImages,
       customData,
@@ -3373,8 +3401,10 @@ export function PropertiesLayout() {
         heroTitle,
         heroSubtitle,
         callToActionText,
-        primaryColor: formData.get("primaryColor"),
-        showLeadMagnet: formData.get("showLeadMagnet") === "on",
+        primaryColor: formData.get("primaryColor") ?? selectedProperty?.landingPage?.primaryColor ?? "#DEC0A6",
+        showLeadMagnet: formData.get("showLeadMagnet") === "on"
+          ? true
+          : selectedProperty?.landingPage?.showLeadMagnet ?? false,
         leadMagnetTitle,
         leadMagnetFileUrl,
       }
@@ -3588,7 +3618,7 @@ export function PropertiesLayout() {
                         );
                       }) : (
                         <div className="rounded-2xl border border-dashed border-novian-muted/55 bg-white/55 px-4 py-3 text-xs text-novian-text/48">
-                          Adicione campos visiveis no card para destacar este imovel.
+                          Adicione campos visíveis no card para destacar este imóvel.
                         </div>
                       )}
                     </div>
@@ -3620,7 +3650,7 @@ export function PropertiesLayout() {
               <h2 className="text-xl font-semibold text-novian-text">
                 {selectedProperty ? 'Editar Imóvel' : 'Novo Imóvel'}
               </h2>
-              <button type="button" onClick={() => setIsDrawerOpen(false)} className="text-novian-text/50 hover:text-novian-accent transition-colors p-2">
+              <button type="button" onClick={() => setIsDrawerOpen(false)} className="text-novian-text/50 hover:text-novian-text transition-colors p-2">
                 ✕
               </button>
             </div>
@@ -3628,7 +3658,7 @@ export function PropertiesLayout() {
               <div className="flex flex-wrap items-end gap-6 border-b border-novian-muted/35">
                 {[
                   { value: "details" as const, label: "Detalhes" },
-                  { value: "media" as const, label: "Midia" },
+                  { value: "media" as const, label: "Fotos" },
                   { value: "landing" as const, label: "Landing Page" },
                   { value: "documents" as const, label: "Documentos", disabled: !selectedProperty },
                 ].map((tab) => {
@@ -3641,7 +3671,7 @@ export function PropertiesLayout() {
                       onClick={() => setActivePropertyTab(tab.value)}
                       className={`border-b-2 px-1 pb-3 pt-1 text-xs font-medium uppercase tracking-[0.18em] transition ${
                         active
-                          ? "border-novian-accent text-novian-accent"
+                          ? "border-novian-accent text-novian-text"
                           : "border-transparent text-novian-text/58 hover:border-novian-muted/45 hover:text-novian-text/88"
                       } disabled:cursor-not-allowed disabled:text-novian-text/30`}
                     >
@@ -3654,12 +3684,12 @@ export function PropertiesLayout() {
               {activePropertyTab === "details" ? (
               <>
               <section className="space-y-4">
-                <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
+                <h3 className="text-sm font-semibold tracking-wider text-novian-text/55 uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <label className="mb-1 block text-xs font-medium text-novian-text/70">Código do Imóvel</label>
                     <div className="flex min-h-[46px] items-center justify-between rounded-xl border border-novian-muted/50 bg-novian-primary px-3 py-2.5 text-sm text-novian-text">
-                      <span className="font-semibold tracking-[0.18em] text-novian-accent">
+                      <span className="font-semibold tracking-[0.18em] text-novian-text/80">
                         {selectedProperty ? getPropertyReferenceCode(selectedProperty) : "Gerado ao salvar"}
                       </span>
                       <span className="text-xs text-novian-text/55">
@@ -3752,7 +3782,7 @@ export function PropertiesLayout() {
                         <p className="text-xs text-novian-text/45">
                           {isMapEditedManually
                             ? "Mapa ajustado manualmente."
-                            : "Automatico pelo endereco."}
+                            : "Automático pelo endereço."}
                         </p>
                         <div className="flex items-center gap-2">
                           <button
@@ -3760,7 +3790,7 @@ export function PropertiesLayout() {
                             onClick={() => setIsMapAdvancedOpen((current) => !current)}
                             className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text"
                           >
-                            {isMapAdvancedOpen ? "Ocultar avancado" : "Editar mapa"}
+                            {isMapAdvancedOpen ? "Ocultar avançado" : "Editar mapa"}
                           </button>
                           <button
                             type="button"
@@ -3772,7 +3802,7 @@ export function PropertiesLayout() {
                             disabled={!address.trim()}
                             className="rounded-full border border-novian-muted/40 px-3 py-1.5 text-xs font-medium text-novian-text/75 transition hover:border-novian-accent/40 hover:text-novian-text disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Usar automatico
+                            Usar automático
                           </button>
                         </div>
                       </div>
@@ -3791,7 +3821,7 @@ export function PropertiesLayout() {
                               setIsMapEditedManually(true);
                             }}
                             className="w-full bg-novian-primary border border-novian-muted/50 rounded-lg px-3 py-2 text-sm focus:border-novian-accent/50 outline-none"
-                            placeholder="O mapa sera preenchido automaticamente quando voce informar o endereco."
+                            placeholder="O mapa será preenchido automaticamente quando você informar o endereço."
                           />
                         </div>
                       ) : (
@@ -3813,9 +3843,9 @@ export function PropertiesLayout() {
                   <div className="col-span-2 rounded-2xl border border-novian-muted/35 bg-novian-primary/25 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-novian-text/45">Precificacao</p>
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-novian-text/45">Precificação</p>
                         <p className="mt-1 text-xs text-novian-text/50">
-                          Edite uma oferta por vez. Adicione venda ou locacao somente quando fizer sentido para este imovel.
+                          Edite uma oferta por vez. Adicione venda ou locação somente quando fizer sentido para este imóvel.
                         </p>
                       </div>
                       <div className="rounded-2xl border border-novian-muted/50 bg-novian-surface/65 px-4 py-3 text-right">
@@ -3893,7 +3923,7 @@ export function PropertiesLayout() {
                             <button
                               type="button"
                               onClick={() => handleRemoveOfferType(editableOfferType)}
-                              className="rounded-full border border-red-400/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:border-red-300/35 hover:text-red-100"
+                              className="rounded-full border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-700"
                             >
                               Remover {getPropertyOfferTypeLabel(editableOfferType)}
                             </button>
@@ -3902,15 +3932,15 @@ export function PropertiesLayout() {
                       </div>
                       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                         <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Valor do proprietario</p>
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Valor do proprietário</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerPrice)}</p>
                         </div>
                         <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Comissao</p>
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Comissão</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{commissionRate}%</p>
                         </div>
                         <div className="rounded-xl border border-novian-muted/25 bg-novian-surface/30 px-3 py-3">
-                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Liquido estimado</p>
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-novian-text/45">Líquido estimado</p>
                           <p className="mt-1 text-sm font-medium text-novian-text/85">{formatCurrency(ownerReceives)}</p>
                         </div>
                       </div>
@@ -3919,7 +3949,7 @@ export function PropertiesLayout() {
                     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div>
                         <label className="block text-xs font-medium text-novian-text/70 mb-1">
-                          Valor do proprietario ({getPropertyOfferTypeLabel(editableOfferType)})
+                          Valor do proprietário ({getPropertyOfferTypeLabel(editableOfferType)})
                         </label>
                         <input
                           name="ownerPrice"
@@ -3933,7 +3963,7 @@ export function PropertiesLayout() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Comissao (%)</label>
+                        <label className="block text-xs font-medium text-novian-text/70 mb-1">Comissão (%)</label>
                         <input
                           name="commissionRate"
                           required
@@ -3947,7 +3977,7 @@ export function PropertiesLayout() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-novian-text/70 mb-1">
-                          Preco final de {getPropertyOfferTypeLabel(editableOfferType).toLowerCase()}
+                          Preço final de {getPropertyOfferTypeLabel(editableOfferType).toLowerCase()}
                         </label>
                         <input
                           name="finalPrice"
@@ -4019,19 +4049,19 @@ export function PropertiesLayout() {
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
                       <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Preco sugerido</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Preço sugerido</p>
                         <p className="mt-1 text-sm font-medium text-novian-text/85">
                           {formatCurrency(suggestedFinalPrice)}
                         </p>
                       </div>
                       <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Valor da comissao</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Valor da comissão</p>
                         <p className="mt-1 text-sm font-medium text-novian-text/85">
                           {formatCurrency(commissionAmount)}
                         </p>
                       </div>
                       <div className="rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-3 py-3">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Liquido do proprietario</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Líquido do proprietário</p>
                         <p className="mt-1 text-sm font-medium text-novian-text/85">
                           {formatCurrency(ownerReceives)}
                         </p>
@@ -4071,12 +4101,11 @@ export function PropertiesLayout() {
               </section>
 
               <section className="space-y-4">
-                <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Campos do Imóvel</h3>
+                <h3 className="text-sm font-semibold tracking-wider text-novian-text/55 uppercase border-b border-novian-muted/50 pb-2">Campos do Imóvel</h3>
                 <div className="space-y-6">
                   <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
                     <div className="mb-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Detalhes principais</p>
-                      <p className="mt-1 text-sm text-novian-text/58">Mais próximo de uma ficha técnica: rótulo de um lado, valor do outro.</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-text/45">Detalhes principais</p>
                     </div>
                     <div className="space-y-3">
                       {primaryFields.map((field) =>
@@ -4087,8 +4116,7 @@ export function PropertiesLayout() {
 
                   <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
                     <div className="mb-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Localização</p>
-                      <p className="mt-1 text-sm text-novian-text/58">Cidade, estado e país seguem seletores estruturados para manter os filtros consistentes.</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-text/45">Localização</p>
                     </div>
                     <div className="space-y-3">
                       {locationFields.map((field) =>
@@ -4100,39 +4128,30 @@ export function PropertiesLayout() {
                   {amenityFields.length > 0 ? (
                     <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
                       <div className="mb-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Amenidades e diferenciais</p>
-                        <p className="mt-1 text-sm text-novian-text/58">Selecione múltiplos itens para alimentar filtros e enriquecer a ficha do imóvel.</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-text/45">Características do imóvel</p>
                       </div>
                       <div className="space-y-3">
                         {amenityFields.map((field) =>
-                          renderPropertyFieldRow(field, "Seleção múltipla para itens como piscina, academia, sauna e outros diferenciais."),
+                          renderPropertyFieldRow(field, "Selecione os principais diferenciais e características deste imóvel."),
                         )}
                       </div>
                     </div>
                   ) : null}
 
-                  <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
-                    <div className="mb-4">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Campos dinâmicos</p>
-                        <p className="mt-1 text-sm text-novian-text/58">
-                          {"Campos criados em Settings > Campos Personalizados aparecem automaticamente aqui para preenchimento."}
-                        </p>
+                  {customAttributeFields.length > 0 ? (
+                    <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-4 sm:p-5">
+                      <div className="mb-4">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-text/45">Campos dinâmicos</p>
+                        </div>
                       </div>
-                    </div>
-
-                    {customAttributeFields.length > 0 ? (
                       <div className="space-y-3">
                         {customAttributeFields.map((field) =>
                           renderPropertyFieldRow(field, "Campo criado dinamicamente para complementar a ficha e os filtros do imóvel."),
                         )}
                       </div>
-                    ) : (
-                      <div className="rounded-[22px] border border-dashed border-novian-muted/45 bg-novian-primary/20 px-4 py-5 text-sm text-novian-text/52">
-                        {"Nenhum campo dinâmico adicional ainda. Crie novos campos em Settings > Campos Personalizados."}
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               </section>
               </>
@@ -4140,10 +4159,8 @@ export function PropertiesLayout() {
 
               {activePropertyTab === "media" ? (
               <section className="space-y-4">
-                <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase border-b border-novian-muted/50 pb-2">Galeria de Imagens</h3>
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-medium text-novian-text/70 mb-2">Faça o upload, organize e selecione a capa do imóvel</label>
                     <ImageGalleryUploader 
                       initialCover={selectedProperty?.coverImage}
                       initialImages={selectedProperty?.images || []}
@@ -4162,13 +4179,13 @@ export function PropertiesLayout() {
               {activePropertyTab === "landing" ? (
               <section className="space-y-4">
                 <div className="flex items-center justify-between border-b border-novian-muted/50 pb-2">
-                  <h3 className="text-sm font-semibold tracking-wider text-novian-accent uppercase">Editor de Landing Page (Geração de Leads)</h3>
-                  <a href={`/imoveis/${selectedProperty?.slug || 'novo'}`} target="_blank" rel="noreferrer" className="text-xs text-novian-accent hover:underline flex items-center gap-1">
+                  <h3 className="text-sm font-semibold tracking-wider text-novian-text/55 uppercase">Editor de Landing Page (Geração de Leads)</h3>
+                  <a href={`/imoveis/${selectedProperty?.slug || 'novo'}`} target="_blank" rel="noreferrer" className="text-xs text-novian-text/60 hover:text-novian-accent hover:underline flex items-center gap-1">
                     Ver Página <ArrowRight size={12} />
                   </a>
                 </div>
                 
-                <div className="bg-novian-primary/50 border border-novian-accent/20 rounded-xl p-4 space-y-4">
+                <div className="bg-novian-primary/35 border border-novian-muted/50 rounded-xl p-4 space-y-4">
                   <label className="group flex cursor-pointer items-center gap-3 rounded-xl border border-novian-muted/30 bg-novian-surface/15 px-4 py-3 text-sm text-novian-text/85 transition-colors hover:border-novian-accent/25 hover:bg-novian-surface/25">
                     <input
                       type="checkbox"
@@ -4176,12 +4193,12 @@ export function PropertiesLayout() {
                       onChange={(event) => setIsExclusiveNovian(event.target.checked)}
                       className="sr-only peer"
                     />
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-novian-muted/60 bg-novian-primary/80 transition-all duration-200 peer-checked:border-novian-accent/80 peer-checked:bg-novian-accent/18 peer-focus-visible:ring-2 peer-focus-visible:ring-novian-accent/35 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[#0f1716] group-hover:border-novian-accent/40">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-novian-muted/60 bg-novian-primary/80 transition-all duration-200 peer-checked:border-novian-accent/80 peer-checked:bg-novian-accent/18 peer-focus-visible:ring-2 peer-focus-visible:ring-novian-accent/35 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-novian-surface group-hover:border-novian-accent/40">
                       <span className={`h-2.5 w-2.5 rounded-sm bg-novian-accent transition-all duration-200 ${isExclusiveNovian ? "scale-100 opacity-100" : "scale-0 opacity-0"}`} />
                     </span>
                     <div className="space-y-1">
                       <span className="block">Exibir selo de exclusividade Novian</span>
-                      <span className="block text-xs text-novian-text/55">Mostra o badge no topo da landing page do imovel.</span>
+                      <span className="block text-xs text-novian-text/55">Mostra o badge no topo da landing page do imóvel.</span>
                     </div>
                   </label>
                   <AiInputField
@@ -4343,7 +4360,11 @@ export function PropertiesLayout() {
               <div className="pt-6 border-t border-novian-muted/50 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold hover:bg-novian-muted transition-colors">Cancelar</button>
                 {activePropertyTab !== "documents" ? (
-                  <button type="submit" disabled={isSaving} className="bg-novian-accent text-novian-primary px-6 py-2 rounded-xl text-sm font-semibold hover:bg-white transition-colors disabled:opacity-50">
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="rounded-xl border border-transparent bg-novian-accent px-6 py-2 text-sm font-semibold text-novian-primary shadow-[0_10px_24px_rgba(47,74,58,0.14)] transition-colors hover:bg-novian-accent/92 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/30 focus-visible:ring-offset-2 focus-visible:ring-offset-novian-primary disabled:cursor-not-allowed disabled:border-novian-accent/12 disabled:bg-novian-accent/8 disabled:text-novian-accent/35 disabled:opacity-100 disabled:shadow-none disabled:hover:bg-novian-accent/8"
+                  >
                     {isSaving ? "Salvando..." : "Salvar Imóvel"}
                   </button>
                 ) : null}
@@ -4864,18 +4885,18 @@ export function SettingsLayout() {
   const SelectedPropertyFieldIcon = getPropertyFieldIcon(propertyFieldForm.iconName);
   const propertyFieldTypeOptions: PopupSelectOption[] = [
     { value: "text", label: "Texto" },
-    { value: "number", label: "Numero" },
+    { value: "number", label: "Número" },
     { value: "dropdown", label: "Dropdown" },
     { value: "multiselect", label: "Multi select" },
-    { value: "boolean", label: "Sim / Nao" },
+    { value: "boolean", label: "Sim / Não" },
     { value: "date", label: "Data" },
   ];
   const propertyFieldTypeLabels: Record<CustomField["type"], string> = {
     text: "Texto",
-    number: "Numero",
+    number: "Número",
     dropdown: "Dropdown",
     multiselect: "Multi select",
-    boolean: "Sim / Nao",
+    boolean: "Sim / Não",
     date: "Data",
   };
 
@@ -5007,7 +5028,7 @@ export function SettingsLayout() {
                 <div>
                   <h2 className="text-xl font-semibold text-novian-text mb-2">Campos Personalizados de Imóveis</h2>
                   <p className="text-sm text-novian-text/60 max-w-2xl">
-                    Crie aqui os campos dinâmicos usados no drawer do imóvel. Os campos estruturados como tipo, cidade, estado, país e amenidades continuam gerenciados pelo sistema.
+                    Crie aqui os campos dinâmicos usados no drawer do imóvel. Os campos estruturados continuam sendo criados pelo sistema, mas você pode ajustar rótulo, descrição e visibilidade.
                   </p>
                 </div>
                 {isAdmin ? (
@@ -5038,15 +5059,15 @@ export function SettingsLayout() {
                       {editingPropertyFieldId
                         ? isEditingSystemPropertyField
                           ? "Editar campo do sistema"
-                          : "Editar campo dinamico"
-                        : "Novo campo dinamico"}
+                          : "Editar campo dinâmico"
+                        : "Novo campo dinâmico"}
                     </p>
                     <p className="mt-1 text-sm text-novian-text/58">
                       {editingPropertyFieldId
                         ? isEditingSystemPropertyField
-                          ? "Ajuste nome, descricao, icone e visibilidade de um campo estruturado do sistema."
-                          : "Atualize configuracoes, descricao, icone e exibicao do campo dinamico."
-                        : "Campos criados aqui aparecem automaticamente na secao de campos dinamicos do drawer do imovel."}
+                          ? "Ajuste nome, descrição, ícone e visibilidade de um campo estruturado do sistema."
+                          : "Atualize configurações, descrição, ícone e exibição do campo dinâmico."
+                        : "Campos criados aqui aparecem automaticamente na seção de campos dinâmicos do drawer do imóvel."}
                     </p>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -5070,18 +5091,18 @@ export function SettingsLayout() {
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Descricao</label>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Descrição</label>
                       <textarea
                         value={propertyFieldForm.description}
                         onChange={(event) =>
                           setPropertyFieldForm((current) => ({ ...current, description: event.target.value }))
                         }
                         className="h-24 w-full resize-none rounded-xl border border-novian-muted/40 bg-novian-primary px-3 py-2.5 text-sm outline-none transition focus:border-novian-accent/35"
-                        placeholder="Explique quando este campo aparece e por que ele e importante."
+                        placeholder="Explique quando este campo aparece e por que ele é importante."
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Icone</label>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Ícone</label>
                       <PopupSelect
                         value={propertyFieldForm.iconName}
                         onChange={(value) => setPropertyFieldForm((current) => ({ ...current, iconName: value }))}
@@ -5090,13 +5111,13 @@ export function SettingsLayout() {
                           label: option.label,
                         }))}
                         searchable
-                        searchPlaceholder="Buscar icone"
-                        emptyMessage="Nenhum icone encontrado."
+                        searchPlaceholder="Buscar ícone"
+                        emptyMessage="Nenhum ícone encontrado."
                       />
                     </div>
                     <div className="rounded-2xl border border-novian-muted/35 bg-novian-primary/30 px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-novian-text/50">
-                        Pre-visualizacao
+                        Pré-visualização
                       </p>
                       <div className="mt-3 flex items-center gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-novian-muted/35 bg-novian-surface/70 text-novian-accent">
@@ -5107,7 +5128,7 @@ export function SettingsLayout() {
                             {propertyFieldForm.name.trim() || "Nome do campo"}
                           </p>
                           <p className="text-xs text-novian-text/52">
-                            {propertyFieldForm.description.trim() || "Descricao curta para orientar o time no drawer do imovel."}
+                            {propertyFieldForm.description.trim() || "Descrição curta para orientar o time no drawer do imóvel."}
                           </p>
                         </div>
                       </div>
@@ -5142,7 +5163,7 @@ export function SettingsLayout() {
                     {[
                       { key: "required", label: "Obrigatório" },
                       { key: "showOnPropertyCard", label: "Mostrar no card" },
-                      { key: "showOnPropertyPage", label: "Mostrar na página" },
+                      { key: "showOnPropertyPage", label: "Mostrar na landing page" },
                       { key: "showOnPropertyFilters", label: "Usar nos filtros" },
                     ].map((toggle) => (
                       <label key={toggle.key} className="flex items-center gap-3 rounded-xl border border-novian-muted/35 bg-novian-primary px-3 py-2.5 text-sm text-novian-text/78">
@@ -5183,7 +5204,7 @@ export function SettingsLayout() {
                           ? "Salvando..."
                           : "Criando..."
                         : editingPropertyFieldId
-                          ? "Salvar alteracoes"
+                          ? "Salvar alterações"
                           : "Criar campo"}
                     </button>
                   </div>
@@ -5194,7 +5215,7 @@ export function SettingsLayout() {
                 <div className="rounded-[28px] border border-novian-muted/35 bg-novian-surface/30 p-5">
                   <div className="mb-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-novian-accent/72">Campos do sistema</p>
-                    <p className="mt-1 text-sm text-novian-text/58">Esses campos são estruturados e controlados pela plataforma.</p>
+                    <p className="mt-1 text-sm text-novian-text/58">Esses campos são estruturados pela plataforma, mas podem ter nome, descrição e visibilidade ajustados.</p>
                   </div>
                   <div className="space-y-3">
                     {systemPropertyFields.map((field) => (
@@ -5211,10 +5232,18 @@ export function SettingsLayout() {
                               <p className="text-sm font-semibold text-novian-text">{field.name}</p>
                               <p className="mt-1 text-xs text-novian-text/48">
                                 Tipo: {propertyFieldTypeLabels[field.type]}
+                                {field.unit ? ` · Unidade: ${field.unit}` : ""}
+                                {field.options?.length ? ` · ${field.options.length} opções` : ""}
                               </p>
                               <p className="mt-2 text-xs leading-5 text-novian-text/50">
-                                {field.description || "Campo estruturado mantido pela plataforma para endereco, destaques e filtros."}
+                                {field.description || "Campo estruturado mantido pela plataforma para endereço, destaques, landing page e filtros."}
                               </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {field.required ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Obrigatório</span> : null}
+                                {field.showOnPropertyCard ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Card</span> : null}
+                                {field.showOnPropertyPage ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Landing</span> : null}
+                                {field.showOnPropertyFilters ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Filtro</span> : null}
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -5268,15 +5297,15 @@ export function SettingsLayout() {
                                   {field.options?.length ? ` · ${field.options.length} opções` : ""}
                                 </p>
                                 <p className="mt-2 text-xs leading-5 text-novian-text/50">
-                                  {field.description || "Campo dinamico criado pelo admin para complementar a ficha e os filtros do imovel."}
+                                  {field.description || "Campo dinâmico criado pelo admin para complementar a ficha, a landing page e os filtros do imóvel."}
                                 </p>
                               </div>
                             </div>
                             <div className="flex flex-col items-start gap-3 lg:items-end">
                               <div className="flex flex-wrap gap-2">
-                                {field.required ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Obrigatorio</span> : null}
+                                {field.required ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Obrigatório</span> : null}
                                 {field.showOnPropertyCard ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Card</span> : null}
-                                {field.showOnPropertyPage ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Pagina</span> : null}
+                                {field.showOnPropertyPage ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Landing</span> : null}
                                 {field.showOnPropertyFilters ? <span className="rounded-full border border-novian-muted/35 px-2.5 py-1 text-[11px] text-novian-text/55">Filtro</span> : null}
                               </div>
                               <div className="flex items-center gap-2">

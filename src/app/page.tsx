@@ -9,6 +9,7 @@ import Image from "next/image";
 import HeroParallaxBackground from "./HeroParallaxBackground";
 import GoogleCalendarButton from "./GoogleCalendarButton";
 import LandingHeader from "./LandingHeader";
+import PropertySearchFilters from "./PropertySearchFilters";
 import TestimonialsCarousel from "./TestimonialsCarousel";
 import {
   ArrowRight,
@@ -23,7 +24,6 @@ import {
   MessageCircle,
   Phone,
   Ruler,
-  Search,
   ShieldCheck,
   Star,
   UserRound,
@@ -432,85 +432,14 @@ export default async function PropertiesListingPage({
                 </div>
               </div>
 
-              <form method="get" className="grid gap-4 xl:grid-cols-[1.15fr_1fr_1fr_1fr_0.9fr]">
-                <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
-                  <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
-                    Localização
-                  </span>
-                  <span className="flex items-center justify-between gap-4">
-                    <input
-                      name="location"
-                      type="text"
-                      placeholder="Bairro, cidade ou região"
-                      defaultValue={readSearchParam("location")}
-                      className="w-full bg-transparent text-[15px] text-[#1F2B2A] outline-none placeholder:text-[#64706b]"
-                    />
-                    <MapPin size={18} className="shrink-0 text-[#1F2B2A]" />
-                  </span>
-                </label>
-
-                <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
-                  <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
-                    Tipo de imóvel
-                  </span>
-                  <select
-                    name="propertyType"
-                    defaultValue={propertyTypeFilter}
-                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
-                  >
-                    <option value="">Selecione o tipo</option>
-                    {availablePropertyTypes.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
-                  <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
-                    Faixa de preço
-                  </span>
-                  <select
-                    name="priceRange"
-                    defaultValue={priceRangeFilter}
-                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
-                  >
-                    <option value="">Selecione a faixa</option>
-                    <option value="under_500k">Até R$ 500 mil</option>
-                    <option value="500k_1m">R$ 500 mil a R$ 1 mi</option>
-                    <option value="1m_2m">R$ 1 mi a R$ 2 mi</option>
-                    <option value="over_2m">Acima de R$ 2 mi</option>
-                  </select>
-                </label>
-
-                <label className="rounded-[18px] border border-white/20 bg-white/90 px-5 py-4 shadow-lg backdrop-blur-md">
-                  <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.22em] text-[#1F2B2A]">
-                    Amenidades
-                  </span>
-                  <select
-                    name="amenity"
-                    defaultValue={amenityFilter}
-                    className="w-full appearance-none bg-transparent text-[15px] text-[#4f5a55] outline-none"
-                  >
-                    <option value="">Selecione uma amenidade</option>
-                    {availableAmenities.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <button
-                  type="submit"
-                  className="inline-flex min-h-[76px] items-center justify-center gap-3 rounded-[18px] bg-[#5E7F49] px-6 py-5 text-base font-semibold text-white shadow-lg shadow-green-900/30 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#4F6F3D]"
-                >
-                  <Search size={18} />
-                  Buscar imóveis
-                  <ArrowRight size={16} />
-                </button>
-              </form>
+              <PropertySearchFilters
+                locationDefaultValue={readSearchParam("location")}
+                propertyTypeValue={propertyTypeFilter}
+                priceRangeValue={priceRangeFilter}
+                featureValue={amenityFilter}
+                propertyTypeOptions={availablePropertyTypes}
+                featureOptions={availableAmenities}
+              />
 
               <div className="mt-6 flex flex-col gap-3 text-sm leading-6 text-white/85 sm:flex-row sm:items-center sm:justify-between">
                 <p className="flex items-start gap-2.5">

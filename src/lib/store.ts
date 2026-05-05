@@ -446,7 +446,7 @@ export const messagesStore = globalForStore.messages ?? [];
 export const threadsStore = globalForStore.threads ?? new Map<string, Thread>();
 export const propertiesStore = globalForStore.properties;
 export const propertyFieldsStore = globalForStore.propertyFields ?? [
-    { id: "property_type", name: "Tipo de Imóvel", description: "Tipo principal do imóvel usado em filtros, cards e na landing page.", iconName: "building-2", type: "dropdown", options: ["Apartamento", "Casa", "Cobertura", "Casa em condominio", "Terreno", "Comercial", "Studio", "Loft"], required: true, sortOrder: 5, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "property_type", name: "Tipo de Imóvel", description: "Tipo principal do imóvel usado em filtros, cards e na landing page.", iconName: "building-2", type: "dropdown", options: ["Apartamento", "Casa", "Cobertura", "Casa em condomínio", "Terreno", "Comercial", "Studio", "Loft"], required: true, sortOrder: 5, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
     { id: "area", name: "Área", description: "Área principal usada para destaque e comparação entre imóveis.", iconName: "ruler", type: "number", required: true, unit: "m²", sortOrder: 10, showOnPropertyCard: true, showOnPropertyPage: true, targetEntity: "properties" },
     { id: "street", name: "Rua", description: "Nome da rua do imóvel.", iconName: "map", type: "text", required: false, sortOrder: 12, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
     { id: "street_number", name: "Número", description: "Número do endereço.", iconName: "hash", type: "text", required: false, sortOrder: 14, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: false, targetEntity: "properties" },
@@ -468,7 +468,7 @@ export const propertyFieldsStore = globalForStore.propertyFields ?? [
     { id: "private_area", name: "Área privativa", description: "Área privativa em metros quadrados.", iconName: "ruler", type: "number", required: false, unit: "m²", sortOrder: 37, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
     { id: "total_area", name: "Área total", description: "Área total do imóvel em metros quadrados.", iconName: "ruler", type: "number", required: false, unit: "m²", sortOrder: 38, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
     { id: "property_age", name: "Idade do imóvel", description: "Idade aproximada do imóvel em anos.", iconName: "building-2", type: "number", required: false, unit: "anos", sortOrder: 39, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
-    { id: "amenities", name: "Amenidades", description: "Amenidades selecionáveis para enriquecer a ficha do imóvel.", iconName: "sparkles", type: "multiselect", options: ["Piscina", "Academia", "Espaco gourmet", "Churrasqueira", "Playground", "Salao de festas", "Portaria 24h", "Pet place", "Varanda", "Suite"], required: false, sortOrder: 40, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
+    { id: "amenities", name: "Características", description: "Características e diferenciais selecionáveis do imóvel.", iconName: "sliders-horizontal", type: "multiselect", options: ["Piscina", "Academia", "Espaço Gourmet", "Churrasqueira", "Playground", "Salão de Festas", "Portaria 24h", "Pet Place", "Varanda", "Suíte"], required: false, sortOrder: 40, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
     { id: "accepts_exchange", name: "Aceita permuta", description: "Indica se o proprietário aceita permuta.", iconName: "building-2", type: "boolean", required: false, sortOrder: 41, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
     { id: "accepts_financing", name: "Aceita financiamento", description: "Indica se o imóvel aceita financiamento.", iconName: "building-2", type: "boolean", required: false, sortOrder: 42, showOnPropertyCard: false, showOnPropertyPage: true, showOnPropertyFilters: true, targetEntity: "properties" },
 ];
@@ -629,21 +629,72 @@ function mapPropertyOffers(row: Record<string, unknown>): PropertyOffer[] {
 }
 
 function mapPropertyFieldRow(row: Record<string, unknown>): CustomField {
+    const fieldKey = typeof row.field_key === "string" && row.field_key ? row.field_key : String(row.id);
+    const targetEntity = typeof row.target_entity === "string" ? row.target_entity : "properties";
+    const rawName = String(row.name || "");
+    const rawDescription = typeof row.description === "string" && row.description ? row.description : undefined;
+    const rawOptions = Array.isArray(row.options) ? row.options.map((option) => String(option)) : undefined;
+    const rawIconName = typeof row.icon_name === "string" && row.icon_name ? row.icon_name : undefined;
+
+    const normalizeName = (name: string) => {
+        if (targetEntity !== "properties") return name;
+        if (fieldKey === "property_type" && name === "Tipo de Imovel") return "Tipo de Imóvel";
+        if (fieldKey === "street_number" && name === "Numero") return "Número";
+        if (fieldKey === "country" && name === "Pais") return "País";
+        if (fieldKey === "condominium_fee" && name === "Condominio") return "Condomínio";
+        if (fieldKey === "transaction_type" && name === "Transacao") return "Transação";
+        if (fieldKey === "property_age" && name === "Idade do imovel") return "Idade do imóvel";
+        if (fieldKey === "amenities" && (name === "Amenidades" || name === "Características do imóvel")) return "Características";
+        return name;
+    };
+
+    const normalizeDescription = (description?: string) => {
+        if (targetEntity !== "properties" || !description) return description;
+        if (fieldKey === "street_number" && description === "Numero do endereco.") return "Número do endereço.";
+        if (fieldKey === "country" && description === "Pais do imovel.") return "País do imóvel.";
+        if (fieldKey === "condominium_fee" && description === "Valor mensal do condominio.") return "Valor mensal do condomínio.";
+        if (fieldKey === "property_type" && description === "Tipo principal do imovel usado em filtros, cards e na landing page.") return "Tipo principal do imóvel usado em filtros, cards e na landing page.";
+        if (fieldKey === "transaction_type" && description === "Define se o imovel esta disponivel para venda, locacao ou ambos.") return "Define se o imóvel está disponível para venda, locação ou ambos.";
+        if (fieldKey === "property_age" && description === "Idade aproximada do imovel em anos.") return "Idade aproximada do imóvel em anos.";
+        if (fieldKey === "amenities" && description === "Amenidades selecionáveis para enriquecer a ficha do imóvel.") return "Características e diferenciais selecionáveis do imóvel.";
+        return description;
+    };
+
+    const normalizeOptions = (options?: string[]) => {
+        if (targetEntity !== "properties" || !options) return options;
+        if (fieldKey === "property_type") {
+            return options.map((option) => (option === "Casa em condominio" ? "Casa em condomínio" : option));
+        }
+        if (fieldKey === "transaction_type") {
+            return options.map((option) => (option === "Locacao" ? "Locação" : option));
+        }
+        if (fieldKey === "amenities") {
+            return options.map((option) => {
+                if (option === "Espaco gourmet" || option === "Espaço gourmet") return "Espaço Gourmet";
+                if (option === "Salao de festas" || option === "Salão de festas") return "Salão de Festas";
+                if (option === "Suite") return "Suíte";
+                if (option === "Pet place") return "Pet Place";
+                return option;
+            });
+        }
+        return options;
+    };
+
     return {
-        id: typeof row.field_key === "string" && row.field_key ? row.field_key : String(row.id),
+        id: fieldKey,
         dbId: typeof row.id === "string" ? row.id : undefined,
-        name: String(row.name || ""),
-        description: typeof row.description === "string" && row.description ? row.description : undefined,
-        iconName: typeof row.icon_name === "string" && row.icon_name ? row.icon_name : undefined,
+        name: normalizeName(rawName),
+        description: normalizeDescription(rawDescription),
+        iconName: targetEntity === "properties" && fieldKey === "amenities" && rawIconName === "sparkles" ? "sliders-horizontal" : rawIconName,
         type: (row.type as CustomField["type"]) || "text",
-        options: Array.isArray(row.options) ? row.options.map((option) => String(option)) : undefined,
+        options: normalizeOptions(rawOptions),
         required: Boolean(row.required),
         unit: typeof row.unit === "string" && row.unit ? row.unit : undefined,
         sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
         showOnPropertyCard: Boolean(row.show_on_property_card),
         showOnPropertyPage: Boolean(row.show_on_property_page),
         showOnPropertyFilters: Boolean(row.show_on_property_filters),
-        targetEntity: typeof row.target_entity === "string" ? row.target_entity : "properties",
+        targetEntity,
     };
 }
 

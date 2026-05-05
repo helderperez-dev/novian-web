@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireInternalApiUser } from "@/lib/api-auth";
 import {
+  DOCUMENT_SIGNED_URL_TTL_SECONDS,
+  DOCUMENT_STORAGE_BUCKET,
   getDocumentFileExtension,
+  getDocumentStorageBucket,
   normalizeDocumentTags,
   normalizeDocumentText,
   toDocumentListItem,
@@ -27,6 +30,32 @@ function asNullableNumber(value: unknown) {
 
 function matchesQuery(value: string, query: string) {
   return value.toLowerCase().includes(query);
+}
+
+async function withAccessibleUrl(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  document: ReturnType<typeof toDocumentListItem>,
+) {
+  if (!document.filePath) {
+    return document;
+  }
+
+  const bucket = getDocumentStorageBucket(document.fileUrl) || DOCUMENT_STORAGE_BUCKET;
+
+  if (/\/storage\/v1\/object\/public\//i.test(document.fileUrl) && bucket !== DOCUMENT_STORAGE_BUCKET) {
+    return document;
+  }
+
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(document.filePath, DOCUMENT_SIGNED_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    console.error(error);
+    return document;
+  }
+
+  return {
+    ...document,
+    fileUrl: data.signedUrl,
+  };
 }
 
 export async function GET(req: Request) {
@@ -116,22 +145,24 @@ export async function GET(req: Request) {
         ].some((value) => matchesQuery(value, query));
       });
 
+    const accessibleDocuments = await Promise.all(filteredDocuments.map((document) => withAccessibleUrl(supabase, document)));
+
     const categories = Array.from(
-      new Set(filteredDocuments.map((document) => document.category).filter((value): value is string => Boolean(value))),
+      new Set(accessibleDocuments.map((document) => document.category).filter((value): value is string => Boolean(value))),
     ).sort((left, right) => left.localeCompare(right));
-    const tags = Array.from(new Set(filteredDocuments.flatMap((document) => document.tags))).sort((left, right) =>
+    const tags = Array.from(new Set(accessibleDocuments.flatMap((document) => document.tags))).sort((left, right) =>
       left.localeCompare(right),
     );
 
     return NextResponse.json({
-      documents: filteredDocuments,
+      documents: accessibleDocuments,
       categories,
       tags,
       summary: {
-        total: filteredDocuments.length,
-        person: filteredDocuments.filter((document) => Boolean(document.personId)).length,
-        property: filteredDocuments.filter((document) => Boolean(document.propertyId)).length,
-        mixed: filteredDocuments.filter((document) => Boolean(document.personId && document.propertyId)).length,
+        total: accessibleDocuments.length,
+        person: accessibleDocuments.filter((document) => Boolean(document.personId)).length,
+        property: accessibleDocuments.filter((document) => Boolean(document.propertyId)).length,
+        mixed: accessibleDocuments.filter((document) => Boolean(document.personId && document.propertyId)).length,
       },
     });
   } catch (error) {
@@ -207,7 +238,9 @@ export async function POST(req: Request) {
       new Map(propertiesResult.data ? [[propertiesResult.data.id, propertiesResult.data]] : []),
     );
 
-    return NextResponse.json({ success: true, document: item });
+    const accessibleItem = await withAccessibleUrl(supabase, item);
+
+    return NextResponse.json({ success: true, document: accessibleItem });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

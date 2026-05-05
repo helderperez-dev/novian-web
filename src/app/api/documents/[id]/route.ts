@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireInternalApiUser } from "@/lib/api-auth";
 import {
+  DOCUMENT_SIGNED_URL_TTL_SECONDS,
+  DOCUMENT_STORAGE_BUCKET,
   getDocumentFileExtension,
+  getDocumentStorageBucket,
   normalizeDocumentTags,
   normalizeDocumentText,
   toDocumentListItem,
@@ -49,12 +52,25 @@ async function hydrateDocument(documentId: string) {
     };
   }
 
+  const item = toDocumentListItem(
+    document,
+    new Map(peopleResult.data ? [[peopleResult.data.id, peopleResult.data]] : []),
+    new Map(propertiesResult.data ? [[propertiesResult.data.id, propertiesResult.data]] : []),
+  );
+  const bucket = getDocumentStorageBucket(item.fileUrl) || DOCUMENT_STORAGE_BUCKET;
+
+  if (item.filePath) {
+    const { data, error: signedUrlError } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(item.filePath, DOCUMENT_SIGNED_URL_TTL_SECONDS);
+
+    if (!signedUrlError && data?.signedUrl) {
+      item.fileUrl = data.signedUrl;
+    }
+  }
+
   return {
-    document: toDocumentListItem(
-      document,
-      new Map(peopleResult.data ? [[peopleResult.data.id, peopleResult.data]] : []),
-      new Map(propertiesResult.data ? [[propertiesResult.data.id, propertiesResult.data]] : []),
-    ),
+    document: item,
     error: null,
   };
 }
@@ -159,7 +175,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     }
 
     if (currentDocument.file_path) {
-      const { error: storageError } = await supabase.storage.from("attachments").remove([currentDocument.file_path]);
+      const storageBucket = getDocumentStorageBucket(currentDocument.file_url) || DOCUMENT_STORAGE_BUCKET;
+      const { error: storageError } = await supabase.storage.from(storageBucket).remove([currentDocument.file_path]);
       if (storageError) {
         console.error(storageError);
       }

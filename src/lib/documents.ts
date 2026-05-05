@@ -42,6 +42,9 @@ export type DocumentListItem = {
   };
 };
 
+export const DOCUMENT_STORAGE_BUCKET = "documents";
+export const DOCUMENT_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
 export function normalizeDocumentText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -73,9 +76,42 @@ export function getDocumentFileExtension(fileName: string) {
   return parts.length > 1 ? parts.pop()?.toLowerCase() || null : null;
 }
 
-export function buildDocumentStoragePath(fileName: string) {
-  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
-  return `documents/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeName}`;
+type DocumentStoragePathOptions = {
+  fileName: string;
+  propertyId?: string | null;
+  personId?: string | null;
+  uploaderId?: string | null;
+};
+
+export function buildDocumentStoragePath(input: string | DocumentStoragePathOptions) {
+  const options = typeof input === "string" ? { fileName: input } : input;
+  const safeName = options.fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const folders = ["files"];
+
+  if (options.propertyId) {
+    folders.unshift("properties", options.propertyId);
+  }
+
+  if (options.personId) {
+    folders.push("people", options.personId);
+  }
+
+  if (options.uploaderId) {
+    folders.push("users", options.uploaderId);
+  }
+
+  return `${folders.join("/")}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeName}`;
+}
+
+export function getDocumentStorageBucket(fileUrl?: string | null) {
+  if (fileUrl) {
+    const match = fileUrl.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\//i);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return DOCUMENT_STORAGE_BUCKET;
 }
 
 export function toDocumentListItem(

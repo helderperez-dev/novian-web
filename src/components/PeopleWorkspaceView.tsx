@@ -1988,7 +1988,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                 </div>
                               </td>
                               <td className="px-5 py-3.5 text-right">
-                                <span className="inline-flex rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-semibold text-yellow-300">
+                                <span className="inline-flex rounded-full border border-novian-accent/25 bg-novian-accent/10 px-3 py-1 text-xs font-semibold text-novian-accent">
                                   {person.stagePoints} pts
                                 </span>
                               </td>
@@ -2006,7 +2006,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                     <MoreHorizontal size={14} />
                                   </button>
                                   {openRowMenuId === person.id ? (
-                                    <div className="absolute right-0 top-10 z-20 min-w-[148px] rounded-2xl border border-white/8 bg-[#0d221f]/95 p-1.5 shadow-2xl shadow-black/35 backdrop-blur-xl">
+                                    <div className="absolute right-0 top-10 z-20 min-w-[148px] rounded-2xl border border-novian-muted/45 bg-[rgba(250,248,243,0.98)] p-1.5 shadow-[0_18px_40px_rgba(47,74,58,0.14)] backdrop-blur-xl">
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -2014,7 +2014,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                           setDrawerOpen(true);
                                           setOpenRowMenuId(null);
                                         }}
-                                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/76 transition hover:bg-white/5 hover:text-novian-text"
+                                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/72 transition hover:bg-novian-surface/65 hover:text-novian-text"
                                       >
                                         <Pencil size={13} />
                                         Editar
@@ -2026,7 +2026,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                           setOpenRowMenuId(null);
                                         }}
                                         disabled={deletingPersonId === person.id}
-                                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-300/88 transition hover:bg-red-400/10 hover:text-red-200 disabled:opacity-60"
+                                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:opacity-60"
                                       >
                                         <Trash2 size={13} />
                                         {deletingPersonId === person.id ? "Excluindo..." : "Excluir"}
@@ -2193,7 +2193,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                               <MoreHorizontal size={13} />
                                             </button>
                                             {openRowMenuId === person.id ? (
-                                              <div className="absolute right-0 top-9 z-20 min-w-[148px] rounded-2xl border border-white/8 bg-[#0d221f]/95 p-1.5 shadow-2xl shadow-black/35 backdrop-blur-xl">
+                                              <div className="absolute right-0 top-9 z-20 min-w-[148px] rounded-2xl border border-novian-muted/45 bg-[rgba(250,248,243,0.98)] p-1.5 shadow-[0_18px_40px_rgba(47,74,58,0.14)] backdrop-blur-xl">
                                                 <button
                                                   type="button"
                                                   onClick={() => {
@@ -2201,7 +2201,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                                     setDrawerOpen(true);
                                                     setOpenRowMenuId(null);
                                                   }}
-                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/76 transition hover:bg-white/5 hover:text-novian-text"
+                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/72 transition hover:bg-novian-surface/65 hover:text-novian-text"
                                                 >
                                                   <Pencil size={13} />
                                                   Editar
@@ -2213,7 +2213,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                                     setOpenRowMenuId(null);
                                                   }}
                                                   disabled={deletingPersonId === person.id}
-                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-300/88 transition hover:bg-red-400/10 hover:text-red-200 disabled:opacity-60"
+                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:opacity-60"
                                                 >
                                                   <Trash2 size={13} />
                                                   {deletingPersonId === person.id ? "Excluindo..." : "Excluir"}
@@ -2249,7 +2249,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                                         </div>
                                         <div className="mt-1 text-sm font-medium text-novian-text">{relationshipState.label}</div>
                                       </div>
-                                      <span className="inline-flex rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2.5 py-1 text-[11px] font-semibold text-yellow-300">
+                                      <span className="inline-flex rounded-full border border-novian-accent/25 bg-novian-accent/10 px-2.5 py-1 text-[11px] font-semibold text-novian-accent">
                                         {person.stagePoints} pts
                                       </span>
                                     </div>

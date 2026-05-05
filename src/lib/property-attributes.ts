@@ -120,15 +120,25 @@ export function synchronizePropertyStructuredData(input: StructuredPropertyInput
   );
 
   if (propertyType) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.propertyType] = propertyType;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.propertyType];
   if (street) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.street] = street;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.street];
   if (streetNumber) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.streetNumber] = streetNumber;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.streetNumber];
   if (complement) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.complement] = complement;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.complement];
   if (neighborhood) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.neighborhood] = neighborhood;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.neighborhood];
   if (city) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.city] = city;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.city];
   if (state) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.state] = state;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.state];
   if (postalCode) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.postalCode] = postalCode;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.postalCode];
   if (country) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.country] = country;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.country];
   if (amenities.length > 0) nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.amenities] = amenities;
+  else delete nextCustomData[PROPERTY_SYSTEM_FIELD_KEYS.amenities];
 
   const fallbackAddress = normalizeStringValue(input.address) || "";
   const structuredAddress = buildStructuredAddressLabel({

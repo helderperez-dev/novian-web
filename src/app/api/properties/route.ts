@@ -43,6 +43,17 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
         
+        // Never allow null status to reach Postgres (properties.status is NOT NULL).
+        if (body?.id) {
+            if (body.status == null || body.status === "") {
+                delete body.status;
+            }
+        } else {
+            if (body.status == null || body.status === "") {
+                body.status = "active";
+            }
+        }
+        
         // Ensure slug is created if missing
         if (!body.slug && body.title) {
             body.slug = body.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "");
