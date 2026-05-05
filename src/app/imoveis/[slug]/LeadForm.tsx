@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePostHog } from "posthog-js/react";
 import { getBrowserContextProps, getPropertyAnalyticsProps } from "@/lib/posthog";
+import { trackLeadConversion } from "@/lib/marketing-tracking";
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -128,6 +129,26 @@ export default function LeadForm({
         last_property_id: propertyId,
         last_property_slug: propertySlug,
         last_property_title: propertyTitle,
+      });
+
+      trackLeadConversion({
+        formName: "property_lead_form",
+        propertyId,
+        propertySlug,
+        propertyTitle,
+        propertyPrice,
+        propertyOfferType: propertyEventProps.property_primary_offer_type,
+        leadMagnetTitle: leadMagnetTitle || null,
+        leadMagnetEnabled: Boolean(showLeadMagnet),
+        callToActionText: callToActionText || null,
+        currentUrl: typeof sharedEventProps.current_url === "string" ? sharedEventProps.current_url : null,
+        pathname: typeof sharedEventProps.pathname === "string" ? sharedEventProps.pathname : null,
+        referrer: typeof sharedEventProps.referrer === "string" ? sharedEventProps.referrer : null,
+        utmSource: typeof sharedEventProps.utm_source === "string" ? sharedEventProps.utm_source : null,
+        utmMedium: typeof sharedEventProps.utm_medium === "string" ? sharedEventProps.utm_medium : null,
+        utmCampaign: typeof sharedEventProps.utm_campaign === "string" ? sharedEventProps.utm_campaign : null,
+        utmTerm: typeof sharedEventProps.utm_term === "string" ? sharedEventProps.utm_term : null,
+        utmContent: typeof sharedEventProps.utm_content === "string" ? sharedEventProps.utm_content : null,
       });
 
       setSuccess(true);
