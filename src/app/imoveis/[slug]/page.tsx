@@ -694,11 +694,11 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
               <div className="mt-6 flex flex-col gap-4 text-sm text-novian-text/56 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-col gap-2">
                   <p>Corretora responsável: Bárbara Camargo - CRECI 301258-F.</p>
-                  <p className="inline-flex items-center gap-2 text-novian-text/62">
-                    Feito com
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[rgba(95,120,80,0.12)] text-novian-accent">
+                  <p className="text-novian-text/62 leading-relaxed">
+                    Feito com{" "}
+                    <span className="inline-flex h-6 w-6 align-middle items-center justify-center rounded-full bg-[rgba(95,120,80,0.12)] text-novian-accent mx-1 -mt-0.5">
                       <Heart size={13} className="fill-current" />
-                    </span>
+                    </span>{" "}
                     em Jundiaí. Orgulhosamente uma empresa remote-first.
                   </p>
                 </div>
