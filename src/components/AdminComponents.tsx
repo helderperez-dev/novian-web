@@ -2577,6 +2577,7 @@ export function PropertiesLayout() {
   const [currentCover, setCurrentCover] = useState<string>("");
   const [currentImageDescriptions, setCurrentImageDescriptions] = useState<Record<string, string>>({});
   const [title, setTitle] = useState<string>("");
+  const [slug, setSlug] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [address, setAddress] = useState<string>("");
   const [mapEmbedUrl, setMapEmbedUrl] = useState<string>("");
@@ -2731,6 +2732,7 @@ export function PropertiesLayout() {
       setCurrentCover(selectedProperty.coverImage || "");
       setCurrentImageDescriptions(getImageDescriptionsFromCustomData(selectedProperty.customData));
       setTitle(selectedProperty.title || "");
+      setSlug(selectedProperty.slug || "");
       setDescription(selectedProperty.description || "");
       setAddress(selectedProperty.address || "");
       const nextSaleDraft = createOfferDraft(selectedProperty, "sale");
@@ -2810,6 +2812,7 @@ export function PropertiesLayout() {
       setCurrentCover("");
       setCurrentImageDescriptions({});
       setTitle("");
+      setSlug("");
       setDescription("");
       setAddress("");
       setMapEmbedUrl("");
@@ -3388,7 +3391,8 @@ export function PropertiesLayout() {
     const publicPrimaryOffer = nextOffers.find((offer) => offer.isPrimary) || nextOffers[0];
 
     const propertyData = {
-      ...(selectedProperty ? { id: selectedProperty.id, slug: selectedProperty.slug } : {}),
+      ...(selectedProperty ? { id: selectedProperty.id } : {}),
+      slug: slug || undefined,
       title,
       description,
       address,
@@ -3742,6 +3746,22 @@ export function PropertiesLayout() {
                         })
                       }
                     />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">URL da Página (Slug)</label>
+                    <div className="flex overflow-hidden rounded-xl border border-novian-muted/50 bg-novian-primary focus-within:border-novian-accent/50 focus-within:ring-1 focus-within:ring-novian-accent/50">
+                      <span className="flex items-center border-r border-novian-muted/30 bg-novian-surface/40 px-3 text-sm text-novian-text/50 select-none">
+                        /imoveis/
+                      </span>
+                      <input
+                        type="text"
+                        name="slug"
+                        value={slug}
+                        onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-'))}
+                        placeholder="Deixe em branco para gerar automaticamente"
+                        className="flex-1 bg-transparent px-3 py-2.5 text-sm text-novian-text outline-none placeholder:text-novian-text/30"
+                      />
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <RichTextEditor

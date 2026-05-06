@@ -118,6 +118,10 @@ export function formatPropertyFieldValue(value: PropertyCustomDataValue, field?:
 
   if (typeof value === "number") {
     if (field?.type === "number" && field.unit) {
+      if (field.unit.trim().toUpperCase() === "R$") {
+        const formattedNumber = new Intl.NumberFormat("pt-BR").format(value);
+        return `R$ ${formattedNumber}`;
+      }
       return `${value} ${field.unit}`;
     }
 
@@ -129,6 +133,9 @@ export function formatPropertyFieldValue(value: PropertyCustomDataValue, field?:
   }
 
   if (field?.type === "number" && field?.unit) {
+    if (field.unit.trim().toUpperCase() === "R$") {
+      return normalizePropertyDisplayText(`R$ ${value}`);
+    }
     return normalizePropertyDisplayText(`${value} ${field.unit}`);
   }
 
