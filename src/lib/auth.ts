@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isRecoverableSessionError } from "@/lib/supabase/session-errors";
 
 export type AppUser = Database["public"]["Tables"]["app_users"]["Row"];
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -34,6 +35,9 @@ export async function getCurrentSessionUser(): Promise<User | null> {
   } = await supabase.auth.getUser();
 
   if (error) {
+    if (isRecoverableSessionError(error)) {
+      return null;
+    }
     throw error;
   }
 
@@ -48,6 +52,9 @@ export async function getCurrentAppUser(): Promise<AppUser | null> {
   } = await supabase.auth.getUser();
 
   if (authError) {
+    if (isRecoverableSessionError(authError)) {
+      return null;
+    }
     throw authError;
   }
 
