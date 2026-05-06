@@ -1,0 +1,165 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"phone\": \"5511943132221\",\n  \"instanceName\": \"evolution_exchange\",\n  \"messageText\": \"Oi! Posso te ajudar com mais alguma coisa?\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        7680,
+        1904
+      ],
+      "id": "d37b9d8b-8500-4daf-9aca-c9903075a13f",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawPhone = String($json.phone ?? '').trim();\nconst instanceName = String($json.instanceName ?? '').trim();\nconst messageText = String($json.messageText ?? $json.text ?? '').trim();\n\nconst baseUrl = 'https://whatsapp.novian.com.br';\nconst role = 'AI Agent';\nconst writingDelayMs = 1200;\nconst linkPreview = false;\nconst status = 'Novo Lead';\nconst threadKind = 'lead';\nconst customData = { source: 'mariana-agent' };\n\nconst agentMap = {\n  'mariana-sdr': 'Mariana Silva',\n  'evolution_exchange': 'Mariana Silva'\n};\n\nif (!rawPhone) {\n  throw new Error('Missing phone');\n}\n\nif (!instanceName) {\n  throw new Error('Missing instanceName');\n}\n\nif (!messageText) {\n  throw new Error('Missing messageText');\n}\n\nconst phone = rawPhone.replace(/\\D+/g, '');\n\nif (!phone) {\n  throw new Error('Invalid phone');\n}\n\nconst threadId = `${phone}@s.whatsapp.net`;\nconst agent = String(agentMap[instanceName] ?? instanceName).trim();\n\nreturn [{\n  json: {\n    phone,\n    thread_id: threadId,\n    messageText,\n    instanceName,\n    baseUrl,\n    threadTitle: phone,\n    agent,\n    role,\n    writingDelayMs,\n    linkPreview,\n    status,\n    threadKind,\n    customData\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7952,
+        1904
+      ],
+      "id": "d10737cd-e5c6-4cd6-ba43-908ec6babe91",
+      "name": "Prepare WhatsApp Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.baseUrl + '/message/sendText/' + encodeURIComponent($json.instanceName) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=e2edf4803d4618326d6710c543a02c49115fef040b5dfd5d8c10956a77b8201e"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.phone, text: $json.messageText, delay: $json.writingDelayMs, linkPreview: $json.linkPreview }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        8224,
+        1904
+      ],
+      "id": "f5110d41-368a-437f-abc6-0b246e72e23f",
+      "name": "Send WhatsApp Message"
+    },
+    {
+      "parameters": {
+        "jsCode": "function esc(value) {\n  if (value === null || value === undefined) return 'NULL';\n  return `'${String(value).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\")}'`;\n}\n\nfunction escTextArray(values) {\n  const normalized = Array.isArray(values)\n    ? values.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim())\n    : [];\n\n  if (!normalized.length) {\n    return \"'{}'::text[]\";\n  }\n\n  return `ARRAY[${normalized.map((value) => esc(value)).join(', ')}]::text[]`;\n}\n\nfunction escJson(value) {\n  return `${esc(JSON.stringify(value ?? {}))}::jsonb`;\n}\n\nconst input = $('Prepare WhatsApp Payload').first().json;\nconst sendResult = $('Send WhatsApp Message').first().json;\n\nconst providerMessageId = sendResult?.key?.id ?? null;\nconst providerStatus = sendResult?.message?.status ?? null;\n\nconst mergedCustomData = {\n  ...(input.customData || {}),\n  last_outbound_instance: input.instanceName,\n  last_outbound_provider_message_id: providerMessageId,\n  last_outbound_provider_status: providerStatus,\n  last_outbound_writing_delay_ms: input.writingDelayMs,\n  last_outbound_at: new Date().toISOString()\n};\n\nconst sql = `WITH upsert_thread AS (\n  INSERT INTO public.chat_threads (\n    thread_id,\n    title,\n    preview,\n    phone,\n    unread,\n    agent_ids,\n    status,\n    custom_data,\n    thread_kind,\n    last_message_at,\n    updated_at\n  ) VALUES (\n    ${esc(input.thread_id)},\n    ${esc(input.threadTitle)},\n    ${esc(input.messageText)},\n    ${esc(input.phone)},\n    false,\n    ${escTextArray([input.instanceName])},\n    ${esc(input.status)},\n    ${escJson(mergedCustomData)},\n    ${esc(input.threadKind)},\n    now(),\n    now()\n  )\n  ON CONFLICT (thread_id) DO UPDATE\n  SET\n    title = CASE\n      WHEN COALESCE(public.chat_threads.title, '') = '' THEN EXCLUDED.title\n      ELSE public.chat_threads.title\n    END,\n    preview = EXCLUDED.preview,\n    phone = COALESCE(EXCLUDED.phone, public.chat_threads.phone),\n    unread = false,\n    agent_ids = (\n      SELECT ARRAY(\n        SELECT DISTINCT item\n        FROM unnest(\n          COALESCE(public.chat_threads.agent_ids, '{}'::text[]) ||\n          COALESCE(EXCLUDED.agent_ids, '{}'::text[])\n        ) AS item\n        WHERE item IS NOT NULL AND btrim(item) <> ''\n      )\n    ),\n    status = COALESCE(public.chat_threads.status, EXCLUDED.status),\n    custom_data = COALESCE(public.chat_threads.custom_data, '{}'::jsonb) || COALESCE(EXCLUDED.custom_data, '{}'::jsonb),\n    thread_kind = COALESCE(public.chat_threads.thread_kind, EXCLUDED.thread_kind),\n    last_message_at = now(),\n    updated_at = now()\n  RETURNING thread_id\n)\nINSERT INTO public.chat_messages (\n  thread_id,\n  agent,\n  role,\n  content,\n  is_system\n)\nSELECT\n  ${esc(input.thread_id)},\n  ${esc(input.agent)},\n  ${esc(input.role)},\n  ${esc(input.messageText)},\n  false\nFROM upsert_thread\nRETURNING id, thread_id, agent, role, content, is_system, created_at;`;\n\nreturn [{\n  json: {\n    ...input,\n    provider_message_id: providerMessageId,\n    provider_status: providerStatus,\n    provider_response: sendResult,\n    persist_sql: sql\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8512,
+        1904
+      ],
+      "id": "48b4d6f8-81ae-4eab-92e2-0962d42f9e3e",
+      "name": "Build Persistence SQL"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.persist_sql }}",
+        "options": {}
+      },
+      "id": "e95045a1-0450-4172-b49b-dfec43e6cd35",
+      "name": "Persist Chat Output",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        8768,
+        1904
+      ],
+      "credentials": {}
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepared = $('Build Persistence SQL').first().json;\nconst dbRow = $json;\n\nreturn [{\n  json: {\n    success: true,\n    thread_id: prepared.thread_id,\n    phone: prepared.phone,\n    instanceName: prepared.instanceName,\n    agent: prepared.agent,\n    role: prepared.role,\n    messageText: prepared.messageText,\n    writingDelayMs: prepared.writingDelayMs,\n    provider_message_id: prepared.provider_message_id,\n    provider_status: prepared.provider_status,\n    chat_message_id: dbRow.id ?? null,\n    provider_response: prepared.provider_response\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9024,
+        1904
+      ],
+      "id": "6c1cde55-e871-4a10-8af1-dce449d8fc24",
+      "name": "Return Result"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Prepare WhatsApp Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare WhatsApp Payload": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Build Persistence SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Persistence SQL": {
+      "main": [
+        [
+          {
+            "node": "Persist Chat Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Chat Output": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "dc4f9ed8d71f80c698f718d77f28fac395a2cf4fec4f6b8304dcfe883e638148"
+  }
+}

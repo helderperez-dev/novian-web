@@ -47,6 +47,8 @@ type CustomField = {
   required?: boolean | null;
 };
 
+type PersonMetadataValue = string | number | null;
+
 type PersonRole = "lead" | "client" | "buyer" | "seller";
 type WorkspaceMode = "people" | "crm";
 type ViewMode = "grid" | "board";
@@ -201,6 +203,23 @@ const parseTagInput = (value: string) =>
         .filter(Boolean),
     ),
   );
+
+const normalizePersonMetadataValue = (field: CustomField, rawValue: string): PersonMetadataValue => {
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  if (field.type === "number") {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  return value;
+};
+
+const buildPersonMetadataPayload = (fields: CustomField[], values: Record<string, string>) =>
+  Object.fromEntries(
+    fields.map((field) => [field.id, normalizePersonMetadataValue(field, values[field.id] || "")]),
+  ) as Record<string, PersonMetadataValue>;
 
 const BUSINESS_ROLE_ORDER: PersonRole[] = ["buyer", "seller"];
 
@@ -768,6 +787,7 @@ function PersonDrawer({
         roles: normalizedRoles,
         tags: parseTagInput(tagsInput),
         stagePoints: Number(stagePoints || 0),
+        metadata: buildPersonMetadataPayload(customFields, metadataValues),
         brokerUserId: brokerUserId || null,
         linkedProperties: linkedProperties.map((item) => ({
           propertyId: item.propertyId,
