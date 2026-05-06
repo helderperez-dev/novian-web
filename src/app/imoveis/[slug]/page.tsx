@@ -3,6 +3,7 @@ import { getActivePropertyBySlug } from "@/lib/properties";
 import { formatPropertyFieldValue, formatPropertyOfferLabel, getPropertyOfferSummary, getVisiblePropertyFieldEntries, normalizePropertyDisplayText } from "@/lib/property-utils";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
+import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
@@ -129,6 +130,78 @@ function splitTitleIntoTwoLines(title: string) {
 
   const midpoint = Math.ceil(words.length / 2);
   return [words.slice(0, midpoint).join(" "), words.slice(midpoint).join(" ")];
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const [property, propertyFields] = await Promise.all([
+    getActivePropertyBySlug(resolvedParams.slug),
+    getPropertyFields(),
+  ]);
+
+  if (!property) {
+    return {
+      title: "Imóvel não encontrado | Novian",
+    };
+  }
+
+  const { primaryOffer } = getPropertyOfferSummary(property);
+  const visiblePageFields = getVisiblePropertyFieldEntries(property, propertyFields, "page");
+  
+  const getFieldValue = (id: string) => {
+    const entry = visiblePageFields.find(({ field }) => field.id === id);
+    return entry ? formatPropertyFieldValue(entry.value!, entry.field) : null;
+  };
+
+  const propertyType = getFieldValue("property_type") || "Imóvel";
+  const bedrooms = getFieldValue("bedrooms");
+  const area = getFieldValue("area");
+  
+  const detailsParts = [];
+  if (bedrooms) detailsParts.push(`${bedrooms} Quartos`);
+  if (area) detailsParts.push(area);
+  const detailsText = detailsParts.length > 0 ? ` • ${detailsParts.join(" • ")}` : "";
+  
+  const priceText = primaryOffer ? ` por ${formatPropertyOfferLabel(primaryOffer)}` : "";
+  
+  const neighborhood = getFieldValue("neighborhood");
+  const city = getFieldValue("city");
+  const locationParts = [];
+  if (neighborhood) locationParts.push(neighborhood);
+  if (city) locationParts.push(city);
+  const locationText = locationParts.length > 0 ? ` em ${locationParts.join(", ")}` : "";
+
+  const title = `${propertyType}${detailsText}${locationText}${priceText}`;
+  
+  const rawDescription = property.landingPage?.heroSubtitle || property.description || "";
+  const cleanDescription = rawDescription.replace(/<\/?[^>]+(>|$)/g, "").substring(0, 160);
+  const description = cleanDescription.length === 160 ? `${cleanDescription}...` : cleanDescription;
+  
+  const ogImage = property.coverImage || "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=1200";
+
+  return {
+    title: `${title} | Novian`,
+    description,
+    openGraph: {
+      title: `${title} | Novian`,
+      description,
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} | Novian`,
+      description,
+      images: [ogImage],
+    },
+  };
 }
 
 export default async function PropertyLandingPage({ params }: { params: Promise<{ slug: string }> }) {
