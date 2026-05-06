@@ -30,6 +30,8 @@ import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, Respon
 type ManagedAppUser = Database["public"]["Tables"]["app_users"]["Row"];
 type ManagedUserRole = Database["public"]["Enums"]["app_role"];
 type ManagedUserType = Database["public"]["Enums"]["app_user_type"];
+type ChatThreadRow = Database["public"]["Tables"]["chat_threads"]["Row"];
+type ChatMessageRow = Database["public"]["Tables"]["chat_messages"]["Row"];
 type BrokerOption = {
   id: string;
   fullName: string;
@@ -70,6 +72,134 @@ type DashboardPayload = {
   recentCaptacao: DashboardRecentCaptacaoItem[];
   recentProperties: DashboardRecentPropertyItem[];
   recentClientProcesses: DashboardRecentClientProcessItem[];
+};
+
+const formatWarRoomClock = (value: string) =>
+  new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+const normalizeWarRoomAgentId = (value: string | null | undefined) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.split("/")[0] || null;
+};
+
+const getWarRoomCustomData = (customData: ChatThreadRow["custom_data"]) => {
+  if (customData && typeof customData === "object" && !Array.isArray(customData)) {
+    return customData as Record<string, unknown>;
+  }
+
+  return {};
+};
+
+const isWarRoomPhoneJid = (value: string) => /@(?:s\.whatsapp\.net|c\.us)$/i.test(value);
+
+const normalizeWarRoomWhatsAppJid = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (!trimmed.includes("@")) {
+    const digits = trimmed.replace(/\D/g, "");
+    return digits ? `${digits}@s.whatsapp.net` : trimmed;
+  }
+
+  const [userPart, serverPart] = trimmed.split("@");
+  const [phonePart, devicePart] = userPart.split(":");
+  const digits = phonePart.replace(/\D/g, "");
+  const normalizedUser = digits ? (devicePart ? `${digits}:${devicePart}` : digits) : userPart;
+  return `${normalizedUser}@${serverPart.toLowerCase()}`;
+};
+
+const extractWarRoomPhoneFromThreadId = (threadId: string) => {
+  if (threadId === "general" || threadId === "continuous") {
+    return null;
+  }
+
+  const normalized = normalizeWarRoomWhatsAppJid(threadId) || threadId;
+  if (!isWarRoomPhoneJid(normalized)) {
+    return null;
+  }
+
+  const [user] = normalized.split("@");
+  return user || null;
+};
+
+const getWarRoomThreadAgentId = (row: Pick<ChatThreadRow, "agent_ids" | "custom_data">) => {
+  const customData = getWarRoomCustomData(row.custom_data);
+  const customAgentId = normalizeWarRoomAgentId(typeof customData.agent_id === "string" ? customData.agent_id : null);
+  if (customAgentId) {
+    return customAgentId;
+  }
+
+  const firstAgentId = Array.isArray(row.agent_ids)
+    ? row.agent_ids.find((value) => typeof value === "string" && value.trim())
+    : null;
+  return normalizeWarRoomAgentId(firstAgentId);
+};
+
+const isWarRoomVisibleThread = (row: ChatThreadRow) => {
+  if (row.thread_kind === "channel") {
+    return true;
+  }
+
+  if ((row.status || "").trim().toLowerCase() === "oportunidades (web)") {
+    return false;
+  }
+
+  const customData = getWarRoomCustomData(row.custom_data);
+  const source = typeof customData.source === "string" ? customData.source : null;
+  const whatsappJid = typeof customData.whatsapp_jid === "string" ? customData.whatsapp_jid : null;
+  return source === "WhatsApp" || Boolean(whatsappJid);
+};
+
+const mapWarRoomThreadRow = (row: ChatThreadRow): Thread => ({
+  id: row.thread_id,
+  leadId: row.person_id || undefined,
+  agentId: getWarRoomThreadAgentId(row) || undefined,
+  title: row.title,
+  preview: row.preview || "",
+  time: formatWarRoomClock(row.last_message_at),
+  unread: row.unread,
+  phone: row.phone || extractWarRoomPhoneFromThreadId(row.thread_id) || "",
+  agentIds: row.agent_ids || [],
+  status: row.status || undefined,
+  score: row.score || 0,
+  funnelId: row.funnel_id || undefined,
+  customData: getWarRoomCustomData(row.custom_data),
+});
+
+const mapWarRoomMessageRow = (row: ChatMessageRow): ChatMessage => ({
+  id: row.id,
+  threadId: row.thread_id,
+  agent: row.agent,
+  role: row.role,
+  content: row.content,
+  time: formatWarRoomClock(row.created_at),
+  isSystem: row.is_system,
+});
+
+const upsertWarRoomThread = (threads: Thread[], nextThread: Thread) => {
+  const remainingThreads = threads.filter((thread) => thread.id !== nextThread.id);
+  return [nextThread, ...remainingThreads];
+};
+
+const upsertWarRoomMessage = (messages: ChatMessage[], nextMessage: ChatMessage) => {
+  const existingIndex = messages.findIndex((message) => message.id === nextMessage.id);
+  if (existingIndex === -1) {
+    return [...messages, nextMessage];
+  }
+
+  const nextMessages = [...messages];
+  nextMessages[existingIndex] = nextMessage;
+  return nextMessages;
 };
 
 const PROPERTY_LOCATION_FIELD_IDS = new Set([
@@ -6072,25 +6202,6 @@ export function WarRoomLayout() {
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<AgentConfig[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
-  const warRoomRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const threadBelongsToAgent = useCallback((record: { agent_ids?: unknown; custom_data?: unknown } | null | undefined, agentId: string) => {
-    if (!record || !agentId) {
-      return false;
-    }
-
-    if (Array.isArray(record.agent_ids) && record.agent_ids.includes(agentId)) {
-      return true;
-    }
-
-    if (record.custom_data && typeof record.custom_data === "object") {
-      const customData = record.custom_data as { agent_id?: unknown };
-      if (typeof customData.agent_id === "string" && customData.agent_id === agentId) {
-        return true;
-      }
-    }
-
-    return false;
-  }, []);
 
   const fetchThreadMessages = useCallback(async (threadId: string, resetSeenMessages = false) => {
     const threadRes = await fetch(`/api/warroom/${encodeURIComponent(threadId)}`, { cache: "no-store" });
@@ -6119,46 +6230,20 @@ export function WarRoomLayout() {
       const data = await res.json();
       const nextThreads = Array.isArray(data.threads) ? data.threads as Thread[] : [];
       setThreads(nextThreads);
-
-      const nextActiveThreadId = nextThreads.some((thread) => thread.id === activeThreadId)
-        ? activeThreadId
-        : nextThreads[0]?.id || null;
-
-      if (nextActiveThreadId !== activeThreadId) {
-        setActiveThreadId(nextActiveThreadId);
-      }
-
-      if (nextActiveThreadId) {
-        await fetchThreadMessages(nextActiveThreadId, nextActiveThreadId !== activeThreadId);
-      } else {
-        setMessages([]);
-        setTypingAgent(null);
-      }
     } catch (e) {
       console.error(e);
     }
-  }, [activeAgentId, activeThreadId, fetchThreadMessages]);
+  }, [activeAgentId]);
 
-  const scheduleWarRoomRefresh = useCallback((immediate = false) => {
-    if (warRoomRefreshTimeoutRef.current) {
-      clearTimeout(warRoomRefreshTimeoutRef.current);
-      warRoomRefreshTimeoutRef.current = null;
+  const markThreadAsRead = useCallback(async (threadId: string) => {
+    try {
+      await fetch(`/api/warroom/${encodeURIComponent(threadId)}/read`, {
+        method: "POST",
+      });
+    } catch (error) {
+      console.error(error);
     }
-
-    if (!activeAgentId) {
-      return;
-    }
-
-    if (immediate) {
-      void fetchWarRoomData();
-      return;
-    }
-
-    warRoomRefreshTimeoutRef.current = setTimeout(() => {
-      warRoomRefreshTimeoutRef.current = null;
-      void fetchWarRoomData();
-    }, 150);
-  }, [activeAgentId, fetchWarRoomData]);
+  }, []);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -6188,10 +6273,15 @@ export function WarRoomLayout() {
 
   useEffect(() => {
     if (!activeAgentId) {
+      setThreads([]);
+      setMessages([]);
+      setTypingAgent(null);
       return;
     }
 
-    scheduleWarRoomRefresh(true);
+    void fetchWarRoomData();
+
+    const normalizedActiveAgentId = normalizeWarRoomAgentId(activeAgentId);
 
     const threadsChannel = supabase
       .channel(`warroom-threads-${activeAgentId}`)
@@ -6199,23 +6289,48 @@ export function WarRoomLayout() {
         "postgres_changes",
         { event: "*", schema: "public", table: "chat_threads" },
         (payload) => {
-          const newRecord = "new" in payload ? payload.new as { agent_ids?: unknown; custom_data?: unknown } : null;
-          const oldRecord = "old" in payload ? payload.old as { agent_ids?: unknown; custom_data?: unknown } : null;
-          if (threadBelongsToAgent(newRecord, activeAgentId) || threadBelongsToAgent(oldRecord, activeAgentId)) {
-            scheduleWarRoomRefresh();
-          }
+          const nextRow = "new" in payload ? payload.new as ChatThreadRow : null;
+          const previousRow = "old" in payload ? payload.old as ChatThreadRow : null;
+          const previousThreadId = previousRow?.thread_id ?? nextRow?.thread_id;
+
+          const matchesAgent = (row: ChatThreadRow | null) =>
+            Boolean(
+              row &&
+              isWarRoomVisibleThread(row) &&
+              (!normalizedActiveAgentId || getWarRoomThreadAgentId(row) === normalizedActiveAgentId),
+            );
+
+          setThreads((currentThreads) => {
+            if (payload.eventType === "DELETE" || !nextRow) {
+              return previousThreadId
+                ? currentThreads.filter((thread) => thread.id !== previousThreadId)
+                : currentThreads;
+            }
+
+            if (!matchesAgent(nextRow)) {
+              return currentThreads.filter((thread) => thread.id !== nextRow.thread_id);
+            }
+
+            return upsertWarRoomThread(currentThreads, mapWarRoomThreadRow(nextRow));
+          });
         },
       )
       .subscribe();
 
     return () => {
-      if (warRoomRefreshTimeoutRef.current) {
-        clearTimeout(warRoomRefreshTimeoutRef.current);
-        warRoomRefreshTimeoutRef.current = null;
-      }
       void supabase.removeChannel(threadsChannel);
     };
-  }, [activeAgentId, scheduleWarRoomRefresh, threadBelongsToAgent]);
+  }, [activeAgentId, fetchWarRoomData]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      setMessages([]);
+      setTypingAgent(null);
+      return;
+    }
+
+    void fetchThreadMessages(activeThreadId, true);
+  }, [activeThreadId, fetchThreadMessages]);
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -6232,8 +6347,35 @@ export function WarRoomLayout() {
           table: "chat_messages",
           filter: `thread_id=eq.${activeThreadId}`,
         },
-        () => {
-          void fetchThreadMessages(activeThreadId);
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const deletedMessage = "old" in payload ? payload.old as ChatMessageRow : null;
+            if (!deletedMessage) {
+              return;
+            }
+
+            setMessages((currentMessages) => currentMessages.filter((message) => message.id !== deletedMessage.id));
+            return;
+          }
+
+          const nextMessageRow = "new" in payload ? payload.new as ChatMessageRow : null;
+          if (!nextMessageRow) {
+            return;
+          }
+
+          const nextMessage = mapWarRoomMessageRow(nextMessageRow);
+          setMessages((currentMessages) => upsertWarRoomMessage(currentMessages, nextMessage));
+          setTypingAgent(null);
+
+          if (nextMessage.role === "Client") {
+            void markThreadAsRead(activeThreadId);
+            setSeenMessageIds((currentSeen) => new Set([...currentSeen, nextMessage.id]));
+            return;
+          }
+
+          if (nextMessage.role === "CEO" || nextMessage.isSystem) {
+            setSeenMessageIds((currentSeen) => new Set([...currentSeen, nextMessage.id]));
+          }
         },
       )
       .subscribe();
@@ -6248,8 +6390,15 @@ export function WarRoomLayout() {
           table: "chat_threads",
           filter: `thread_id=eq.${activeThreadId}`,
         },
-        () => {
-          scheduleWarRoomRefresh();
+        (payload) => {
+          const nextRow = "new" in payload ? payload.new as ChatThreadRow : null;
+          if (!nextRow) {
+            return;
+          }
+
+          if (isWarRoomVisibleThread(nextRow)) {
+            setThreads((currentThreads) => upsertWarRoomThread(currentThreads, mapWarRoomThreadRow(nextRow)));
+          }
         },
       )
       .subscribe();
@@ -6258,7 +6407,17 @@ export function WarRoomLayout() {
       void supabase.removeChannel(messageChannel);
       void supabase.removeChannel(threadChannel);
     };
-  }, [activeThreadId, fetchThreadMessages, scheduleWarRoomRefresh]);
+  }, [activeThreadId, markThreadAsRead]);
+
+  useEffect(() => {
+    setActiveThreadId((currentThreadId) => {
+      if (currentThreadId && threads.some((thread) => thread.id === currentThreadId)) {
+        return currentThreadId;
+      }
+
+      return threads[0]?.id || null;
+    });
+  }, [threads]);
 
   useEffect(() => {
     setActiveThreadTab("overview");
@@ -6271,13 +6430,26 @@ export function WarRoomLayout() {
 
     try {
       // Create endpoint payload. If it's continuous ops, maybe we handle it slightly differently in backend, but same API works.
-      await fetch(`/api/warroom/${encodeURIComponent(activeThreadId)}`, {
+      const response = await fetch(`/api/warroom/${encodeURIComponent(activeThreadId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, agent: "Hélder Perez", role: "CEO" }),
       });
-      // Force an immediate fetch to see our message
-      await fetchWarRoomData();
+
+      if (!response.ok) {
+        throw new Error("Failed to send message");
+      }
+
+      const data = await response.json();
+      const sentMessage = data.message as ChatMessage | undefined;
+      if (sentMessage) {
+        setMessages((currentMessages) => upsertWarRoomMessage(currentMessages, sentMessage));
+        setSeenMessageIds((currentSeen) => new Set([...currentSeen, sentMessage.id]));
+      }
+
+      if (activeThreadId !== "general" && activeThreadId !== "continuous") {
+        setTypingAgent(null);
+      }
     } catch (e) {
       console.error(e);
       setTypingAgent(null);

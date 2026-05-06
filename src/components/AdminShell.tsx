@@ -37,8 +37,8 @@ const NavItem = ({ icon, label, href, active, collapsed }: { icon: React.ReactNo
     <div
       className={`flex items-center py-2.5 px-3 rounded-xl cursor-pointer transition-all duration-200 group
         ${active 
-          ? 'bg-novian-accent/12 text-novian-accent shadow-[inset_0_0_0_1px_rgba(47,74,58,0.08)]'
-          : 'text-novian-text/60 hover:text-novian-text hover:bg-white/72'
+          ? 'bg-[rgba(243,237,227,0.12)] text-[#F3EDE3]'
+          : 'text-[rgba(243,237,227,0.68)] hover:bg-[rgba(243,237,227,0.06)] hover:text-[#F8F4EC]'
         }
         ${collapsed ? 'justify-center' : 'justify-start gap-3'}
       `}
@@ -47,7 +47,7 @@ const NavItem = ({ icon, label, href, active, collapsed }: { icon: React.ReactNo
         {icon}
       </div>
       {!collapsed && (
-        <span className={`font-medium tracking-wide text-sm truncate ${active ? 'text-novian-accent' : ''}`}>
+        <span className={`font-medium tracking-wide text-sm truncate ${active ? 'text-[#F8F4EC]' : ''}`}>
           {label}
         </span>
       )}
@@ -105,17 +105,17 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     <div className="flex h-screen w-full overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.65),rgba(243,237,227,0.72))] text-novian-text font-sans">
       
       {/* Sidebar Navigation */}
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20 flex shrink-0 flex-col justify-between border-r border-novian-muted/60 bg-[rgba(255,255,255,0.82)] shadow-[0_20px_50px_rgba(47,74,58,0.07)] backdrop-blur-xl transition-all duration-300`}>
+      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} relative z-20 flex shrink-0 flex-col justify-between border-r border-white/8 bg-[#0D1D1D] shadow-[0_24px_60px_rgba(6,14,14,0.28)] transition-all duration-300`}>
         {/* Toggle Button */}
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-6 z-50 hidden rounded-full border border-novian-muted/65 bg-white p-1 text-novian-text/50 shadow-sm transition-colors hover:text-novian-accent lg:block"
+          className="absolute -right-3 top-6 z-50 hidden rounded-full border border-[rgba(13,29,29,0.08)] bg-[rgba(250,248,243,0.96)] p-1.5 text-[#233A36] shadow-[0_10px_24px_rgba(13,29,29,0.14)] backdrop-blur-md transition-all duration-200 hover:border-[rgba(13,29,29,0.14)] hover:bg-white hover:text-[#0D1D1D] lg:block"
         >
           {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </button>
 
         <div>
-          <div className={`h-20 flex items-center justify-center ${isSidebarOpen ? 'lg:justify-start px-6' : 'px-0'} border-b border-novian-muted/55 transition-all duration-300`}>
+          <div className={`h-20 flex items-center justify-center ${isSidebarOpen ? 'lg:justify-start px-6' : 'px-0'} border-b border-white/8 transition-all duration-300`}>
             <div className={`flex items-center w-full overflow-hidden ${isSidebarOpen ? 'justify-start' : 'justify-center'}`}>
               <Image 
                 src="/logo.png" 
@@ -212,12 +212,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all group ${
                 isUserMenuOpen 
-                  ? 'bg-novian-accent/12 text-novian-accent shadow-[inset_0_0_0_1px_rgba(47,74,58,0.08)]'
-                  : 'text-novian-text/60 hover:text-novian-text hover:bg-white/72'
+                  ? 'bg-[rgba(243,237,227,0.12)] text-[#F3EDE3]'
+                  : 'text-[rgba(243,237,227,0.68)] hover:bg-[rgba(243,237,227,0.06)] hover:text-[#F8F4EC]'
               } ${!isSidebarOpen ? 'justify-center' : ''}`}
             >
               <div className={`flex h-8 w-8 shrink-0 items-center ${!isSidebarOpen ? 'justify-center' : 'justify-start'} transition-transform duration-200 ${isUserMenuOpen ? 'scale-105' : 'group-hover:scale-105'}`}>
-                <div className="relative h-8 w-8 overflow-hidden rounded-full border border-novian-muted/70 bg-white">
+                <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/12 bg-white/10">
                   {currentAppUser?.avatar_url ? (
                     <Image
                       src={currentAppUser.avatar_url}
@@ -235,7 +235,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
               {isSidebarOpen && (
                 <div className="flex min-w-0 items-center">
-                  <span className={`w-full truncate text-sm font-medium tracking-wide transition-colors ${isUserMenuOpen ? 'text-novian-accent' : ''}`}>
+                  <span className={`w-full truncate text-sm font-medium tracking-wide transition-colors ${isUserMenuOpen ? 'text-[#F8F4EC]' : ''}`}>
                     {currentAppUser?.full_name || currentAppUser?.email || "Carregando..."}
                   </span>
                 </div>

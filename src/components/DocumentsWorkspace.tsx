@@ -6,7 +6,6 @@ import {
   Eye,
   FileText,
   Filter,
-  FolderOpen,
   Home,
   MoreHorizontal,
   Search,
@@ -51,11 +50,11 @@ const PERSON_ROLE_OPTIONS = [
   { value: "seller", label: "Proprietario" },
 ];
 
-const SCOPE_OPTIONS = [
-  { value: "all", label: "Tudo" },
+const DOCUMENT_SCOPE_TABS = [
+  { value: "all", label: "Todos" },
   { value: "person", label: "Pessoas" },
   { value: "property", label: "Imoveis" },
-  { value: "mixed", label: "Vinculados aos dois" },
+  { value: "mixed", label: "Ambos" },
 ];
 
 function formatDate(value: string) {
@@ -93,6 +92,8 @@ export default function DocumentsWorkspace({
   const [roleFilter, setRoleFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
+  const [showUploadPanel, setShowUploadPanel] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [formTitle, setFormTitle] = useState("");
@@ -211,15 +212,14 @@ export default function DocumentsWorkspace({
     loadDocuments().catch(console.error);
   }, [loadDocuments]);
 
-  const stats = useMemo(
-    () => ({
-      total: documents.length,
-      people: documents.filter((item) => item.personId).length,
-      properties: documents.filter((item) => item.propertyId).length,
-      recent: documents[0]?.updatedAt || null,
-    }),
-    [documents],
-  );
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (!personId && !propertyId && scopeFilter !== "all") count += 1;
+    if (!personId && roleFilter !== "all") count += 1;
+    if (categoryFilter !== "all") count += 1;
+    if (tagFilter !== "all") count += 1;
+    return count;
+  }, [personId, propertyId, scopeFilter, roleFilter, categoryFilter, tagFilter]);
 
   const resetUploadForm = () => {
     setSelectedFile(null);
@@ -335,47 +335,12 @@ export default function DocumentsWorkspace({
 
   const shellClass = embedded ? "space-y-5" : "flex h-full w-full flex-col overflow-y-auto bg-novian-primary";
   const innerClass = embedded ? "space-y-5" : "mx-auto flex w-full max-w-none flex-col gap-6 px-6 py-5";
-  const heroClass = embedded
-    ? "rounded-[24px] border border-novian-muted/35 bg-[linear-gradient(180deg,rgba(247,244,238,0.92),rgba(240,235,228,0.98))] p-5"
-    : "rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,rgba(18,37,33,0.92),rgba(11,22,19,0.98))] p-6";
-  const heroEyebrowClass = embedded
-    ? "inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-novian-text/48"
-    : "inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-novian-accent/80";
-  const statsGridClass = embedded ? "grid min-w-[260px] grid-cols-2 gap-2" : "grid min-w-[260px] grid-cols-2 gap-3";
-  const statCardClass = embedded
-    ? "rounded-2xl border border-novian-muted/30 bg-novian-surface/55 px-4 py-3"
-    : "rounded-2xl border border-white/8 bg-white/4 px-4 py-3";
-  const panelClass = embedded
-    ? "rounded-[24px] border border-novian-muted/35 bg-novian-surface/45 p-5"
-    : "rounded-[24px] border border-white/8 bg-novian-surface/70 p-5";
-  const subtleChipClass = embedded
-    ? "inline-flex items-center gap-2 rounded-full border border-novian-muted/35 bg-novian-surface/45 px-3 py-2 text-xs uppercase tracking-[0.16em] text-novian-text/55"
-    : "inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-3 py-2 text-xs uppercase tracking-[0.16em] text-novian-text/55";
-  const scopeBadgeClass = embedded
-    ? "rounded-full border border-novian-muted/35 bg-novian-surface/45 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-novian-text/55"
-    : "rounded-full border border-white/8 bg-white/4 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-novian-text/55";
-  const inputClass =
-    "w-full rounded-2xl border border-novian-muted/35 bg-novian-primary/40 px-4 py-3 text-sm text-novian-text outline-none transition focus:border-novian-accent/35";
-  const selectClass =
-    "rounded-2xl border border-novian-muted/35 bg-novian-primary/40 px-4 py-3 text-sm text-novian-text outline-none transition focus:border-novian-accent/35";
-  const documentCardClass = embedded
-    ? "rounded-[24px] border border-novian-muted/35 bg-novian-surface/55 p-5 transition hover:border-novian-accent/30"
-    : "rounded-[24px] border border-white/8 bg-novian-surface/70 p-5 transition hover:border-novian-accent/30";
-  const emptyStateClass = embedded
-    ? "rounded-[24px] border border-dashed border-novian-muted/35 bg-novian-surface/35 px-5 py-12 text-center"
-    : "rounded-[24px] border border-dashed border-white/10 bg-novian-surface/40 px-5 py-12 text-center";
-  const emptyIconClass = embedded
-    ? "mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-novian-muted/35 bg-novian-surface/55 text-novian-text/55"
-    : "mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/4 text-novian-text/55";
-  const detailCardClass = embedded
-    ? "rounded-2xl border border-novian-muted/30 bg-novian-primary/35 px-4 py-3 text-sm text-novian-text/70"
-    : "rounded-2xl border border-white/8 bg-white/3 px-4 py-3 text-sm text-novian-text/70";
-  const tagClass = embedded
-    ? "inline-flex items-center gap-1 rounded-full border border-novian-muted/30 bg-novian-primary/30 px-3 py-1 text-xs text-novian-text/60"
-    : "inline-flex items-center gap-1 rounded-full border border-white/8 px-3 py-1 text-xs text-novian-text/60";
-  const secondaryActionClass = embedded
-    ? "inline-flex items-center gap-2 rounded-2xl border border-novian-muted/35 bg-novian-primary/35 px-3 py-2 text-xs font-medium uppercase tracking-[0.14em] text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text"
-    : "inline-flex items-center gap-2 rounded-2xl border border-white/8 px-3 py-2 text-xs font-medium uppercase tracking-[0.14em] text-novian-text/70 transition hover:border-novian-accent/35 hover:text-novian-text";
+
+  const scopeBadgeClass = "rounded-full border border-novian-muted/30 bg-novian-primary/50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-novian-text/60";
+  const filterInputClass = "w-full rounded-full border border-novian-muted/30 bg-white px-5 py-2.5 text-sm text-novian-text outline-none transition focus:border-novian-accent/40 focus:ring-2 focus:ring-novian-accent/10 shadow-sm";
+  const filterSelectClass = "rounded-full border border-novian-muted/30 bg-white px-4 py-2.5 text-sm text-novian-text outline-none transition focus:border-novian-accent/40 focus:ring-2 focus:ring-novian-accent/10 shadow-sm appearance-none pr-8 cursor-pointer";
+  const formInputClass = "w-full rounded-xl border border-novian-muted/30 bg-white px-4 py-3 text-sm text-novian-text outline-none transition focus:border-novian-accent/40 focus:ring-2 focus:ring-novian-accent/10";
+  const tagClass = "inline-flex items-center gap-1 rounded-md bg-novian-primary/60 px-2.5 py-1 text-[11px] font-medium text-novian-text/70";
 
   const handleSelectFile = (file: File | null) => {
     setSelectedFile(file);
@@ -462,7 +427,7 @@ export default function DocumentsWorkspace({
                     value={formTitle}
                     onChange={(event) => setFormTitle(event.target.value)}
                     placeholder="Ex: Matrícula atualizada"
-                    className={inputClass}
+                    className={formInputClass}
                   />
                 </div>
 
@@ -472,7 +437,7 @@ export default function DocumentsWorkspace({
                     value={formCategory}
                     onChange={(event) => setFormCategory(event.target.value)}
                     placeholder="Ex: contrato, propriedade, identificação"
-                    className={inputClass}
+                    className={formInputClass}
                   />
                 </div>
 
@@ -482,7 +447,7 @@ export default function DocumentsWorkspace({
                     value={formTags}
                     onChange={(event) => setFormTags(event.target.value)}
                     placeholder="Ex: escritura, comprador, assinatura"
-                    className={inputClass}
+                    className={formInputClass}
                   />
                 </div>
 
@@ -492,7 +457,7 @@ export default function DocumentsWorkspace({
                     value={formDescription}
                     onChange={(event) => setFormDescription(event.target.value)}
                     placeholder="Observações rápidas sobre este arquivo"
-                    className={inputClass}
+                    className={formInputClass}
                   />
                 </div>
 
@@ -502,7 +467,7 @@ export default function DocumentsWorkspace({
                     <select
                       value={selectedPersonId}
                       onChange={(event) => setSelectedPersonId(event.target.value)}
-                      className={inputClass}
+                      className={formInputClass}
                     >
                       <option value="">Sem pessoa vinculada</option>
                       {people.map((person) => (
@@ -520,7 +485,7 @@ export default function DocumentsWorkspace({
                     <select
                       value={selectedPropertyId}
                       onChange={(event) => setSelectedPropertyId(event.target.value)}
-                      className={inputClass}
+                      className={formInputClass}
                     >
                       <option value="">Sem imóvel vinculado</option>
                       {properties.map((property) => (
@@ -556,7 +521,7 @@ export default function DocumentsWorkspace({
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Buscar documentos"
-                    className={`${inputClass} pl-11`}
+                    className={`${filterInputClass} pl-11`}
                   />
                 </div>
               </div>
@@ -659,77 +624,77 @@ export default function DocumentsWorkspace({
   return (
     <div className={shellClass}>
       <div className={innerClass}>
-        <section className={heroClass}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className={heroEyebrowClass}>
-                <FolderOpen size={14} />
-                {embedded ? "Documentos" : "Documents Hub"}
+        <section className="-mx-6 flex flex-1 flex-col overflow-hidden">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-novian-muted/25 px-5 py-2">
+            {!personId && !propertyId ? (
+              <div className="mr-auto -mb-px flex flex-wrap items-center gap-5">
+                {DOCUMENT_SCOPE_TABS.map((tab) => {
+                  const active = scopeFilter === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => setScopeFilter(tab.value)}
+                      className={`inline-flex h-9 items-center border-b px-0 text-[10px] font-medium uppercase tracking-[0.14em] transition ${
+                        active
+                          ? "border-novian-accent text-novian-text"
+                          : "border-transparent text-novian-text/42 hover:text-novian-text/68"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
-              <h2 className="mt-2 text-2xl font-semibold text-novian-text">{title}</h2>
-              <p className="mt-2 max-w-3xl text-sm text-novian-text/60">{description}</p>
+            ) : (
+              <div className="mr-auto flex items-center gap-3">
+                <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-novian-text/40">{title}</div>
+                <div className="hidden text-xs text-novian-text/45 lg:block">{description}</div>
+              </div>
+            )}
+
+            <div className="relative w-full min-w-[220px] flex-1 sm:max-w-[320px] sm:flex-none">
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-novian-text/36" size={14} />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar documentos"
+                className={`${filterInputClass} h-8 px-10 py-0 text-xs`}
+              />
             </div>
-            <div className={statsGridClass}>
-              <div className={statCardClass}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Total</div>
-                <div className="mt-1 text-2xl font-semibold text-novian-text">{stats.total}</div>
-              </div>
-              <div className={statCardClass}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Com pessoas</div>
-                <div className="mt-1 text-2xl font-semibold text-novian-text">{stats.people}</div>
-              </div>
-              <div className={statCardClass}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Com imóveis</div>
-                <div className="mt-1 text-2xl font-semibold text-novian-text">{stats.properties}</div>
-              </div>
-              <div className={statCardClass}>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-novian-text/45">Última atividade</div>
-                <div className="mt-1 text-sm font-medium text-novian-text">
-                  {stats.recent ? formatDate(stats.recent) : "Sem uploads ainda"}
-                </div>
-              </div>
-            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-novian-muted/35 bg-white px-3 text-[10px] font-medium uppercase tracking-[0.12em] text-novian-text/64 transition hover:border-novian-accent/35 hover:text-novian-text"
+            >
+              <Filter size={12} />
+              Filtros
+              {activeFilterCount > 0 ? (
+                <span className="rounded-full bg-novian-accent px-1.5 py-0.5 text-[10px] font-semibold tracking-normal text-white">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowUploadPanel((current) => !current)}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-novian-accent px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-novian-accent/90"
+            >
+              <Upload size={12} />
+              Novo documento
+            </button>
           </div>
-        </section>
 
-        <section className={`grid gap-6 ${embedded ? "xl:grid-cols-[minmax(0,1fr)_340px]" : "xl:grid-cols-[minmax(0,1fr)_360px]"}`}>
-          <div className="space-y-4">
-            <div className={panelClass}>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[220px] flex-1">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-novian-text/40" size={16} />
-                  <input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Buscar por título, categoria, pessoa ou imóvel"
-                    className={`${inputClass} pl-11`}
-                  />
-                </div>
-                <div className={subtleChipClass}>
-                  <Filter size={13} />
-                  Filtros
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {!personId && !propertyId ? (
-                  <select
-                    value={scopeFilter}
-                    onChange={(event) => setScopeFilter(event.target.value)}
-                    className={selectClass}
-                  >
-                    {SCOPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
+          {showFilters ? (
+            <div className="border-b border-novian-muted/25 bg-novian-primary/18 px-5 py-4">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,220px)_minmax(0,220px)_minmax(0,220px)_minmax(0,220px)_auto]">
                 {!personId ? (
                   <select
                     value={roleFilter}
                     onChange={(event) => setRoleFilter(event.target.value)}
-                    className={selectClass}
+                    className={filterSelectClass}
                   >
                     {PERSON_ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -741,7 +706,7 @@ export default function DocumentsWorkspace({
                 <select
                   value={categoryFilter}
                   onChange={(event) => setCategoryFilter(event.target.value)}
-                className={selectClass}
+                  className={filterSelectClass}
                 >
                   <option value="all">Todas as categorias</option>
                   {categories.map((category) => (
@@ -753,7 +718,7 @@ export default function DocumentsWorkspace({
                 <select
                   value={tagFilter}
                   onChange={(event) => setTagFilter(event.target.value)}
-                className={selectClass}
+                  className={filterSelectClass}
                 >
                   <option value="all">Todas as tags</option>
                   {tags.map((tag) => (
@@ -762,226 +727,284 @@ export default function DocumentsWorkspace({
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleFilter("all");
+                    setCategoryFilter("all");
+                    setTagFilter("all");
+                  }}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-novian-muted/35 px-4 text-xs font-medium uppercase tracking-[0.12em] text-novian-text/55 transition hover:border-novian-accent/35 hover:text-novian-text"
+                >
+                  Limpar filtros
+                </button>
               </div>
             </div>
+          ) : null}
 
-            <div className="space-y-3">
-              {loading ? (
-                <div className={`${panelClass} px-5 py-12 text-center text-sm text-novian-text/55`}>
-                  Carregando documentos...
-                </div>
-              ) : documents.length === 0 ? (
-                <div className={emptyStateClass}>
-                  <div className={emptyIconClass}>
-                    <FileText size={20} />
-                  </div>
-                  <div className="mt-4 text-lg font-medium text-novian-text">Nenhum documento encontrado</div>
-                  <div className="mt-2 text-sm text-novian-text/55">
-                    Ajuste os filtros ou envie um novo arquivo para iniciar a base documental.
+          {showUploadPanel ? (
+            <div className="border-b border-novian-muted/25 bg-novian-primary/18 px-5 py-4">
+              <div className="rounded-[24px] border border-novian-muted/35 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-novian-accent">Novo documento</div>
+                    <div className="mt-2 text-sm text-novian-text/60">{description}</div>
                   </div>
                 </div>
-              ) : (
-                documents.map((document) => (
-                  <article
-                    key={document.id}
-                    className={documentCardClass}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={scopeBadgeClass}>
-                            {getScopeLabel(document)}
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="md:col-span-2 xl:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Arquivo</label>
+                    <input
+                      type="file"
+                      onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+                      className="w-full rounded-xl border border-novian-muted/30 bg-white px-3 py-2 text-sm text-novian-text outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-novian-muted/20 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-novian-text/80 hover:file:bg-novian-muted/30 transition shadow-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Título</label>
+                    <input
+                      value={formTitle}
+                      onChange={(event) => setFormTitle(event.target.value)}
+                      placeholder="Ex: RG comprador, matrícula, contrato"
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Categoria</label>
+                    <input
+                      value={formCategory}
+                      onChange={(event) => setFormCategory(event.target.value)}
+                      placeholder="Ex: identificação, contrato, propriedade"
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 xl:col-span-1">
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Descrição</label>
+                    <textarea
+                      value={formDescription}
+                      onChange={(event) => setFormDescription(event.target.value)}
+                      rows={4}
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-novian-text/70">Tags</label>
+                    <input
+                      value={formTags}
+                      onChange={(event) => setFormTags(event.target.value)}
+                      placeholder="vip, escritura, due-diligence"
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  {!isScopedToPerson ? (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Pessoa</label>
+                      <select
+                        value={selectedPersonId}
+                        onChange={(event) => setSelectedPersonId(event.target.value)}
+                        className={formInputClass}
+                      >
+                        <option value="">Sem pessoa vinculada</option>
+                        {people.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.fullName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {!isScopedToProperty ? (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-novian-text/70">Imóvel</label>
+                      <select
+                        value={selectedPropertyId}
+                        onChange={(event) => setSelectedPropertyId(event.target.value)}
+                        className={formInputClass}
+                      >
+                        <option value="">Sem imóvel vinculado</option>
+                        {properties.map((property) => (
+                          <option key={property.id} value={property.id}>
+                            {property.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  <div className="flex items-end justify-end md:col-span-2 xl:col-span-3">
+                    <button
+                      type="button"
+                      onClick={() => uploadDocument().catch(console.error)}
+                      disabled={uploading}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-novian-accent px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-novian-accent/90 disabled:opacity-60 shadow-sm md:w-auto md:min-w-[220px]"
+                    >
+                      <Upload size={15} />
+                      {uploading ? "Enviando..." : "Salvar documento"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full min-w-[1120px] text-left text-sm text-novian-text">
+              <thead className="border-b border-novian-muted/30 text-[11px] uppercase tracking-[0.18em] text-novian-text/42">
+                <tr>
+                  <th className="px-5 py-3">Documento</th>
+                  <th className="px-5 py-3">Categoria</th>
+                  <th className="px-5 py-3">Tags</th>
+                  <th className="px-5 py-3">Relacionamento</th>
+                  <th className="px-5 py-3">Atualizado</th>
+                  <th className="px-4 py-3 text-right"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center text-novian-text/50">
+                      Carregando documentos...
+                    </td>
+                  </tr>
+                ) : documents.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center text-novian-text/50">
+                      Nenhum documento encontrado com os filtros atuais.
+                    </td>
+                  </tr>
+                ) : (
+                  documents.map((document) => (
+                    <tr
+                      key={document.id}
+                      className="border-b border-novian-muted/20 transition hover:bg-novian-primary/25 last:border-b-0"
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/30 bg-novian-primary/30 text-novian-accent">
+                            <FileText size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-novian-text">{document.title}</div>
+                            <div className="truncate text-xs text-novian-text/55">
+                              {document.fileName} {document.fileSizeBytes ? `· ${formatDocumentFileSize(document.fileSizeBytes)}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {document.category ? (
+                          <span className="inline-flex rounded-md bg-novian-accent/10 px-2 py-1 text-[11px] text-novian-accent">
+                            {document.category}
                           </span>
-                          {document.category ? (
-                            <span className="rounded-full bg-novian-accent/12 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-novian-accent">
-                              {document.category}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-3 flex items-start gap-3">
-                          <div className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl text-novian-text/70 ${embedded ? "border border-novian-muted/35 bg-novian-primary/35" : "border border-white/8 bg-white/4"}`}>
-                            <FileText size={18} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3 className="truncate text-lg font-semibold text-novian-text">{document.title}</h3>
-                            <div className="mt-1 text-sm text-novian-text/55">
-                              {document.fileName} · {formatDocumentFileSize(document.fileSizeBytes)}
-                            </div>
-                            {document.description ? (
-                              <p className="mt-3 text-sm leading-6 text-novian-text/65">{document.description}</p>
-                            ) : null}
-                          </div>
-                        </div>
-                        <div className="mt-4 grid gap-2 md:grid-cols-2">
-                          {document.person ? (
-                            <div className={detailCardClass}>
-                              <div className="flex items-center gap-2 text-novian-text">
-                                <User size={14} />
-                                {document.person.fullName}
-                              </div>
-                              <div className="mt-1 text-xs text-novian-text/45">{document.person.roles.join(", ") || "Sem papel"}</div>
-                            </div>
-                          ) : null}
-                          {document.property ? (
-                            <div className={detailCardClass}>
-                              <div className="flex items-center gap-2 text-novian-text">
-                                <Home size={14} />
-                                {document.property.title}
-                              </div>
-                              <div className="mt-1 text-xs text-novian-text/45">{document.property.address}</div>
-                            </div>
-                          ) : null}
-                        </div>
-                        {document.tags.length > 0 ? (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {document.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className={tagClass}
-                              >
+                        ) : (
+                          <span className="text-xs text-novian-text/28">-</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex max-w-[260px] flex-wrap gap-1.5">
+                          {document.tags.length > 0 ? (
+                            document.tags.slice(0, 4).map((tag) => (
+                              <span key={tag} className={tagClass}>
                                 <Tag size={11} />
                                 {tag}
                               </span>
-                            ))}
+                            ))
+                          ) : (
+                            <span className="text-xs text-novian-text/28">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={scopeBadgeClass}>{getScopeLabel(document)}</span>
                           </div>
-                        ) : null}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-3">
-                        <div className="text-right text-xs text-novian-text/45">{formatDate(document.updatedAt)}</div>
-                        <a
-                          href={document.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={secondaryActionClass}
-                        >
-                          <FileText size={13} />
-                          Abrir
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => deleteDocument(document).catch(console.error)}
-                          disabled={deletingId === document.id}
-                          className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 px-3 py-2 text-xs font-medium uppercase tracking-[0.14em] text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:opacity-60"
-                        >
-                          <Trash2 size={13} />
-                          {deletingId === document.id ? "Excluindo..." : "Excluir"}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
+                          <div className="mt-2 space-y-1 text-xs text-novian-text/55">
+                            {document.person ? (
+                              <div className="flex items-center gap-2">
+                                <User size={12} />
+                                <span className="truncate">{document.person.fullName}</span>
+                              </div>
+                            ) : null}
+                            {document.property ? (
+                              <div className="flex items-center gap-2">
+                                <Home size={12} />
+                                <span className="truncate">{document.property.title}</span>
+                              </div>
+                            ) : null}
+                            {!document.person && !document.property ? <span className="text-novian-text/28">-</span> : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="text-sm text-novian-text/65">{formatDate(document.updatedAt)}</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="relative inline-flex" data-document-menu-root="true">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenDocumentMenuId((current) => (current === document.id ? null : document.id))
+                            }
+                            aria-label={`Ações de ${document.title}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openDocumentMenuId === document.id}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-transparent text-novian-text/38 transition hover:border-novian-muted/35 hover:bg-novian-primary/50 hover:text-novian-text/72"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                          {openDocumentMenuId === document.id ? (
+                            <div className="absolute right-0 top-10 z-20 min-w-[160px] rounded-2xl border border-novian-muted/45 bg-[rgba(250,248,243,0.98)] p-1.5 text-left shadow-[0_18px_40px_rgba(47,74,58,0.14)] backdrop-blur-xl">
+                              <a
+                                href={document.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-novian-text/80 transition hover:bg-novian-surface/65 hover:text-novian-text"
+                              >
+                                <Eye size={14} />
+                                Ver arquivo
+                              </a>
+                              <a
+                                href={document.fileUrl}
+                                download={document.fileName}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-novian-text/80 transition hover:bg-novian-surface/65 hover:text-novian-text"
+                              >
+                                <Download size={14} />
+                                Baixar
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => deleteDocument(document).catch(console.error)}
+                                disabled={deletingId === document.id}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <Trash2 size={14} />
+                                {deletingId === document.id ? "Excluindo..." : "Excluir"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
 
-          <aside className={panelClass}>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-novian-accent">
-              <Upload size={14} />
-              Novo documento
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-novian-muted/25 px-5 py-3">
+            <div className="text-[11px] uppercase tracking-[0.16em] text-novian-text/34">
+              {loading ? "Carregando registros" : `${documents.length} registro(s)`}
             </div>
-            <h3 className="mt-2 text-lg font-semibold text-novian-text">Anexar arquivo</h3>
-            <p className="mt-2 text-sm text-novian-text/55">
-              Faça upload e já vincule o documento ao contato, ao imóvel ou aos dois.
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <label className="mb-1 block text-xs text-novian-text/60">Arquivo</label>
-                <input
-                  type="file"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                  className="w-full rounded-2xl border border-novian-muted/35 bg-novian-primary/40 px-4 py-3 text-sm text-novian-text outline-none file:mr-3 file:rounded-full file:border-0 file:bg-novian-accent/15 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-novian-accent"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-novian-text/60">Título</label>
-                <input
-                  value={formTitle}
-                  onChange={(event) => setFormTitle(event.target.value)}
-                  placeholder="Ex: RG comprador, matrícula, contrato"
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-novian-text/60">Categoria</label>
-                <input
-                  value={formCategory}
-                  onChange={(event) => setFormCategory(event.target.value)}
-                  placeholder="Ex: identificação, contrato, propriedade"
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-novian-text/60">Descrição</label>
-                <textarea
-                  value={formDescription}
-                  onChange={(event) => setFormDescription(event.target.value)}
-                  rows={3}
-                  className={inputClass}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs text-novian-text/60">Tags</label>
-                <input
-                  value={formTags}
-                  onChange={(event) => setFormTags(event.target.value)}
-                  placeholder="vip, escritura, due-diligence"
-                  className={inputClass}
-                />
-              </div>
-
-              {!isScopedToPerson ? (
-                <div>
-                  <label className="mb-1 block text-xs text-novian-text/60">Pessoa</label>
-                  <select
-                    value={selectedPersonId}
-                    onChange={(event) => setSelectedPersonId(event.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Sem pessoa vinculada</option>
-                    {people.map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.fullName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              {!isScopedToProperty ? (
-                <div>
-                  <label className="mb-1 block text-xs text-novian-text/60">Imóvel</label>
-                  <select
-                    value={selectedPropertyId}
-                    onChange={(event) => setSelectedPropertyId(event.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Sem imóvel vinculado</option>
-                    {properties.map((property) => (
-                      <option key={property.id} value={property.id}>
-                        {property.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={() => uploadDocument().catch(console.error)}
-                disabled={uploading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-novian-accent px-4 py-3 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
-              >
-                <Upload size={15} />
-                {uploading ? "Enviando..." : "Salvar documento"}
-              </button>
-            </div>
-          </aside>
+            <div className="text-xs text-novian-text/45">Centralize arquivos, vínculos e classificação em uma única grade.</div>
+          </div>
         </section>
       </div>
     </div>
