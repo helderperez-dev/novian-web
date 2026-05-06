@@ -160,7 +160,20 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
       return offer.offerType !== primaryOffer.offerType || offer.price !== primaryOffer.price;
     },
   );
-  const visiblePageFields = getVisiblePropertyFieldEntries(property, propertyFields, "page");
+  const HIDDEN_PAGE_FIELD_KEYS = new Set([
+    "street",
+    "street_number",
+    "complement",
+    "neighborhood",
+    "city",
+    "state",
+    "postal_code",
+    "country",
+    "accepts_exchange",
+  ]);
+
+  const visiblePageFields = getVisiblePropertyFieldEntries(property, propertyFields, "page")
+    .filter(({ field }) => !HIDDEN_PAGE_FIELD_KEYS.has(field.id));
   const prioritizedHighlights = SUMMARY_FIELD_PRIORITY.map((fieldId) =>
     visiblePageFields.find(({ field }) => field.id === fieldId),
   ).filter((entry): entry is NonNullable<(typeof visiblePageFields)[number]> => Boolean(entry));
@@ -269,12 +282,6 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
                       className="inline-flex rounded-full border border-white/14 bg-white/6 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#e8d6c2] backdrop-blur-md"
                     >
                       Exclusividade Novian
-                    </div>
-                  ) : null}
-                  {property.address ? (
-                    <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-black/14 px-4 py-2 text-xs text-white/72 backdrop-blur-md">
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
-                      <span className="truncate">{property.address}</span>
                     </div>
                   ) : null}
                 </div>
@@ -390,19 +397,6 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
               )}
             </div>
             
-            {property.address && (
-              <div className="space-y-4">
-                <h3 className="font-serif text-[1.85rem] font-light text-[#1f2421]">Localização</h3>
-                <p className="flex items-start gap-2 text-[16px] leading-7 text-[#525b56]">
-                  <svg className="mt-0.5 h-5 w-5 shrink-0 text-current" style={{ color: primaryColor }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span>{property.address}</span>
-                </p>
-              </div>
-            )}
-
             {remainingPageFields.length > 0 && (
               <div className="space-y-4">
                 <h3 className="font-serif text-[1.85rem] font-light text-[#1f2421]">Características</h3>
@@ -428,21 +422,6 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
 
           <div className="space-y-8">
             <PropertyGalleryViewer coverImage={property.coverImage} images={property.images || []} />
-            
-            {property.mapEmbedUrl && (
-              <div className="relative h-64 overflow-hidden rounded-[28px] border border-[#ddd3c7] bg-white/70 shadow-[0_14px_32px_rgba(47,74,58,0.05)]">
-                <iframe 
-                  src={property.mapEmbedUrl} 
-                  width="100%" 
-                  height="100%" 
-                  style={{ border: 0, filter: 'grayscale(14%) contrast(1.02)' }} 
-                  allowFullScreen={true} 
-                  loading="lazy" 
-                  referrerPolicy="no-referrer-when-downgrade"
-                  className="absolute inset-0"
-                />
-              </div>
-            )}
 
             {contactCard}
           </div>

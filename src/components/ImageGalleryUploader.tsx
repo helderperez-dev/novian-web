@@ -3,8 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, UploadCloud, GripVertical, Star, Loader2, Expand, FileText } from "lucide-react";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
 import PropertyLightbox from "@/components/PropertyLightbox";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 interface ImageGalleryUploaderProps {
   initialImages: string[];
@@ -37,6 +37,7 @@ export default function ImageGalleryUploader({
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
   const [descriptions, setDescriptions] = useState<Record<string, string>>(initialDescriptions);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [descriptionModalImage, setDescriptionModalImage] = useState<string | null>(null);
@@ -56,6 +57,7 @@ export default function ImageGalleryUploader({
     setImages(nextImages);
     setCoverImage(initialCover || nextImages[0] || "");
     setDescriptions(initialDescriptions);
+    setUploadErrorMessage(null);
     setPreviewImage(null);
     setDescriptionModalImage(null);
     setDescriptionDraft("");
@@ -76,44 +78,60 @@ export default function ImageGalleryUploader({
     onChange(galleryImages, updatedCover, getCleanDescriptions(updatedImages, nextDescriptions));
   };
 
+  const sanitizeFileName = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, "-");
+
   const uploadToSupabase = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+    const supabase = createBrowserSupabaseClient();
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${Date.now()}-${sanitizeFileName(file.name)}${fileExt ? "" : ".bin"}`;
     const filePath = `properties/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('assets')
-      .upload(filePath, file);
+      .from("assets")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
 
     if (uploadError) {
-      console.error('Error uploading file to Supabase:', uploadError);
+      console.error("Error uploading file to Supabase:", uploadError);
       throw uploadError;
     }
 
-    const { data } = supabase.storage.from('assets').getPublicUrl(filePath);
+    const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
     return data.publicUrl;
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setIsUploading(true);
-      try {
-        const files = Array.from(e.target.files);
-        const newImages = await Promise.all(files.map(uploadToSupabase));
-        
-        const updatedImages = [...images, ...newImages];
-        const newCover = coverImage || newImages[0];
-        const nextDescriptions = { ...descriptions };
-        
-        setImages(updatedImages);
-        setCoverImage(newCover);
-        setDescriptions(nextDescriptions);
-        triggerChange(updatedImages, newCover, nextDescriptions);
-      } catch (err) {
-        console.error("Failed to upload images:", err);
-      } finally {
-        setIsUploading(false);
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) {
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadErrorMessage(null);
+    try {
+      const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+      if (files.length === 0) {
+        throw new Error("Selecione arquivos de imagem validos.");
       }
+
+      const newImages = await Promise.all(files.map(uploadToSupabase));
+
+      const updatedImages = [...images, ...newImages];
+      const newCover = coverImage || newImages[0];
+      const nextDescriptions = { ...descriptions };
+
+      setImages(updatedImages);
+      setCoverImage(newCover);
+      setDescriptions(nextDescriptions);
+      triggerChange(updatedImages, newCover, nextDescriptions);
+    } catch (err) {
+      console.error("Failed to upload images:", err);
+      setUploadErrorMessage(err instanceof Error ? err.message : "Nao foi possivel enviar as imagens.");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -223,8 +241,12 @@ export default function ImageGalleryUploader({
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setIsUploading(true);
+      setUploadErrorMessage(null);
       try {
         const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith("image/"));
+        if (files.length === 0) {
+          throw new Error("Arraste apenas arquivos de imagem.");
+        }
         const newImages = await Promise.all(files.map(uploadToSupabase));
         
         if (newImages.length > 0) {
@@ -238,6 +260,7 @@ export default function ImageGalleryUploader({
         }
       } catch (err) {
         console.error("Failed to upload images via drag and drop:", err);
+        setUploadErrorMessage(err instanceof Error ? err.message : "Nao foi possivel enviar as imagens.");
       } finally {
         setIsUploading(false);
       }
@@ -281,6 +304,12 @@ export default function ImageGalleryUploader({
           disabled={isUploading}
         />
       </div>
+
+      {uploadErrorMessage ? (
+        <div className="rounded-xl border border-red-300/35 bg-red-500/8 px-4 py-3 text-sm text-red-200">
+          {uploadErrorMessage}
+        </div>
+      ) : null}
 
       {/* Sortable Gallery Grid */}
       {images.length > 0 && (

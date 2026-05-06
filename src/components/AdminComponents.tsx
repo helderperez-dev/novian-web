@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, MessageSquare, BarChart3, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square } from "lucide-react";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
+import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
 import type { ChatMessage, Thread, AgentConfig, Funnel as StoreFunnel, FunnelType, Property, CustomField, PropertyOfferType } from "@/lib/store";
 import { customFieldsStore } from "@/lib/store";
@@ -23,6 +23,8 @@ import AccountProfileForm from "@/components/AccountProfileForm";
 import type { Database } from "@/lib/database.types";
 import { getPropertyReferenceCode, PROPERTY_REFERENCE_CODE_KEY } from "@/lib/property-reference";
 import { getPropertyFieldIcon, PROPERTY_FIELD_ICON_OPTIONS } from "@/lib/property-field-icons";
+
+const supabase = createBrowserSupabaseClient();
 import { Funnel as RechartsFunnel, FunnelChart, Tooltip, Cell, LabelList, ResponsiveContainer } from "recharts";
 
 type ManagedAppUser = Database["public"]["Tables"]["app_users"]["Row"];
@@ -2610,6 +2612,7 @@ export function PropertiesLayout() {
   const [activeAiField, setActiveAiField] = useState<string | null>(null);
   const [openAiMenuField, setOpenAiMenuField] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [propertySaveError, setPropertySaveError] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -2720,6 +2723,8 @@ export function PropertiesLayout() {
   }, [fetchGeoOptions, selectedCountryCode, selectedStateCode]);
 
   useEffect(() => {
+    setPropertySaveError(null);
+
     if (selectedProperty) {
       setActivePropertyTab("details");
       setCurrentImages(selectedProperty.images || []);
@@ -3294,6 +3299,7 @@ export function PropertiesLayout() {
   const handleSaveProperty = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
+    setPropertySaveError(null);
     
     const formData = new FormData(e.currentTarget);
     const customData: Record<string, Property["customData"][string]> = {};
@@ -3411,15 +3417,24 @@ export function PropertiesLayout() {
     };
 
     try {
-      await fetch('/api/properties', {
+      const response = await fetch('/api/properties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(propertyData)
       });
+
+      const rawResponse = await response.text();
+      const payload = rawResponse ? JSON.parse(rawResponse) : {};
+
+      if (!response.ok || payload?.success === false) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Nao foi possivel salvar o imovel.");
+      }
+
       await fetchProps();
       setIsDrawerOpen(false);
     } catch (err) {
       console.error(err);
+      setPropertySaveError(err instanceof Error ? err.message : "Nao foi possivel salvar o imovel.");
     } finally {
       setIsSaving(false);
     }
@@ -3681,8 +3696,7 @@ export function PropertiesLayout() {
                 })}
               </div>
 
-              {activePropertyTab === "details" ? (
-              <>
+              <div className={activePropertyTab === "details" ? "block" : "hidden"}>
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold tracking-wider text-novian-text/55 uppercase border-b border-novian-muted/50 pb-2">Informações Básicas</h3>
                 <div className="grid grid-cols-2 gap-4">
@@ -4154,16 +4168,15 @@ export function PropertiesLayout() {
                   ) : null}
                 </div>
               </section>
-              </>
-              ) : null}
+              </div>
 
-              {activePropertyTab === "media" ? (
+              <div className={activePropertyTab === "media" ? "block" : "hidden"}>
               <section className="space-y-4">
                 <div className="space-y-6">
                   <div>
                     <ImageGalleryUploader 
-                      initialCover={selectedProperty?.coverImage}
-                      initialImages={selectedProperty?.images || []}
+                      initialCover={currentCover}
+                      initialImages={currentImages}
                       initialDescriptions={currentImageDescriptions}
                       onChange={(imgs, cover, descriptions) => {
                         setCurrentImages(imgs);
@@ -4174,9 +4187,9 @@ export function PropertiesLayout() {
                   </div>
                 </div>
               </section>
-              ) : null}
+              </div>
 
-              {activePropertyTab === "landing" ? (
+              <div className={activePropertyTab === "landing" ? "block" : "hidden"}>
               <section className="space-y-4">
                 <div className="flex items-center justify-between border-b border-novian-muted/50 pb-2">
                   <h3 className="text-sm font-semibold tracking-wider text-novian-text/55 uppercase">Editor de Landing Page (Geração de Leads)</h3>
@@ -4340,10 +4353,10 @@ export function PropertiesLayout() {
                   </div>
                 </div>
               </section>
-              ) : null}
+              </div>
 
-              {activePropertyTab === "documents" ? (
-                selectedProperty ? (
+              <div className={activePropertyTab === "documents" ? "block" : "hidden"}>
+                {selectedProperty ? (
                   <DocumentsWorkspace
                     embedded
                     propertyId={selectedProperty.id}
@@ -4354,10 +4367,16 @@ export function PropertiesLayout() {
                   <section className="rounded-[24px] border border-dashed border-novian-muted/35 bg-novian-primary/20 px-5 py-12 text-center text-sm text-novian-text/55">
                     Salve o imóvel primeiro para começar a anexar documentos.
                   </section>
-                )
-              ) : null}
+                )}
+              </div>
 
-              <div className="pt-6 border-t border-novian-muted/50 flex justify-end gap-3">
+              <div className="pt-6 border-t border-novian-muted/50">
+                {propertySaveError ? (
+                  <div className="mb-4 rounded-xl border border-red-300/35 bg-red-500/8 px-4 py-3 text-sm text-red-200">
+                    {propertySaveError}
+                  </div>
+                ) : null}
+                <div className="flex justify-end gap-3">
                 <button type="button" onClick={() => setIsDrawerOpen(false)} className="px-4 py-2 rounded-xl text-sm font-semibold hover:bg-novian-muted transition-colors">Cancelar</button>
                 {activePropertyTab !== "documents" ? (
                   <button
@@ -4368,6 +4387,7 @@ export function PropertiesLayout() {
                     {isSaving ? "Salvando..." : "Salvar Imóvel"}
                   </button>
                 ) : null}
+                </div>
               </div>
             </div>
           </form>
