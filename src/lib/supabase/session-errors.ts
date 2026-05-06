@@ -17,6 +17,8 @@ export function isRecoverableSessionError(error: unknown) {
     RECOVERABLE_AUTH_ERROR_CODES.has(code) ||
     message.includes("refresh token") ||
     message.includes("invalid refresh token") ||
+    message.includes("auth session missing") ||
+    message.includes("session missing") ||
     message.includes("jwt expired") ||
     message.includes("session not found")
   );
