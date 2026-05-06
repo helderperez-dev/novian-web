@@ -2151,132 +2151,126 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                             </div>
                           </div>
                           <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                            {column.people.length === 0 ? (
-                              <div className="flex min-h-[120px] items-center justify-center rounded-[20px] border border-dashed border-white/6 bg-black/5 text-xs text-novian-text/30">
-                                Sem contatos nesta etapa
-                              </div>
-                            ) : (
-                              column.people.map((person) => {
-                                const businessRoles = getBusinessRoles(person.roles);
-                                const relationshipState = getRelationshipState(person);
-                                const avatarUrl = getPersonAvatarUrl(person);
-                                const canDragCard = column.id !== "uncategorized" || Boolean(person.lead || person.primaryPhone);
-                                return (
-                                  <div
-                                    key={person.id}
-                                    draggable={canDragCard}
-                                    onDragStart={(event) => handleCardDragStart(event, person.id)}
-                                    onDragEnd={handleCardDragEnd}
-                                    onClick={() => {
-                                      setSelectedPerson(person);
-                                      setDrawerOpen(true);
-                                    }}
-                                    className={`group rounded-xl border bg-novian-surface p-4 shadow-sm transition ${
-                                      canDragCard ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-                                    } ${
-                                      draggedPersonId === person.id
-                                        ? "border-novian-accent opacity-50"
-                                        : "border-novian-muted/50 hover:border-novian-accent/50"
-                                    }`}
-                                  >
-                                    <div className="flex items-start gap-3">
-                                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/30 bg-novian-primary/30 text-novian-accent">
-                                        {avatarUrl ? (
-                                          // eslint-disable-next-line @next/next/no-img-element
-                                          <img
-                                            src={avatarUrl}
-                                            alt={person.fullName}
-                                            className="h-full w-full rounded-2xl object-cover"
-                                          />
-                                        ) : (
-                                          <UserRound size={16} />
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <div className="min-w-0">
-                                            <div className="truncate font-semibold text-novian-text">{person.fullName}</div>
-                                            <div className="mt-1 truncate text-xs text-novian-text/52">
-                                              {person.primaryPhone || person.email || "Sem contato principal"}
-                                            </div>
-                                          </div>
-                                          <div
-                                            data-person-row-menu
-                                            className="relative shrink-0"
-                                            onClick={(event) => event.stopPropagation()}
-                                          >
-                                            <button
-                                              type="button"
-                                              onClick={() => setOpenRowMenuId((current) => current === person.id ? null : person.id)}
-                                              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-novian-text/55 transition hover:bg-white/10 hover:text-novian-text"
-                                            >
-                                              <MoreHorizontal size={13} />
-                                            </button>
-                                            {openRowMenuId === person.id ? (
-                                              <div className="absolute right-0 top-9 z-20 min-w-[148px] rounded-2xl border border-novian-muted/45 bg-[rgba(250,248,243,0.98)] p-1.5 shadow-[0_18px_40px_rgba(47,74,58,0.14)] backdrop-blur-xl">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setSelectedPerson(person);
-                                                    setDrawerOpen(true);
-                                                    setOpenRowMenuId(null);
-                                                  }}
-                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/72 transition hover:bg-novian-surface/65 hover:text-novian-text"
-                                                >
-                                                  <Pencil size={13} />
-                                                  Editar
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setPendingDeletePerson(person);
-                                                    setOpenRowMenuId(null);
-                                                  }}
-                                                  disabled={deletingPersonId === person.id}
-                                                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:opacity-60"
-                                                >
-                                                  <Trash2 size={13} />
-                                                  {deletingPersonId === person.id ? "Excluindo..." : "Excluir"}
-                                                </button>
-                                              </div>
-                                            ) : null}
-                                          </div>
-                                        </div>
-                                        <div className="mt-3 flex flex-wrap gap-1.5">
-                                          {businessRoles.length > 0 ? (
-                                            businessRoles.map((role) => (
-                                              <span key={role} className="rounded-md bg-novian-accent/10 px-2 py-1 text-[11px] text-novian-accent">
-                                                {getRoleLabel(role)}
-                                              </span>
-                                            ))
-                                          ) : (
-                                            <span className="rounded-md bg-white/4 px-2 py-1 text-[11px] text-novian-text/38">
-                                              Sem papel
-                                            </span>
-                                          )}
-                                          {person.tags.slice(0, 2).map((tag) => (
-                                            <span key={tag} className="rounded-md bg-white/4 px-2 py-1 text-[11px] text-novian-text/52">
-                                              {tag}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
+                            {column.people.map((person) => {
+                              const businessRoles = getBusinessRoles(person.roles);
+                              const relationshipState = getRelationshipState(person);
+                              const avatarUrl = getPersonAvatarUrl(person);
+                              const canDragCard = column.id !== "uncategorized" || Boolean(person.lead || person.primaryPhone);
+                              return (
+                                <div
+                                  key={person.id}
+                                  draggable={canDragCard}
+                                  onDragStart={(event) => handleCardDragStart(event, person.id)}
+                                  onDragEnd={handleCardDragEnd}
+                                  onClick={() => {
+                                    setSelectedPerson(person);
+                                    setDrawerOpen(true);
+                                  }}
+                                  className={`group rounded-xl border bg-novian-surface p-4 shadow-sm transition ${
+                                    canDragCard ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                                  } ${
+                                    draggedPersonId === person.id
+                                      ? "border-novian-accent opacity-50"
+                                      : "border-novian-muted/50 hover:border-novian-accent/50"
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-novian-muted/30 bg-novian-primary/30 text-novian-accent">
+                                      {avatarUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          src={avatarUrl}
+                                          alt={person.fullName}
+                                          className="h-full w-full rounded-2xl object-cover"
+                                        />
+                                      ) : (
+                                        <UserRound size={16} />
+                                      )}
                                     </div>
-                                    <div className="mt-4 flex items-end justify-between gap-3 border-t border-novian-muted/30 pt-3">
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-[0.14em] text-novian-text/34">
-                                          Relacionamento
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <div className="truncate font-semibold text-novian-text">{person.fullName}</div>
+                                          <div className="mt-1 truncate text-xs text-novian-text/52">
+                                            {person.primaryPhone || person.email || "Sem contato principal"}
+                                          </div>
                                         </div>
-                                        <div className="mt-1 text-sm font-medium text-novian-text">{relationshipState.label}</div>
+                                        <div
+                                          data-person-row-menu
+                                          className="relative shrink-0"
+                                          onClick={(event) => event.stopPropagation()}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => setOpenRowMenuId((current) => current === person.id ? null : person.id)}
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-novian-text/55 transition hover:bg-white/10 hover:text-novian-text"
+                                          >
+                                            <MoreHorizontal size={13} />
+                                          </button>
+                                          {openRowMenuId === person.id ? (
+                                            <div className="absolute right-0 top-9 z-20 min-w-[148px] rounded-2xl border border-novian-muted/45 bg-[rgba(250,248,243,0.98)] p-1.5 shadow-[0_18px_40px_rgba(47,74,58,0.14)] backdrop-blur-xl">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedPerson(person);
+                                                  setDrawerOpen(true);
+                                                  setOpenRowMenuId(null);
+                                                }}
+                                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-novian-text/72 transition hover:bg-novian-surface/65 hover:text-novian-text"
+                                              >
+                                                <Pencil size={13} />
+                                                Editar
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setPendingDeletePerson(person);
+                                                  setOpenRowMenuId(null);
+                                                }}
+                                                disabled={deletingPersonId === person.id}
+                                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-500/10 hover:text-red-700 disabled:opacity-60"
+                                              >
+                                                <Trash2 size={13} />
+                                                {deletingPersonId === person.id ? "Excluindo..." : "Excluir"}
+                                              </button>
+                                            </div>
+                                          ) : null}
+                                        </div>
                                       </div>
-                                      <span className="inline-flex rounded-full border border-novian-accent/25 bg-novian-accent/10 px-2.5 py-1 text-[11px] font-semibold text-novian-accent">
-                                        {person.stagePoints} pts
-                                      </span>
+                                      <div className="mt-3 flex flex-wrap gap-1.5">
+                                        {businessRoles.length > 0 ? (
+                                          businessRoles.map((role) => (
+                                            <span key={role} className="rounded-md bg-novian-accent/10 px-2 py-1 text-[11px] text-novian-accent">
+                                              {getRoleLabel(role)}
+                                            </span>
+                                          ))
+                                        ) : (
+                                          <span className="rounded-md bg-white/4 px-2 py-1 text-[11px] text-novian-text/38">
+                                            Sem papel
+                                          </span>
+                                        )}
+                                        {person.tags.slice(0, 2).map((tag) => (
+                                          <span key={tag} className="rounded-md bg-white/4 px-2 py-1 text-[11px] text-novian-text/52">
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
-                                );
-                              })
-                            )}
+                                  <div className="mt-4 flex items-end justify-between gap-3 border-t border-novian-muted/30 pt-3">
+                                    <div>
+                                      <div className="text-[10px] uppercase tracking-[0.14em] text-novian-text/34">
+                                        Relacionamento
+                                      </div>
+                                      <div className="mt-1 text-sm font-medium text-novian-text">{relationshipState.label}</div>
+                                    </div>
+                                    <span className="inline-flex rounded-full border border-novian-accent/25 bg-novian-accent/10 px-2.5 py-1 text-[11px] font-semibold text-novian-accent">
+                                      {person.stagePoints} pts
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ))
