@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, MessageSquare, BarChart3, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square } from "lucide-react";
+import { ArrowRight, MessageSquare, BarChart3, Bell, Search, Plus, MapPin, LoaderCircle, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, WandSparkles, Flame, Filter, LayoutGrid, List, Check, Home as HomeIcon, Edit, Trash2, Target, Bot, GripVertical, FileText, Lock, Bold, Italic, Type, Bath, BedDouble, CarFront, Square, Copy } from "lucide-react";
 import Image from "next/image";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { createLeadNote, getLeadNotes, LEAD_NOTES_KEY, upsertLeadNotes, type LeadNote, type LeadNoteVisibility } from "@/lib/leadNotes";
@@ -130,6 +130,19 @@ const extractWarRoomPhoneFromThreadId = (threadId: string) => {
 
   const [user] = normalized.split("@");
   return user || null;
+};
+
+const buildWhatsAppDirectHref = (value: string | null | undefined) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  return `https://wa.me/${digits}`;
 };
 
 const getWarRoomThreadAgentId = (row: Pick<ChatThreadRow, "agent_ids" | "custom_data">) => {
@@ -2750,6 +2763,7 @@ export function PropertiesLayout() {
   const [isLoading, setIsLoading] = useState(true);
   const [activePropertyTab, setActivePropertyTab] = useState<"details" | "media" | "landing" | "documents">("details");
   const [propertyListTab, setPropertyListTab] = useState<"active" | "inactive">("active");
+  const [propertyToast, setPropertyToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
 
   const fetchProps = async () => {
     try {
@@ -2875,6 +2889,16 @@ export function PropertiesLayout() {
   useEffect(() => {
     fetchGeoOptions(selectedCountryCode, selectedStateCode);
   }, [fetchGeoOptions, selectedCountryCode, selectedStateCode]);
+
+  useEffect(() => {
+    if (!propertyToast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setPropertyToast(null);
+    }, 2600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [propertyToast]);
 
   useEffect(() => {
     setPropertySaveError(null);
@@ -3613,6 +3637,32 @@ export function PropertiesLayout() {
     }
   };
 
+  const handleCopyPropertyLink = async (property: Property) => {
+    if (!property.slug) {
+      setPropertyToast({
+        message: "Este imóvel ainda não possui um link público disponível.",
+        tone: "error",
+      });
+      return;
+    }
+
+    const shareUrl = `${window.location.origin}/imoveis/${property.slug}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setPropertyToast({
+        message: "Link copiado para a área de transferência.",
+        tone: "success",
+      });
+    } catch (error) {
+      console.error(error);
+      setPropertyToast({
+        message: "Não foi possível copiar o link deste imóvel.",
+        tone: "error",
+      });
+    }
+  };
+
   const brokerOptions = [
     { value: "", label: "Sem corretor" },
     ...brokers.map((broker) => ({
@@ -3641,8 +3691,8 @@ export function PropertiesLayout() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 border-b border-novian-muted/35">
-              <div className="flex items-center gap-6 overflow-x-auto">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-b border-novian-muted/25 px-5 py-2">
+              <div className="mr-auto -mb-px flex flex-wrap items-center gap-5">
                 {propertyListTabs.map((tab) => {
                   const isActive = propertyListTab === tab.id;
 
@@ -3651,13 +3701,13 @@ export function PropertiesLayout() {
                       key={tab.id}
                       type="button"
                       onClick={() => setPropertyListTab(tab.id)}
-                      className={`relative border-b-2 px-1 py-3 text-sm font-medium uppercase tracking-[0.14em] whitespace-nowrap transition-colors ${
+                      className={`inline-flex h-9 items-center border-b px-0 text-[10px] font-medium uppercase tracking-[0.14em] transition ${
                         isActive
                           ? "border-novian-accent text-novian-text"
-                          : "border-transparent text-novian-text/50 hover:text-novian-text/80"
+                          : "border-transparent text-novian-text/42 hover:text-novian-text/68"
                       }`}
                     >
-                      {tab.label} ({tab.count})
+                      {tab.label}
                     </button>
                   );
                 })}
@@ -3667,9 +3717,9 @@ export function PropertiesLayout() {
                   setSelectedProperty(null);
                   setIsDrawerOpen(true);
                 }}
-                className="mb-3 inline-flex items-center gap-2 rounded-full border border-novian-accent/20 bg-[linear-gradient(135deg,#2f4a3a,#5b7359)] px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_34px_rgba(47,74,58,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_42px_rgba(47,74,58,0.22)]"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-novian-accent px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-novian-primary transition hover:bg-white"
               >
-                <Plus size={16} /> Cadastrar Imóvel
+                <Plus size={12} /> Novo Imovel
               </button>
             </div>
 
@@ -3743,7 +3793,17 @@ export function PropertiesLayout() {
                       <MoreHorizontal size={16} />
                     </button>
                     {openDropdownId === prop.id && (
-                      <div className="absolute right-0 mt-2 w-40 overflow-hidden rounded-2xl border border-novian-muted/55 bg-[rgba(255,255,255,0.97)] animate-in fade-in zoom-in duration-200">
+                      <div className="absolute right-0 mt-2 w-44 overflow-hidden rounded-2xl border border-novian-muted/55 bg-[rgba(255,255,255,0.97)] animate-in fade-in zoom-in duration-200">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenDropdownId(null);
+                            handleCopyPropertyLink(prop).catch((error) => console.error(error));
+                          }}
+                          className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-novian-text transition-colors hover:bg-novian-surface-soft/72"
+                        >
+                          <Copy size={14} /> Copiar link
+                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setOpenDropdownId(null); setSelectedProperty(prop); setIsDrawerOpen(true); }}
                           className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-novian-text transition-colors hover:bg-novian-surface-soft/72"
@@ -4583,7 +4643,7 @@ export function PropertiesLayout() {
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="rounded-xl border border-transparent bg-novian-accent px-6 py-2 text-sm font-semibold text-novian-primary shadow-[0_10px_24px_rgba(47,74,58,0.14)] transition-colors hover:bg-novian-accent/92 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/30 focus-visible:ring-offset-2 focus-visible:ring-offset-novian-primary disabled:cursor-not-allowed disabled:border-novian-accent/12 disabled:bg-novian-accent/8 disabled:text-novian-accent/35 disabled:opacity-100 disabled:shadow-none disabled:hover:bg-novian-accent/8"
+                    className="rounded-xl border border-transparent bg-novian-accent px-6 py-2 text-sm font-semibold text-novian-primary shadow-[0_10px_24px_rgba(47,74,58,0.14)] transition-colors hover:bg-novian-accent/92 active:bg-novian-accent/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/30 focus-visible:ring-offset-2 focus-visible:ring-offset-novian-primary disabled:cursor-not-allowed disabled:border-novian-accent/18 disabled:bg-novian-accent/22 disabled:text-novian-accent/80 disabled:opacity-100 disabled:shadow-none disabled:hover:bg-novian-accent/22 disabled:active:bg-novian-accent/22"
                   >
                     {isSaving ? "Salvando..." : "Salvar Imóvel"}
                   </button>
@@ -4594,6 +4654,23 @@ export function PropertiesLayout() {
           </form>
         </div>
       )}
+
+      {propertyToast ? (
+        <div className="pointer-events-none fixed bottom-6 right-6 z-80">
+          <div
+            className={`min-w-[280px] max-w-sm rounded-2xl border px-4 py-3 shadow-[0_18px_38px_rgba(15,23,18,0.18)] backdrop-blur-xl ${
+              propertyToast.tone === "success"
+                ? "border-[#25D366]/20 bg-[rgba(247,255,249,0.94)] text-[#1f4d31]"
+                : "border-red-500/20 bg-[rgba(255,249,249,0.96)] text-red-700"
+            }`}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-70">
+              {propertyToast.tone === "success" ? "Done" : "Attention"}
+            </p>
+            <p className="mt-1 text-sm font-medium">{propertyToast.message}</p>
+          </div>
+        </div>
+      ) : null}
 
       {/* Delete Confirmation Modal */}
       {propertyToDelete && (
@@ -6215,40 +6292,12 @@ function AgentConfigCard({ agent, onUpdate }: { agent: AgentConfig, onUpdate: (a
   )
 }
 
-function ChatInput({ onSendMessage }: { onSendMessage: (msg: string) => void }) {
-  const [inputMessage, setInputMessage] = useState("");
-
-  const handleSend = () => {
-    if (!inputMessage.trim()) return;
-    onSendMessage(inputMessage);
-    setInputMessage("");
-  };
-
-  return (
-    <div className="p-6 shrink-0">
-      <div className="relative flex items-center shadow-sm">
-        <input 
-          type="text" 
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Envie uma mensagem para a equipe de IA ou dê um comando..." 
-          className="w-full bg-novian-surface/80 rounded-xl pl-5 pr-12 py-4 text-sm focus:outline-none focus:bg-novian-surface focus:ring-1 focus:ring-novian-accent/50 transition-all border-none"
-        />
-        <button onClick={handleSend} className="absolute right-3 p-2 bg-novian-accent text-novian-primary rounded-lg hover:bg-white transition-colors">
-          <ArrowRight size={18} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function WarRoomLayout() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [activeThreadTab, setActiveThreadTab] = useState<LeadContextTab>("overview");
-  const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(true);
+  const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false);
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [seenMessageIds, setSeenMessageIds] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<AgentConfig[]>([]);
@@ -6474,39 +6523,6 @@ export function WarRoomLayout() {
     setActiveThreadTab("overview");
   }, [activeThreadId]);
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim() || !activeThreadId) return;
-
-    setTypingAgent("System");
-
-    try {
-      // Create endpoint payload. If it's continuous ops, maybe we handle it slightly differently in backend, but same API works.
-      const response = await fetch(`/api/warroom/${encodeURIComponent(activeThreadId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, agent: "Hélder Perez", role: "CEO" }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send message");
-      }
-
-      const data = await response.json();
-      const sentMessage = data.message as ChatMessage | undefined;
-      if (sentMessage) {
-        setMessages((currentMessages) => upsertWarRoomMessage(currentMessages, sentMessage));
-        setSeenMessageIds((currentSeen) => new Set([...currentSeen, sentMessage.id]));
-      }
-
-      if (activeThreadId !== "general" && activeThreadId !== "continuous") {
-        setTypingAgent(null);
-      }
-    } catch (e) {
-      console.error(e);
-      setTypingAgent(null);
-    }
-  };
-
   const activeThread = activeThreadId ? threads.find((thread) => thread.id === activeThreadId) || null : null;
   const activeThreadAgentId = activeThread?.agentId || activeAgentId;
   const activeAgent = activeThreadAgentId ? agents.find((agent) => agent.id === activeThreadAgentId) || null : null;
@@ -6523,6 +6539,7 @@ export function WarRoomLayout() {
   const activeThreadPersonHref = activeThread?.leadId
     ? `/admin/people?personId=${encodeURIComponent(activeThread.leadId)}`
     : null;
+  const activeThreadWhatsAppHref = buildWhatsAppDirectHref(activeThreadPhone);
   const activeClientAvatarUrl =
     typeof activeThreadCustomData?.whatsapp_profile_picture_url === "string"
       ? activeThreadCustomData.whatsapp_profile_picture_url
@@ -6606,16 +6623,30 @@ export function WarRoomLayout() {
                   {activeThreadPhone || "Nao informado"}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsLeadDrawerOpen((current) => !current)}
-                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-full border border-novian-muted/40 bg-novian-primary/55 text-novian-text/75 transition hover:border-novian-accent/35 hover:text-novian-text"
-                aria-expanded={isLeadDrawerOpen}
-                aria-label={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
-                title={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
-              >
-                {isLeadDrawerOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-              </button>
+              <div className="flex items-center gap-2">
+                {activeThreadWhatsAppHref ? (
+                  <a
+                    href={activeThreadWhatsAppHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hidden xl:inline-flex h-9 items-center justify-center rounded-full border border-[#25D366]/25 bg-[#25D366]/10 px-3 text-[#25D366] transition hover:bg-[#25D366]/16"
+                    aria-label="Abrir conversa no WhatsApp"
+                    title="Abrir conversa no WhatsApp"
+                  >
+                    <MessageSquare size={15} />
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setIsLeadDrawerOpen((current) => !current)}
+                  className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-full border border-novian-muted/40 bg-novian-primary/55 text-novian-text/75 transition hover:border-novian-accent/35 hover:text-novian-text"
+                  aria-expanded={isLeadDrawerOpen}
+                  aria-label={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
+                  title={isLeadDrawerOpen ? "Fechar painel da pessoa" : "Abrir painel da pessoa"}
+                >
+                  {isLeadDrawerOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col-reverse min-w-0">
@@ -6663,9 +6694,6 @@ export function WarRoomLayout() {
                 )}
               </div>
             </div>
-
-            {/* Input Area */}
-            <ChatInput onSendMessage={handleSendMessage} />
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-novian-text/30">
@@ -6743,6 +6771,17 @@ export function WarRoomLayout() {
                         <div>
                           <p className="mb-1 text-xs text-novian-text/50">Telefone / WhatsApp</p>
                           <p className="break-all font-mono text-sm text-novian-text/90">{activeThreadPhone || "Nao informado"}</p>
+                          {activeThreadWhatsAppHref ? (
+                            <a
+                              href={activeThreadWhatsAppHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-[#25D366]/25 bg-[#25D366]/10 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#25D366] transition hover:bg-[#25D366]/16"
+                            >
+                              <MessageSquare size={12} />
+                              Abrir WhatsApp
+                            </a>
+                          ) : null}
                         </div>
                         <div>
                           <p className="mb-1 text-xs text-novian-text/50">Atendido por</p>

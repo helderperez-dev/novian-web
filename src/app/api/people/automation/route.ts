@@ -7,6 +7,22 @@ export const dynamic = "force-dynamic";
 
 type PersonRole = Database["public"]["Enums"]["person_role"];
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeStageId(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || !UUID_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 function normalizeRoleList(value: unknown) {
   const roles = Array.isArray(value)
     ? value
@@ -117,7 +133,7 @@ export async function PUT(req: Request) {
     const sanitizedRules = rules
       .map((rule: Record<string, unknown>) => ({
         funnel_id: funnelId,
-        stage_id: typeof rule.stageId === "string" ? rule.stageId : null,
+        stage_id: normalizeStageId(rule.stageId),
         stage_title: String(rule.stageTitle ?? "").trim(),
         add_roles: normalizeRoleList(rule.addRoles),
         remove_roles: normalizeRoleList(rule.removeRoles),

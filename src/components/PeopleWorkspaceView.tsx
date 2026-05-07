@@ -12,6 +12,7 @@ import {
   CopyPlus,
   GitMerge,
   LayoutGrid,
+  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -52,6 +53,34 @@ type PersonMetadataValue = string | number | null;
 type PersonRole = "lead" | "client" | "buyer" | "seller";
 type WorkspaceMode = "people" | "crm";
 type ViewMode = "grid" | "board";
+
+const buildWhatsAppDirectHref = (value: string | null | undefined) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return null;
+  }
+
+  return `https://wa.me/${digits}`;
+};
+
+const primaryButtonToneClass =
+  "border border-transparent bg-novian-accent text-novian-primary transition-colors hover:bg-[#3b5c49] active:bg-[#284032] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/20 disabled:cursor-not-allowed disabled:bg-novian-accent/45 disabled:text-novian-primary/80";
+
+const secondaryButtonToneClass =
+  "border border-novian-muted/45 bg-white/78 text-novian-text/78 transition-colors hover:border-novian-line-strong/70 hover:bg-novian-surface-soft hover:text-novian-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/12";
+
+const whatsAppButtonToneClass =
+  "border border-[#25D366]/40 bg-[#EAF8F0] text-[#17663B] transition-colors hover:bg-[#DDF3E7] active:bg-[#D0EDDE] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]/20";
+
+const warningButtonToneClass =
+  "border border-amber-300/70 bg-amber-50 text-amber-900 transition-colors hover:bg-amber-100 active:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/30";
+
+const dangerButtonToneClass =
+  "border border-red-300/70 bg-red-50 text-red-700 transition-colors hover:bg-red-100 active:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200/35";
 
 type PersonLead = {
   id: string;
@@ -330,7 +359,7 @@ function DuplicateCard({
         </div>
         <button
           onClick={() => onMerge(group)}
-          className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-300/15"
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${warningButtonToneClass}`}
         >
           <GitMerge size={13} />
           Mesclar grupo
@@ -464,7 +493,7 @@ function LinkedPropertiesEditor({
               type="button"
               onClick={addLink}
               disabled={!propertyIdToAdd}
-              className="inline-flex h-[50px] items-center gap-2 rounded-2xl bg-novian-accent px-4 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-50"
+              className={`inline-flex h-[50px] items-center gap-2 rounded-2xl px-4 text-sm font-semibold ${primaryButtonToneClass}`}
             >
               <Plus size={15} />
               Vincular
@@ -493,7 +522,7 @@ function LinkedPropertiesEditor({
                   <button
                     type="button"
                     onClick={() => removeLink(item.localId)}
-                    className="inline-flex items-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition hover:bg-red-500/15"
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium ${dangerButtonToneClass}`}
                   >
                     <Trash2 size={13} />
                     Remover
@@ -649,13 +678,13 @@ function FilterDrawer({
           <div className="flex items-center justify-between gap-3">
             <button
               onClick={onReset}
-              className="rounded-full border border-novian-muted/30 px-4 py-2 text-sm text-novian-text/65 transition hover:border-novian-accent/35 hover:text-novian-text"
+              className={`rounded-full px-4 py-2 text-sm ${secondaryButtonToneClass}`}
             >
               Limpar filtros
             </button>
             <button
               onClick={onClose}
-              className="rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white"
+              className={`rounded-full px-4 py-2 text-sm font-semibold ${primaryButtonToneClass}`}
             >
               Aplicar
             </button>
@@ -822,6 +851,8 @@ function PersonDrawer({
     }
   };
 
+  const personWhatsAppHref = buildWhatsAppDirectHref(primaryPhone || person?.primaryPhone || "");
+
   if (!open) return null;
 
   return (
@@ -858,6 +889,17 @@ function PersonDrawer({
                   <div className="mt-2 truncate text-sm text-novian-text/55">
                     {primaryPhone || person.primaryPhone || email || person.email || "Sem contato principal"}
                   </div>
+                  {personWhatsAppHref ? (
+                    <a
+                      href={personWhatsAppHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`mt-3 inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold uppercase tracking-[0.12em] ${whatsAppButtonToneClass}`}
+                    >
+                      <MessageSquare size={12} />
+                      Abrir WhatsApp
+                    </a>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -1134,7 +1176,7 @@ function PersonDrawer({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-2xl px-4 py-2 text-sm text-novian-text/70 transition hover:bg-novian-primary/40 hover:text-novian-text"
+              className={`rounded-2xl px-4 py-2 text-sm ${secondaryButtonToneClass}`}
             >
               Cancelar
             </button>
@@ -1143,7 +1185,7 @@ function PersonDrawer({
                 type="submit"
                 form="person-drawer-form"
                 disabled={isSubmitting}
-                className="inline-flex items-center gap-2 rounded-2xl bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
+                className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${primaryButtonToneClass}`}
               >
                 <Save size={15} />
                 {isSubmitting ? "Salvando..." : "Salvar Pessoa"}
@@ -1773,7 +1815,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                     console.error(error);
                     alert(error instanceof Error ? error.message : "Não foi possível mesclar.");
                   })}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200 transition hover:bg-amber-300/15"
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-[10px] font-semibold uppercase tracking-[0.12em] ${warningButtonToneClass}`}
                 >
                   <GitMerge size={12} />
                   Mesclar
@@ -1784,7 +1826,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                   setSelectedPerson(null);
                   setDrawerOpen(true);
                 }}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-novian-accent px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-novian-primary transition hover:bg-white"
+                className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-[10px] font-semibold uppercase tracking-[0.12em] ${primaryButtonToneClass}`}
               >
                 <Plus size={12} />
                 {pageCopy.createLabel}
@@ -1873,7 +1915,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                       alert(error instanceof Error ? error.message : "Não foi possível executar a ação em lote.");
                     })}
                     disabled={!bulkAction || submittingBulk}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-novian-accent px-4 py-3 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
+                    className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${primaryButtonToneClass}`}
                   >
                     <ChevronsRight size={15} />
                     {submittingBulk ? "Executando..." : "Aplicar"}
@@ -2343,7 +2385,7 @@ export default function PeopleWorkspaceView({ mode = "people" }: { mode?: Worksp
                 type="button"
                 onClick={() => setPendingDeletePerson(null)}
                 disabled={Boolean(deletingPersonId)}
-                className="rounded-2xl px-4 py-2 text-sm text-novian-text/65 transition hover:bg-novian-surface-soft/90 hover:text-novian-text disabled:opacity-50"
+                className={`rounded-2xl px-4 py-2 text-sm ${secondaryButtonToneClass} disabled:opacity-50`}
               >
                 Cancelar
               </button>
