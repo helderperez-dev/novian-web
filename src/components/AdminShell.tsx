@@ -57,6 +57,7 @@ const NavItem = ({ icon, label, href, active, collapsed }: { icon: React.ReactNo
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const useMainContentScroll = pathname.startsWith("/admin/properties");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [currentAppUser, setCurrentAppUser] = useState<ManagedAppUser | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -279,7 +280,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <div className="flex-1 flex overflow-hidden min-w-0">
+        <div
+          className={
+            useMainContentScroll
+              ? "flex-1 min-h-0 min-w-0 overflow-y-auto"
+              : "flex-1 flex min-w-0 overflow-hidden"
+          }
+        >
           {children}
         </div>
       </main>

@@ -2749,6 +2749,7 @@ export function PropertiesLayout() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activePropertyTab, setActivePropertyTab] = useState<"details" | "media" | "landing" | "documents">("details");
+  const [propertyListTab, setPropertyListTab] = useState<"active" | "inactive">("active");
 
   const fetchProps = async () => {
     try {
@@ -2815,6 +2816,28 @@ export function PropertiesLayout() {
           !PROPERTY_AMENITIES_FIELD_IDS.has(field.id),
       ),
     [fields],
+  );
+  const propertyListTabs = useMemo(
+    () => [
+      {
+        id: "active" as const,
+        label: "Ativos",
+        count: properties.filter((property) => property.status === "active").length,
+      },
+      {
+        id: "inactive" as const,
+        label: "Inativos",
+        count: properties.filter((property) => property.status !== "active").length,
+      },
+    ],
+    [properties],
+  );
+  const filteredProperties = useMemo(
+    () =>
+      properties.filter((property) =>
+        propertyListTab === "active" ? property.status === "active" : property.status !== "active",
+      ),
+    [properties, propertyListTab],
   );
 
   const fetchGeoOptions = useCallback(async (countryCode: string, stateCode?: string) => {
@@ -3601,23 +3624,10 @@ export function PropertiesLayout() {
   ];
 
   return (
-    <div className="flex flex-col flex-1 h-full p-6" onClick={() => { setOpenDropdownId(null); setOpenAiMenuField(null); }}>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-light text-novian-text">Gerenciamento de Imóveis</h2>
-        <button 
-          onClick={() => {
-            setSelectedProperty(null);
-            setIsDrawerOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-full border border-novian-accent/20 bg-[linear-gradient(135deg,#2f4a3a,#5b7359)] px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_34px_rgba(47,74,58,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_42px_rgba(47,74,58,0.22)]"
-        >
-          <Plus size={16} /> Cadastrar Imóvel
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-auto pb-6">
+    <div className="flex min-h-full flex-col p-6" onClick={() => { setOpenDropdownId(null); setOpenAiMenuField(null); }}>
+      <div className="pb-6">
         {isLoading ? (
-          <div className="flex flex-1 h-full items-center justify-center p-6">
+          <div className="flex min-h-[360px] items-center justify-center p-6">
             <div className="flex flex-col items-center">
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-novian-muted/35 border-t-novian-accent" />
               <p className="mt-4 text-sm font-medium text-novian-text/75">Carregando imóveis...</p>
@@ -3630,8 +3640,41 @@ export function PropertiesLayout() {
             <p className="text-sm max-w-md mx-auto">Adicione seu primeiro imóvel para começar a montar o catálogo e criar landing pages.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {properties.map(prop => {
+          <div className="space-y-6">
+            <div className="flex items-end justify-between gap-4 border-b border-novian-muted/35">
+              <div className="flex items-center gap-6 overflow-x-auto">
+                {propertyListTabs.map((tab) => {
+                  const isActive = propertyListTab === tab.id;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPropertyListTab(tab.id)}
+                      className={`relative border-b-2 px-1 py-3 text-sm font-medium uppercase tracking-[0.14em] whitespace-nowrap transition-colors ${
+                        isActive
+                          ? "border-novian-accent text-novian-text"
+                          : "border-transparent text-novian-text/50 hover:text-novian-text/80"
+                      }`}
+                    >
+                      {tab.label} ({tab.count})
+                    </button>
+                  );
+                })}
+              </div>
+              <button 
+                onClick={() => {
+                  setSelectedProperty(null);
+                  setIsDrawerOpen(true);
+                }}
+                className="mb-3 inline-flex items-center gap-2 rounded-full border border-novian-accent/20 bg-[linear-gradient(135deg,#2f4a3a,#5b7359)] px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_34px_rgba(47,74,58,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_42px_rgba(47,74,58,0.22)]"
+              >
+                <Plus size={16} /> Cadastrar Imóvel
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredProperties.map(prop => {
               const statusMeta = getPropertyCardStatusMeta(prop.status);
               const propertyReferenceCode = getPropertyReferenceCode(prop);
               const propertyMetrics = fields
@@ -3775,11 +3818,19 @@ export function PropertiesLayout() {
                 </article>
               );
             })}
-          {properties.length === 0 && (
-            <div className="col-span-full py-12 text-center text-novian-text/50">
-              Nenhum imóvel cadastrado.
+            {filteredProperties.length === 0 && (
+              <div className="col-span-full rounded-[28px] border border-dashed border-novian-muted/45 bg-white/45 px-6 py-14 text-center text-novian-text/55">
+                <p className="text-base font-medium text-novian-text/72">
+                  Nenhum imóvel {propertyListTab === "active" ? "ativo" : "inativo"} encontrado.
+                </p>
+                <p className="mt-2 text-sm">
+                  {propertyListTab === "active"
+                    ? "Altere o status de um imóvel ou cadastre um novo item para preencher esta aba."
+                    : "Os imóveis com status inativo ou vendido aparecerão aqui."}
+                </p>
+              </div>
+            )}
             </div>
-          )}
           </div>
         )}
       </div>
