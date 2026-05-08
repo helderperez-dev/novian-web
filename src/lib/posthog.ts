@@ -9,7 +9,7 @@ type PropertyAnalyticsInput = Pick<Property, "id" | "slug" | "title" | "price" |
 
 export const posthogConfig = {
   apiKey: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
-  apiHost: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
+  apiHost: process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://m.novian.com",
 };
 
 export function isPublicAnalyticsPath(pathname: string | null) {
