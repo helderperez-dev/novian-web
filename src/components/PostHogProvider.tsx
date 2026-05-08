@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
 import { PostHogProvider as PostHogReactProvider } from "posthog-js/react";
@@ -16,12 +16,30 @@ function ensurePostHog() {
   posthog.init(posthogConfig.apiKey, {
     api_host: posthogConfig.apiHost,
     defaults: "2026-01-30",
-    capture_pageview: false,
-    capture_pageleave: true,
+    capture_pageview: "history_change",
+    capture_pageleave: "if_capture_pageview",
     autocapture: true,
     capture_performance: true,
     persistence: "localStorage+cookie",
     person_profiles: "identified_only",
+    before_send: (event) => {
+      if (!event) {
+        return event;
+      }
+
+      const currentUrl = event.properties?.$current_url;
+
+      if (typeof currentUrl !== "string") {
+        return event;
+      }
+
+      try {
+        const { pathname } = new URL(currentUrl);
+        return isPublicAnalyticsPath(pathname) ? event : null;
+      } catch {
+        return event;
+      }
+    },
   });
 
   isPostHogInitialized = true;
@@ -30,26 +48,20 @@ function ensurePostHog() {
 export default function PostHogProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isPublicRoute = isPublicAnalyticsPath(pathname);
-  const lastTrackedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!posthogConfig.apiKey || !isPublicRoute) {
-      if (isPostHogInitialized) {
-        posthog.stopSessionRecording();
-        posthog.opt_out_capturing();
-      }
-      lastTrackedPathRef.current = null;
+    if (!posthogConfig.apiKey) {
       return;
     }
 
     ensurePostHog();
-    posthog.opt_in_capturing();
-    posthog.startSessionRecording();
 
-    if (pathname && lastTrackedPathRef.current !== pathname) {
-      posthog.capture("$pageview");
-      lastTrackedPathRef.current = pathname;
+    if (isPublicRoute) {
+      posthog.startSessionRecording();
+      return;
     }
+
+    posthog.stopSessionRecording();
   }, [isPublicRoute, pathname]);
 
   if (!posthogConfig.apiKey) {

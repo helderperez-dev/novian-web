@@ -82,16 +82,27 @@ export default function MobileNav({ links, whatsappHref }: MobileNavProps) {
 
           <nav className="mt-8 flex flex-col">
             {links.map((link) => (
-              <a
-                key={`${link.href}-${link.label}`}
-                href={link.href}
-                target={link.href.startsWith("http") ? "_blank" : undefined}
-                rel={link.href.startsWith("http") ? "noreferrer" : undefined}
-                onClick={() => setOpen(false)}
-                className="border-b border-novian-muted/45 py-5 text-[2.1rem] font-medium leading-none tracking-[-0.05em] text-novian-text"
-              >
-                {link.label}
-              </a>
+              link.href.startsWith("http") ? (
+                <a
+                  key={`${link.href}-${link.label}`}
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="border-b border-novian-muted/45 py-5 text-[2.1rem] font-medium leading-none tracking-[-0.05em] text-novian-text"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={`${link.href}-${link.label}`}
+                  href={link.href}
+                  onClick={() => setOpen(false)}
+                  className="border-b border-novian-muted/45 py-5 text-[2.1rem] font-medium leading-none tracking-[-0.05em] text-novian-text"
+                >
+                  {link.label}
+                </Link>
+              )
             ))}
           </nav>
 

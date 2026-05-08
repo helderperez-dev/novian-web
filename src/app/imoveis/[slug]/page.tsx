@@ -24,21 +24,21 @@ const navLinks = [
   { href: "/#collection", label: "Imóveis" },
   { href: "/#experience", label: "Quem somos" },
   { href: "/#experience", label: "Soluções" },
-  { href: whatsappHref, label: "Contato" },
+  { href: "/#contact", label: "Contato" },
 ];
 const footerNavigation = [
   { href: "/#collection", label: "Imóveis selecionados" },
   { href: "/#experience", label: "Experiência Novian" },
-  { href: whatsappHref, label: "Fale conosco" },
+  { href: "/#contact", label: "Fale conosco" },
   { href: "/politica-de-privacidade", label: "Política de Privacidade" },
   { href: "/termos-de-uso", label: "Termos de Uso" },
   { href: "/login", label: "Área interna" },
 ];
 const footerSolutions = [
-  "Compra guiada",
-  "Venda estratégica",
-  "Locação com suporte",
-  "Avaliação de imóveis",
+  { href: "/#experience", label: "Compra guiada" },
+  { href: "/#experience", label: "Venda estratégica" },
+  { href: "/#experience", label: "Locação com suporte" },
+  { href: "/#experience", label: "Avaliação de imóveis" },
 ];
 const testimonials = [
   {
@@ -632,9 +632,13 @@ export default async function PropertyLandingPage({ params }: { params: Promise<
                   </p>
                   <div className="mt-4 flex flex-col gap-3">
                     {footerSolutions.map((item) => (
-                      <p key={item} className="text-sm text-novian-text/68">
-                        {item}
-                      </p>
+                      <Link
+                        key={item.label}
+                        href={item.href}
+                        className="text-sm text-novian-text/68 transition hover:text-novian-accent"
+                      >
+                        {item.label}
+                      </Link>
                     ))}
                   </div>
                 </div>

@@ -60,15 +60,25 @@ export default function LandingHeader({ navLinks, whatsappHref }: LandingHeaderP
 
             <nav className="hidden items-center gap-8 text-[15px] font-medium text-novian-text/78 md:flex">
               {navLinks.map((link) => (
-                <a
-                  key={`${link.href}-${link.label}`}
-                  href={link.href}
-                  target={link.href.startsWith("http") ? "_blank" : undefined}
-                  rel={link.href.startsWith("http") ? "noreferrer" : undefined}
-                  className="transition-colors hover:text-novian-accent"
-                >
-                  {link.label}
-                </a>
+                link.href.startsWith("http") ? (
+                  <a
+                    key={`${link.href}-${link.label}`}
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="transition-colors hover:text-novian-accent"
+                  >
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={`${link.href}-${link.label}`}
+                    href={link.href}
+                    className="transition-colors hover:text-novian-accent"
+                  >
+                    {link.label}
+                  </Link>
+                )
               ))}
             </nav>
 
