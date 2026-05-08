@@ -50,6 +50,8 @@ type DashboardRecentPropertyItem = {
   offers?: Property["offers"];
   address: string;
 };
+const adminPrimaryButtonClass =
+  "border border-transparent bg-novian-accent text-novian-primary transition-colors hover:bg-[#3b5c49] active:bg-[#284032] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/20 disabled:cursor-not-allowed disabled:bg-novian-accent/45 disabled:text-novian-primary/80";
 type DashboardRecentClientProcessItem = { id: string; title: string; status: string; updated_at: string };
 type DashboardPayload = {
   overview: {
@@ -815,7 +817,7 @@ export function LeadNotesPanel({
             type="button"
             onClick={handleSaveNote}
             disabled={!leadId || !draft.trim() || isSaving}
-            className="rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+            className={`rounded-full px-4 py-2 text-sm font-semibold ${adminPrimaryButtonClass}`}
           >
             {isSaving ? "Salvando..." : editingNoteId ? "Salvar alteracoes" : "Salvar"}
           </button>
@@ -1416,7 +1418,7 @@ export function NewLeadForm({ onClose, onLeadCreated, initialData }: { onClose: 
         </button>
         <button 
           type="submit"
-          className="bg-novian-accent text-novian-primary px-6 py-2 rounded-xl text-sm font-semibold hover:bg-white transition-colors"
+          className={`rounded-xl px-6 py-2 text-sm font-semibold ${adminPrimaryButtonClass}`}
         >
           {initialData ? "Salvar Alterações" : "Criar Lead"}
         </button>
@@ -2468,7 +2470,7 @@ export function LeadsLayout({ refreshTrigger = 0 }: { refreshTrigger?: number })
                       // Logic to jump to Chat with this lead active
                       alert("Abre o chat (A implementar)");
                    }}
-                   className="w-full bg-novian-accent text-novian-primary py-3 rounded-xl font-semibold hover:bg-white transition-colors flex items-center justify-center gap-2"
+                   className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 font-semibold ${adminPrimaryButtonClass}`}
                  >
                    <MessageSquare size={18} /> Conversar no Chat
                  </button>
@@ -3717,7 +3719,7 @@ export function PropertiesLayout() {
                   setSelectedProperty(null);
                   setIsDrawerOpen(true);
                 }}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-novian-accent px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-novian-primary transition hover:bg-white"
+                className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-[10px] font-semibold uppercase tracking-[0.12em] ${adminPrimaryButtonClass}`}
               >
                 <Plus size={12} /> Novo Imovel
               </button>
@@ -6264,7 +6266,7 @@ function AgentConfigCard({ agent, onUpdate }: { agent: AgentConfig, onUpdate: (a
                 onUpdate({ ...agent, systemPrompt, knowledgeBase, modules });
                 setIsEditing(false);
               }}
-              className="bg-novian-accent text-novian-primary px-4 py-2 rounded-lg text-xs font-semibold hover:bg-white transition-colors"
+              className={`rounded-lg px-4 py-2 text-xs font-semibold ${adminPrimaryButtonClass}`}
             >
               Salvar Configurações
             </button>
@@ -7252,7 +7254,13 @@ function Message({ id, agent, time, role, content, isTyping, isClient, shouldTyp
           <span className="text-[10px] text-novian-text/40">{role}</span>
           <span className="text-[10px] text-novian-text/40 ml-2">{time}</span>
         </div>
-        <div className={`p-5 shadow-sm inline-block max-w-[85%] lg:max-w-[75%] xl:max-w-3xl text-left ${isClient ? 'bg-novian-accent/10 rounded-2xl rounded-tr-sm text-novian-accent' : 'bg-novian-surface/60 rounded-2xl rounded-tl-sm text-novian-text/90'}`}>
+        <div
+          className={`inline-block max-w-[85%] rounded-2xl border p-5 text-left shadow-[0_10px_28px_rgba(24,36,28,0.06)] lg:max-w-[75%] xl:max-w-3xl ${
+            isClient
+              ? 'rounded-tr-sm border-[#bfd0c3] bg-[#dfe9e1] text-[#173225]'
+              : 'rounded-tl-sm border-novian-muted/55 bg-white text-novian-text'
+          }`}
+        >
           {isTyping ? (
             <div className="flex gap-1.5 items-center h-6 px-2">
               <div className="w-2 h-2 rounded-full bg-novian-text/40 animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -7260,7 +7268,7 @@ function Message({ id, agent, time, role, content, isTyping, isClient, shouldTyp
               <div className="w-2 h-2 rounded-full bg-novian-text/40 animate-bounce" style={{ animationDelay: '300ms' }}></div>
             </div>
           ) : (
-            <div className="prose prose-sm prose-invert text-current leading-relaxed break-words overflow-x-auto max-w-full">
+            <div className="prose prose-sm max-w-full wrap-break-word overflow-x-auto leading-relaxed text-current prose-p:my-0 prose-a:text-current prose-strong:text-current prose-code:text-current">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {displayedContent}
               </ReactMarkdown>

@@ -305,7 +305,7 @@ export default function AccountProfileForm() {
             <button
               type="submit"
               disabled={isSaving || isUploading}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-novian-accent px-5 text-sm font-semibold text-[#081210] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-transparent bg-novian-accent px-5 text-sm font-semibold text-[#081210] transition-colors hover:bg-[#3b5c49] hover:text-novian-primary active:bg-[#284032] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/20 disabled:cursor-not-allowed disabled:bg-novian-accent/45 disabled:text-novian-primary/80"
             >
               {isSaving ? (
                 <>

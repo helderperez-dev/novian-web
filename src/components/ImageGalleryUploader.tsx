@@ -480,7 +480,7 @@ export default function ImageGalleryUploader({
                   <button
                     type="button"
                     onClick={saveDescriptionModal}
-                    className="rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white"
+                    className="rounded-full border border-transparent bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition-colors hover:bg-[#3b5c49] active:bg-[#284032] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/20"
                   >
                     Salvar descricao
                   </button>

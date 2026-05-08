@@ -220,7 +220,7 @@ export default function FunnelAutomationSettings({
           type="button"
           onClick={saveRules}
           disabled={saving || loading}
-          className="inline-flex items-center gap-2 rounded-full bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition hover:bg-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full border border-transparent bg-novian-accent px-4 py-2 text-sm font-semibold text-novian-primary transition-colors hover:bg-[#3b5c49] active:bg-[#284032] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-novian-accent/20 disabled:cursor-not-allowed disabled:bg-novian-accent/45 disabled:text-novian-primary/80"
         >
           <Save size={14} />
           {saving ? "Salvando..." : "Salvar"}
